@@ -100,6 +100,8 @@ void ResetSpMPSpMVTime();
 double GetKnobSpMVTime();
 void ResetKnobSpMVTime();
 
+void SetLogLevel(int level);
+
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, double *b, FunctionKnob *fknob);
