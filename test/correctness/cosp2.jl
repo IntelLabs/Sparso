@@ -3,6 +3,74 @@ using SparseAccelerator
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
+function spmatmul_witheps_and_flops{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}, eps;
+                         sortindices::Symbol = :sortcols)
+    mA, nA = size(A)
+    mB, nB = size(B)
+    nA==mB || throw(DimensionMismatch())
+
+    flops = 0
+
+    colptrA = A.colptr; rowvalA = A.rowval; nzvalA = A.nzval
+    colptrB = B.colptr; rowvalB = B.rowval; nzvalB = B.nzval
+    # TODO: Need better estimation of result space
+    nnzC = min(mA*nB, length(nzvalA) + length(nzvalB))
+    colptrC = Array(Ti, nB+1)
+    rowvalC = Array(Ti, nnzC)
+    nzvalC = Array(Tv, nnzC)
+
+    @inbounds begin
+        ip = 1
+        xb = zeros(Ti, mA)
+        x  = zeros(Tv, mA)
+        for i in 1:nB
+            if ip + mA - 1 > nnzC
+                resize!(rowvalC, nnzC + max(nnzC,mA))
+                resize!(nzvalC, nnzC + max(nnzC,mA))
+                nnzC = length(nzvalC)
+            end
+            colptrC[i] = ip
+            for jp in colptrB[i]:(colptrB[i+1] - 1)
+                nzB = nzvalB[jp]
+                j = rowvalB[jp]
+                for kp in colptrA[j]:(colptrA[j+1] - 1)
+                    nzC = nzvalA[kp] * nzB
+                    k = rowvalA[kp]
+                    if xb[k] != i
+                        rowvalC[ip] = k
+                        ip += 1
+                        xb[k] = i
+                        x[k] = nzC
+                    else
+                        x[k] += nzC
+                    end
+
+                    flops += 2
+                end
+            end
+            idx = colptrC[i]
+            for vp in colptrC[i]:(ip - 1)
+                col = rowvalC[vp]
+                if col == i || abs(x[col]) > eps
+                  nzvalC[idx] = x[col]
+                  rowvalC[idx] = col
+                  idx += 1
+                end
+            end
+            ip = idx
+        end
+        colptrC[nB+1] = ip
+    end
+
+    deleteat!(rowvalC, colptrC[end]:length(rowvalC))
+    deleteat!(nzvalC, colptrC[end]:length(nzvalC))
+
+    # The Gustavson algorithm does not guarantee the product to have sorted row indices.
+    Cunsorted = SparseMatrixCSC(mA, nB, colptrC, rowvalC, nzvalC)
+    C = Base.SparseMatrix.sortSparseMatrixCSC!(Cunsorted, sortindices=sortindices)
+    return C, flops
+end
+
 function spmatmul_witheps{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}, eps;
                          sortindices::Symbol = :sortcols)
     mA, nA = size(A)
@@ -91,7 +159,74 @@ function gershgorin(A :: SparseMatrixCSC)
   return eMax, eMin
 end
 
-function CoSP2_ref(X)
+function count_CoSP2_flop(X)
+  m = size(X, 1)
+  occ = m/2
+  idemTol = 1e-14
+  eps = 1e-5
+
+  eMax, eMin = gershgorin(X')
+  X = SparseMatrixCSC{Float64, Int32}((eMax*speye(m) - X)/(eMax - eMin))
+  assert(issym(X))
+  idempErr = 0
+  idempErr1 = 0
+  idempErr2 = 0
+  BreakLoop = 0
+  iter = 0
+  trXOLD = 0
+
+  flops = 0
+  spgemm_flops = 0
+
+  while BreakLoop == 0
+    trX = trace(X)
+    flops += m
+
+    X2, f = spmatmul_witheps_and_flops(X, X', eps) # CoSP2 does approximate spgemm
+    flops += f
+    spgemm_flops += f
+
+    trX2 = trace(X2)
+    flops += m
+    trXOLD = trX
+
+    limDiff = abs(trX2 - occ) - abs(2*trX - trX2 - occ)
+    if limDiff > idemTol
+
+      X = 2*X - X2
+      flops += nnz(X) + nnz(X2)
+
+      trX = 2*trX - trX2
+    elseif limDiff < -idemTol
+      X = X2 # output X is dead here, so we can free
+      trX = trX2
+    else
+      trX = trXOLD
+      BreakLoop = 1
+    end
+
+    idempErr2 = idempErr1
+    idempErr1 = idempErr
+    idempErr = abs(trX - trXOLD)
+    #println(idempErr)
+
+    iter += 1
+
+    if iter >= 25 && idempErr >= idempErr2
+      BreakLoop = 1
+    end
+  end
+
+  X = 2*X
+  flops += nnz(X)
+
+  println("X sum = $(sum(X)), max = $(maximum(X))")
+  println("Number of iterations = $iter")
+  println("$flops $spgemm_flops")
+  return flops
+end
+
+function CoSP2_ref(X, flops)
   set_matrix_property(Dict(
       :S => SA_SYMM_VALUED, 
     )
@@ -161,10 +296,10 @@ function CoSP2_ref(X)
 
   println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("Total time $total_time, SpGEMM time $spgemm_time, SpADD time $spadd_time")
+  println("Total time $total_time ($(flops/total_time/1e9) gflops), SpGEMM time $spgemm_time, SpADD time $spadd_time")
 end
 
-function CoSP2_call_replacement(X)
+function CoSP2_call_replacement(X, flops)
   m = size(X, 1)
   occ = m/2
   idemTol = 1e-14
@@ -233,10 +368,10 @@ function CoSP2_call_replacement(X)
 
   println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("Total time $total_time, SpGEMM time $spgemm_time, SpADD time $spadd_time")
+  println("Total time $total_time ($(flops/total_time/1e9) gflops), SpGEMM time $spgemm_time, SpADD time $spadd_time")
 end
 
-function CoSP2_call_replacement_and_context_opt(X)
+function CoSP2_call_replacement_and_context_opt(X, flops)
   m = size(X, 1)
   occ = m/2
   idemTol = 1e-14
@@ -310,7 +445,7 @@ function CoSP2_call_replacement_and_context_opt(X)
 
   println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("Total time $total_time, SpGEMM time $spgemm_time, SpADD time $spadd_time")
+  println("Total time $total_time ($(flops/total_time/1e9) gflops), SpGEMM time $spgemm_time, SpADD time $spadd_time")
 end
 
 file_name = "hmatrix.512.mtx"
@@ -321,11 +456,13 @@ end
 X = matrix_market_read(file_name)
 assert(issym(X))
 
+flops = count_CoSP2_flop(X)
+
 # currently, something wrong with spmatmul_witheps used in CoSP2_ref.
 # So, ignore the results of CoSP2_ref
 println("\nOriginal:")
-CoSP2_ref(X)
-CoSP2_ref(X)
+CoSP2_ref(X, flops)
+CoSP2_ref(X, flops)
 println("End original.")
 
 # Expected results for hmatrix.512.mtx: X sum = 6106.4049873666145, max = 1.280873477930676
@@ -333,16 +470,16 @@ println("End original.")
 # Expected results for hmatrix.1024.mtx: X sum = 12212.785128790038, max = 1.2808837088549991
 # Number of iterations = 25
 println("\nCoSP2_call_replacement:")
-CoSP2_call_replacement(X)
-CoSP2_call_replacement(X)
+CoSP2_call_replacement(X, flops)
+CoSP2_call_replacement(X, flops)
 println("End CoSP2_call_replacement.")
 
 println("\nCoSP2_call_replacement_and_context_opt:")
-CoSP2_call_replacement_and_context_opt(X)
-CoSP2_call_replacement_and_context_opt(X)
+CoSP2_call_replacement_and_context_opt(X, flops)
+CoSP2_call_replacement_and_context_opt(X, flops)
 println("End CoSP2_call_replacement_and_context_opt.")
 
 println("\nAccelerated:")
-@acc CoSP2_ref(X)
-@acc CoSP2_ref(X)
+@acc CoSP2_ref(X, flops)
+@acc CoSP2_ref(X, flops)
 println("End accelerated.")
