@@ -1318,3 +1318,7 @@ end
 function reset_knob_trisolve_time()
   ccall((:ResetKnobTriangularSolveTime, LIB_PATH), Void, ())
 end
+
+function set_knob_log_level(level)
+  ccall((:SetLogLevel, LIB_PATH), Void, (Cint,), level)
+end
