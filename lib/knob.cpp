@@ -46,12 +46,26 @@ void SetBandwidthThresholdToReorder(double bw)
 }
 
 // set this true to see important decisions on matrix reordering
-static const bool LOG_REORDERING = false;
+static bool LOG_REORDERING = false;
 // set this true to see if we're doing transposes which is not cheap.
 // we'd like to avoid transpose as much as possible if matrix
 // is symmetric or a transposed version of the matrix is already
 // available in the application context
-static const bool LOG_TRANSPOSE = false;
+static bool LOG_TRANSPOSE = false;
+
+void SetLogLevel(int level)
+{
+    if (level > 0)
+    {
+        LOG_REORDERING = true;
+        LOG_TRANSPOSE = true;
+    }
+    else
+    {
+        LOG_REORDERING = false;
+        LOG_TRANSPOSE = false;
+    }
+}
 
 static double spmp_spmv_time = 0;
 static double spmp_trsv_time = 0;
@@ -570,7 +584,6 @@ void SpMV(
             double width_time = -omp_get_wtime();
             double old_w = mknob->A->getAverageWidth(true);
             width_time += omp_get_wtime();
-            printf("SpMV: old width takes %f\n", width_time);
 
             fknob->reordering_info.row_inverse_perm = MALLOC(int, m);
             fknob->reordering_info.col_perm = MALLOC(int, n);
@@ -620,7 +633,9 @@ void SpMV(
             double new_w = newA->getAverageWidth();
             width_time += omp_get_wtime();
 
-            printf("SpMV: new width takes %f, old_w = %f, new_w = %f\n", width_time, old_w, new_w);
+            if (LOG_REORDERING) {
+                printf("SpMV: old_width = %f, new_width = %f\n", old_w, new_w);
+            }
 
             if (new_w/old_w < 1.2) {
                 mknob->A = newA;
