@@ -405,7 +405,7 @@ const pagerank_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test pagerank with reordering"
         ),
-        TestPattern(r"New AST:(.|\n)*?Ap = \(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,##fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?\(\(top\(getfield\)\)\(SparseAccelerator,:SpMV!\)\)\(Ap,1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,##fknob.*?\)",
                      "Test pagerank with reordering"
         ),
         TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,p,SparseAccelerator.ROW_PERM\)",

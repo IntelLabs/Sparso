@@ -11,6 +11,8 @@ function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
 
   t = time()
 
+  Ap = zeros(size(A, 1))
+
   for i = 1:maxiter
     Ap = (1-r)*A*p + r
 
@@ -19,7 +21,9 @@ function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
       println("error = $err")
     end
 
-    p = Ap
+    temp = Ap
+    Ap = p
+    p = temp
   end
 
   t = time() - t
@@ -40,11 +44,14 @@ A = scale(A,1./d)
 
 maxiter = 100
 
-x = pagerank(A, p, r, maxiter)
+p2 = copy(p)
+x = pagerank(A, p2, r, maxiter)
 println("Original: ")
-x = pagerank(A, p, r, maxiter)
+p2 = copy(p)
+x = pagerank(A, p2, r, maxiter)
 
-@acc x= pagerank(A, p, r, maxiter)
+p2 = copy(p)
+@acc x= pagerank(A, p2, r, maxiter)
 
 println("\nAccelerated without reordering: ")
 SparseAccelerator.reset_spmp_spmv_time()
