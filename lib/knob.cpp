@@ -581,9 +581,9 @@ void SpMV(
         }
 
         if (bw < bw_threshold_to_reorder) {
-            double width_time = -omp_get_wtime();
+            double old_width_time = -omp_get_wtime();
             double old_w = mknob->A->getAverageWidth(true);
-            width_time += omp_get_wtime();
+            old_width_time += omp_get_wtime();
 
             fknob->reordering_info.row_inverse_perm = MALLOC(int, m);
             fknob->reordering_info.col_perm = MALLOC(int, n);
@@ -629,12 +629,12 @@ void SpMV(
                 fknob->reordering_info.col_perm,
                 fknob->reordering_info.row_inverse_perm);
 
-            width_time = -omp_get_wtime();
+            double new_width_time = -omp_get_wtime();
             double new_w = newA->getAverageWidth();
-            width_time += omp_get_wtime();
+            new_width_time += omp_get_wtime();
 
             if (LOG_REORDERING) {
-                printf("SpMV: old_width = %f, new_width = %f\n", old_w, new_w);
+                printf("SpMV: old_width = %f, new_width = %f, old_width takes %f sec new_width takes %f sec\n", old_w, new_w, old_width_time, new_width_time);
             }
 
             if (new_w/old_w < 1.2) {
@@ -660,8 +660,10 @@ void SpMV(
             else {
                 if (fknob->reordering_info.row_perm != fknob->reordering_info.col_perm)
                     FREE(fknob->reordering_info.row_perm);
+                fknob->reordering_info.row_perm = NULL;
                 if (fknob->reordering_info.col_inverse_perm != fknob->reordering_info.row_inverse_perm)
                     FREE(fknob->reordering_info.col_inverse_perm);
+                fknob->reordering_info.col_inverse_perm = NULL;
                 FREE(fknob->reordering_info.col_perm);
                 FREE(fknob->reordering_info.row_inverse_perm);
 
