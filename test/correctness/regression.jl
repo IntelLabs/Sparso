@@ -257,7 +257,7 @@ const context_test3 = Test(
 #        TestPattern(r"New AST:(.|\n)*?Rd = .*\(SparseAccelerator,:SpMV\)\)\(1,__AT__,y,1,s-p,fknob_spmv.*\)",
 #                     "Test call replacement. Currently cannot match as we need to handle AT specially."
 #        ),
-        TestPattern(r"New AST:(.|\n)*?Rp = .*?\(SparseAccelerator,:SpMV\)\)\(1,A.*?,x.*?,-1,b.*?,0,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator,:SpMV!\)\)\(Rp,1,A.*?,x.*?,-1,b.*?,0,.*?fknob.*?\)",
                      "Test call replacement."
         ),
         TestPattern(r"New AST:(.|\n)*?Rc = .*?SparseAccelerator,:element_wise_multiply\)\)\(x.*?,s.*?\)",

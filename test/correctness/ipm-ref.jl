@@ -131,6 +131,7 @@ function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: ob
   spmv_time = 0.
 
   D = speye_int32(n)
+  Rp = zeros(size(A, 1))
 
   for iter=1:200
 
