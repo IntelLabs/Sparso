@@ -222,7 +222,7 @@ function count_CoSP2_flop(X)
 
   println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("$flops $spgemm_flops")
+  #println("$flops $spgemm_flops")
   return flops
 end
 
