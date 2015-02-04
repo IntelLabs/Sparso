@@ -13,7 +13,7 @@
 
 module AliasAnalysis
 
-#using LivenessAnalysis
+using ..LivenessAnalysis
 
 DEBUG_LVL=0
 
@@ -173,9 +173,62 @@ function from_assignment(state, env, expr::Any)
   end
 end
 
+function normalize_callname(state, env, fun, args)
+  if isa(fun, Symbol)
+    if is(fun, :broadcast!)
+      dst = args[2]
+      if isa(dst, SymbolNode)
+        dst = get(state.defs, dst.name, nothing)
+        if isa(dst, VarDef)
+          dst = dst.rhs
+        end
+      end
+      if isa(dst, Expr) && is(dst.head, :call) && isa(dst.args[1], TopNode) &&
+         is(dst.args[1].name, :ccall) && isa(dst.args[2], QuoteNode) &&
+         is(dst.args[2].value, :jl_new_array)
+        # now we are sure destination array is temporary
+        fun   = args[1]
+        args  = args[3:end]
+        if isa(fun, Symbol)
+        elseif isa(fun, SymbolNode)
+          fun = fun.name
+        else
+          error("cannot handle broadcast! with function ", fun)
+        end
+      else
+        dprintln(env, "cannot decide :broadcast! destination is temporary")
+      end
+    end
+  elseif isa(fun, TopNode)
+    fun = fun.name
+    if is(fun, :ccall)
+      callee = args[1]
+      if isa(callee, SymbolNode)
+        callee = get(state.defs, callee.name, nothing)
+      end
+      if isa(callee, QuoteNode) && (is(callee.value, :jl_alloc_array_1d) || is(callee.value, :jl_alloc_array_2d) || is(callee.value, :jl_alloc_array_3d))
+        local realArgs = Any[]
+        for i = 4:2:length(args)
+          push!(realArgs, args[i])
+        end
+        fun  = :alloc
+        args = realArgs
+      else
+      end
+    end
+  elseif isa(fun, GetfieldNode)
+    if is(fun.value, Base.Broadcast)
+      if is(fun.name, :broadcast_shape)
+        fun = :broadcast_shape
+      end
+    end
+  end
+  return (fun, args)
+end
+
+mapSym = Symbol[:negate, :.+, :.-, :.*, :./, :+, :-, :*, :/, :sin, :erf, :log10, :exp, :sqrt]
+
 function from_call(state, env, expr::Any)
-  # The assumption here is that the program has already been translated
-  # by DomainIR, and all args are either SymbolNode or Constant.
   local head = expr.head
   local ast = expr.args
   local typ = expr.typ
@@ -185,9 +238,9 @@ function from_call(state, env, expr::Any)
   dprintln(2, "AA from_call: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
   #fun = from_expr(state, env, fun)
   #dprintln(2, "AA from_call: new fun=", fun)
-  (fun_, args) = DomainIR.normalize_callname(state, env, fun, args)
+  (fun_, args) = normalize_callname(state, env, fun, args)
   dprintln(2, "AA from_call: normalized fun=", fun_)
-  if is(fun_, :arrayref) || is(fun, :arrayset) || is(fun_, :unsafe_arrayset) || is(fun_, :unsafe_arrayref) || haskey(DomainIR.mapOps, fun_) 
+  if is(fun_, :arrayref) || is(fun, :arrayset) || in(fun_, mapSym)
     # This is actually an conservative answer since arrayref might return
     # an array too, but we don't consider it as a case to handle.
     return NotArray
@@ -217,34 +270,6 @@ function from_return(state, env, expr)
   else
     return Unknown
   end
-end
-
-function from_stencil!(state, env, ast)
-  # ast is a list of PIRParForAst nodes.
-  assert(length(ast) > 0)
-  krnStat = ast[1]
-  iterations = ast[2]
-  bufs = ast[3]
-  dprintln(3, "AA: rotateNum = ", krnStat.rotateNum, " out of ", length(bufs), " input bufs")
-  if !((isa(iterations, Number) && iterations == 1) || (krnStat.rotateNum == 0))
-  # when iterations > 1, and we have buffer rotation, need to set alias Unknown for all rotated buffers
-    for i = 1:min(krnStat.rotateNum, length(bufs))
-      v = bufs[i]
-      if isa(v, SymbolNode)
-        update_unknown(state, v.name)
-      end
-    end
-  end
-end
-
-function from_parfor(state, env, ast)
-  # FIXME: the return result could alias any of the rotating buffers
-  state.nest_level = state.nest_level + 1
-  from_exprs(state, env, ast.preParFor)
-  from_exprs(state, env, ast.body)
-  ret = from_exprs(state, env, ast.postParFor)
-  state.nest_level = state.nest_level - 1
-  return ret[end]
 end
 
 function from_expr(state, env, ast)
@@ -301,13 +326,17 @@ function from_expr(state, env, ast)
   return Unknown
 end
 
+function isarray(typ)
+  isa(typ, DataType) && is(typ.name, Array.name)
+end
+
 # (:lambda, {param, meta@{localvars, types, freevars}, body})
 function analyze_lambda_body(body, param, meta_typed, liveness)
   local state = init_state(liveness)
-  dprintln(2, "AA ", isa(expr, Expr), " ", is(body.head, :body)) 
+  dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   # FIXME: surprisingly the first value printed above is false!
   for (v, (u,t,m)) in meta_typed
-    if !DomainIR.isarray(t)
+    if !isarray(t)
       update_notarray(state, v)
     end
   end
@@ -315,7 +344,7 @@ function analyze_lambda_body(body, param, meta_typed, liveness)
     # Note we assume all input parameters do not aliasing each other,
     # which is a very strong assumption. This may require reconsideration.
     # Update: changed to assum nothing by default.
-    if DomainIR.isarray(meta_typed[v][2])
+    if isarray(meta_typed[v][2])
       #update_node(state, v, next_node(state))
       update_unknown(state, v)
     end
@@ -355,6 +384,7 @@ function analyze_lambda(expr, liveness)
   for info in meta[2]
     meta2[info[1]] = info
   end
+#  return nothing
   analyze_lambda_body(body, param, meta2, liveness)
 end
 
