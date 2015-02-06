@@ -25,6 +25,16 @@ function reorder(funcAST, L, M::Symbol, liveness, uniqSet)
     #    reordedDefs = union of defs(S) forall statement S
     #       if uses(S) contains any element in reorderedUses
   
+    # First, make sure that defs and uses include their aliases as well. 
+    # ASSUMPTION: if two matrices/vectors alias, they must be fully overlap.
+    #             We cannot handle partial overlapping aliases.
+    # ISSUE: even for this simple full-or-none-alias assumption, we have
+    #        difficult to do it at compile time. And whether two function
+    #        parameters alias or not is dependent on the specific call site
+    #        at run time. So we would simply assume NO matrix/vector alias 
+    #        with any other one, and we can check that dynamically at runtime
+    #        by inserting the check to the function AST.
+    
     reordedUses = Set{Symbol}()
     reordedDefs = Set{Symbol}()
 
@@ -32,7 +42,7 @@ function reorder(funcAST, L, M::Symbol, liveness, uniqSet)
     changed = true
     while changed
         changed = false
-        for bbnum in L
+        for bbnum in L.members
             for stmt in bbs[bbnum].statements
                 if ⊈(stmt.use, reordedUses)
                     if in(M, stmt.use) or !isempty(intersect(stmt.use, reordedDefs))
@@ -50,21 +60,29 @@ function reorder(funcAST, L, M::Symbol, liveness, uniqSet)
         end
     end
     
-    # Permuted_Before_L is the reorderedUses live into L
-    # Permuted_Inside_L is just reorderedDefs
-Permuted_Before_L =  { matrix or vector live into L and in an expression with M transitively}
-Permuted_Inside_L =  { matrix or vector defined in L depending on Permuted_Before_L  transitively}
-Permuted = Permuted_Before_L  |  Permuted_Inside_L
-Liveout = {matrix or vector live out of L} //Todd
-ReversePermuted = Permuted & Liveout
-E     = {expression in L containing a matrix or vector in Permuted }
-Insert:
-             Benefit = benefit of computing E with Permuted 
-             Cost = cost of permuting Permuted_Before_L and reverse permuting with ReversePermuted
-             If (benefit > cost) {
-                                                      Before loop: insert “permute Permuted_Before_L" "ccall(reordering, librarypath, signature)
-                                                      after loop: insert “reverse permute ReversePermuted”
-             }
+    # The symbols that should be reordered before L are the reorderedUses live into L
+    reorderedBeforeL = intersect(reorderedUses, L.head.live_in)
+    
+    # The symbols that are reordered inside L, due to the symbols reordered before L,
+    # are simply the reorderedDefs
+    
+    # Now we know all the symbols that need/will be reordered
+    reordered = union(reorderedBeforeL, reorderedDefs)
+    
+    # Further analyze the feasibility by looking at each expression to make sure they 
+    # are in the forms we can safely process
+    
+    
+    #TODO: benefit-cost analysis
+    
+    # At the exit of the loop, we need to reverse reorder those that live out of the loop,
+    # to recover their original order before they are getting used outside of the loop
+    for bbnum in L.exits
+        bb = bbs[bbnum]
+        reverseReordered = intersect(reordered, bb.live_out)
+        
+        #insert transformation here
+    end
 
 Expressions are limited to the following form and their combinations: 
              A*v, A+-A, A*A, v*v, v+-v, n*v, n*n, n+-n
