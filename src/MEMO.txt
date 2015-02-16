@@ -1,13 +1,19 @@
 1. REORDERING: feasibility and correctness
 
 Let function R represent reordering.
-Let G be a graph representing a loop, where each node represents a computation in the loop, or a live-in value to the loop. A special Phi node selects one of the inputs dynamically so that for each input of each  computation, there is only one source for it. In other words, the graph is in SSA. 
+Let G be a graph representing a loop, where each node represents a computation
+in the loop, or a live-in value to the loop. A special Phi node selects one of
+the inputs dynamically so that for each input of each  computation, there is 
+only one source for it. In other words, the graph is in SSA. 
 Let LiveIn/Out be the values live into/out of L. 
 Reordering transforms the loop as below:
     LiveIn = R(LiveIn)
-    R(G)
+    G
     Liveout = R'(LiveOut)  //R' is the reverse ordering.
-To ensure that the above transformation indeed preserves semantics of the loop, the following condition is necessary and sufficient: 
+We need to ensure the semantics remains the same. That is, the above is equivalent to
+    G
+To ensure the semantics is indeed preserved, the following condition is necessary
+and sufficient: 
     R must be distributive over any computation in G.
 Distributivity means that for a computation C whose inputs are i1, ..., in, 
     R(C(i1, ..., in)) = C(R(i1), ..., R(in))
@@ -15,9 +21,10 @@ For example, for the following computation where M is a matrix, and v is a vecto
     M*v
 Reordering 
     R(M*v) = P'*(M*v) = (P'*M*P)*(P'*v) = R(M)*R(v)
+where P is a permutation matrix.
 
-Reordering function R is defined as below, assuming the permuation array is P: 
-    R(x) = P'*x*P  if x is a matrix
+Reordering function R is defined as below, assuming the permutation matrix is P: 
+    R(x) = P'*x*P  if x is a matrix // P' is conjugate transpose of P
          = P'*x    if x is a vector
          = x       if x is a number
          = error   no other kind of input is accepted.
@@ -35,6 +42,7 @@ The computations over which reordering is distributive:
     n*v // R(n*v)= P'*(n*v)= n*(P'*v) = n*R(v)
     if(n) // Result of if is a boolean (0: false, 1:true). R(if(n))=R(n!=0)=(R(n)!=0)=if(R(n))
     else  // = if(n==0). Then similar to above
+    any other expressions involving only numbers
     
 If reordering is distributive over every computation in the graph, then
 R(G) is a graph in which every live-in value is reordered, while all the computation nodes remain

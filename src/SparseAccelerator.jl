@@ -77,7 +77,7 @@ function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
   invariants = Dict{LivenessAnalysis.Loop, Set{Symbol} }()
 
   for l in domloops.loops
-    invariants[l] = findInvariants(l.members, uniqSet)
+    invariants[l] = findInvariants(l.members, uniqSet, bbs)
   end
 
   return invariants

@@ -1,13 +1,45 @@
-# Try to reorder sparse matrices and related (dense vectors) in the given loop
-# L is a loop region. M is a sparse matrix live into L. 
-# Liveness is the set of matrices or vectors live into/out of L
-# Aliases contains pairs of matrices or vectors that alias with each other
-# Note: if a matrix/vector is to be reordered, then we must ensure all its 
-# definitions reordered in the same way.
+function RCM{Tv,Ti<:Integer}(M<:SparseMatrixCSC)
+    #call to Jongsoo's library. Return a permutation matrix P
+    P = ccall((:RCM, pcl libary path), (Int, Int, Vector{Ti}, Vector{Ti}, Vector{Tv}), M.m, M.n, M.colptr, M.rowval, m.nzval)
+    return P
+end
+
+
 # A matrix A is reordered by row and column permuation, i.e. P'AP, where P is
 # a permuation matrix, and P' is its conjugate transpose.
 # A (column) vector v is reordered by row permutation, i.e. P'v
-function reorder(funcAST, L, M::Symbol, liveness, uniqSet)
+# TODO: insert a new statement into the right place of AST and a basic block
+
+function reorder(M<:AbstractSparseMatrix, P::AbstractMatrix)
+    return :(M = P' * M * P)
+end
+
+function reorder(V::AbstractVector, P::AbstractMatrix)
+    return :(V = P' * V)
+end
+
+function reverseReorder(M::AbstractSparseMatrix, P::AbstractMatrix)
+    return :(M = P * M * P')
+end
+
+function reverseReorder(V::AbstractVector, P::AbstractMatrix)
+    return :(V = P * V)
+end
+
+# Try to reorder sparse matrices and related (dense vectors) in the given loop
+# L is a loop region. M is a sparse matrix live into L. 
+# Lives is the set of matrices or vectors live into/out of L
+# ASSUMPTION: if two matrices/vectors alias, they must be fully overlap.
+#             We cannot handle partial overlapping aliases.
+# ISSUE: even for this simple full-or-none-alias assumption, we have
+#        difficult to analyze aliases at compile time. And whether two function
+#        parameters alias or not is dependent on the specific call site
+#        at run time. So we would simply assume NO matrix/vector alias 
+#        with any other one.
+# TODO:  check that no two matrices/vectors alias dynamically at runtime
+#        by inserting the check to the function AST.
+    
+function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     # If we reorder M inside L, consequently, some other matrices or vectors
     # need to be reordered. For example, for the following code
     #       N = M * v 
@@ -16,36 +48,34 @@ function reorder(funcAST, L, M::Symbol, liveness, uniqSet)
     # M * v, N got reordered as well. Consequently, the matrix due to speye()
     # has to be reordered, and K as well. This is a propagation.
     # Assumption: we know the semantics of all the operators/functions.
-    # Let "uses/defs(S)" be the set of matrices/vectors used/defined in the 
-    # RHS/LHS of a statement S in loop L.  
-    # Let us say "reorderedUses/Defs" are the 
-    # matrices/vectors used/defined in L that got reordered. Then
+    # Let "uses/defs(S)" be the set of matrices/vectors used/defined in 
+    # statement S in loop L.  
+    # Let us say "reorderedUses/Defs" are the matrices/vectors 
+    # used/defined in L that got reordered. Then
     #    reordedUses = union of uses(S) forall statement S 
     #       if uses(S) contains M or any element in reorderedDefs
     #    reordedDefs = union of defs(S) forall statement S
     #       if uses(S) contains any element in reorderedUses
-  
-    # First, make sure that defs and uses include their aliases as well. 
-    # ASSUMPTION: if two matrices/vectors alias, they must be fully overlap.
-    #             We cannot handle partial overlapping aliases.
-    # ISSUE: even for this simple full-or-none-alias assumption, we have
-    #        difficult to do it at compile time. And whether two function
-    #        parameters alias or not is dependent on the specific call site
-    #        at run time. So we would simply assume NO matrix/vector alias 
-    #        with any other one, and we can check that dynamically at runtime
-    #        by inserting the check to the function AST.
+    
+    # Test if all the basic blocks of this loop contain only computations over
+    # which reordering is distributive
+    bbs = lives.basic_blocks
+    for bbnum in L.members
+        if !(bbs[bbnum].cur_bb.reordering_distributive)
+            return funcAST # Cannot do reordering. Return the original AST
+        end
+    end
     
     reordedUses = Set{Symbol}()
     reordedDefs = Set{Symbol}()
 
-    bbs = lives.basic_blocks
     changed = true
     while changed
         changed = false
         for bbnum in L.members
             for stmt in bbs[bbnum].statements
                 if ⊈(stmt.use, reordedUses)
-                    if in(M, stmt.use) or !isempty(intersect(stmt.use, reordedDefs))
+                    if in(M.name, stmt.use) or !isempty(intersect(stmt.use, reordedDefs))
                         union!(reordedUses, stmt.use)
                         changed = true
                     end
@@ -68,48 +98,66 @@ function reorder(funcAST, L, M::Symbol, liveness, uniqSet)
     
     # Now we know all the symbols that need/will be reordered
     reordered = union(reorderedBeforeL, reorderedDefs)
-    
-    # Further analyze the feasibility by looking at each expression to make sure they 
-    # are in the forms we can safely process
-    
-    
+           
     #TODO: benefit-cost analysis
+    
+    # Get the permutation matrix
+    P = RCM(M)
+    
+    # Insert R(LiveIn) before the head
+    for sym in reorderedBeforeL
+        # ISSUE: how to get the corresponding matrix/vector from the symbol?
+        # we cannot really pass a symbol here
+        reorder(sym, P)
+    end
     
     # At the exit of the loop, we need to reverse reorder those that live out of the loop,
     # to recover their original order before they are getting used outside of the loop
+    # TODO: change this after Todd add empty basic blocks
     for bbnum in L.exits
         bb = bbs[bbnum]
         reverseReordered = intersect(reordered, bb.live_out)
         
         #insert transformation here
+        for sym in reverseReordered
+            # ISSUE: how to get the corresponding matrix/vector from the symbol?
+            # we cannot really pass a symbol here
+            reverseReorder(sym, P)
+        end
     end
+end
 
-Expressions are limited to the following form and their combinations: 
-             A*v, A+-A, A*A, v*v, v+-v, n*v, n*n, n+-n
-Where A: matrix, v: vector, n: number 
+function reorder(funcAST, lives, loop_info)
+    assert(funcAST.head == :lambda)
+    assert(length(funcAST) == 3)
+    local param = funcAST[1]
 
+    # Select a sparse matrix from the function AST's arguments. 
+    # So far, choose the first sparse matrix in the arguments.
+    # TODO: have a heuristic to choose the best candidate?
+    bool found = false
+    for i = 1:length(param)
+        if typeof(param[i]) <: AbstractSparseMatrix
+            found = true
+            M = param[i]
+            break
+        end
+    end    
+    if found 
+        for L in loop_info
+            reorder(funcAST, L, M, lives)
+        end
+    end
 end
 
 # Try to insert knobs to an expression
-insert_knobs_to_expr(expr:: Expr, invariants) =
-	expr.head == :(call) ? insert_knobs_to_call(expr, invariants) : 
-	is_assignment(expr.head) ? insert_knobs_to_assignment(expr, invariants) :
-	expr.head == :(comparison) ? insert_knobs_to_comparison(expr, invariants) :
-	expr.head == :(block) ? insert_knobs_to_block(expr, invariants) 
-ex.head == :(.) ? tqvar(ex) :
-		ex.head == :(call) ? tcall(ex) :
-		ex.head == :(comparison) ? tcomparison(ex) :
-		ex.head == :(ref) ? tref(ex) :
-		ex.head == :(=) ? tassign(ex) :
-		ex.head == :(block) ? tblock(ex) :
-		is_empty_tuple(ex) ? TEmpty() :
-		is_opassign(ex.head) ? topassign(ex) :
-
-	
+function insert_knobs_to_statement(expr:: Expr, lives, loop_info)
+    return expr
+end
 
 # Analyze the sparse library function calls in the AST of a function, 
 # and insert knobs(context-sensitive info)
-function insert_knobs(ast, loop, invariants)	
+function insert_knobs(ast, lives, loop_info)	
   if isa(ast, LambdaStaticData)
       ast = uncompressed_ast(ast)
   end
@@ -117,13 +165,15 @@ function insert_knobs(ast, loop, invariants)
   body = ast.args[3]
   assert(isa(body, Expr) && is(body.head, :body))
   for i = 1:length(body.args)
-	insert_knobs_to_statement(body.args[i], invariants)    
+	insert_knobs_to_statement(body.args[i], lives, loop_info)    
   end
 end
 
+# Try reordering, then insert knobs.
+# TODO: combine the two together so that we scan AST only once.
 function sparse_analyze(ast, lives, loop_info)
   dprintln(2, "sparse_analyze: ", ast, " ", lives, " ", loop_info)
-  ast1 = reorder(ast, lives, loop_info, invariants)
-  ast2 = insert_knobs(ast1, lives, loop_info, invariants)
-  return new_ast2
+  ast1 = reorder(ast, lives, loop_info)
+  ast2 = insert_knobs(ast1, lives, loop_info)
+  return ast2
 end

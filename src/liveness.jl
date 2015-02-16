@@ -64,8 +64,9 @@ type BasicBlock
     live_out
     depth_first_number
     statements :: Array{TopLevelStatement,1}
+    reordering_distributive :: Bool # Is reordering distributive over all the computations in the block?
 
-    BasicBlock(label) = new(label,Set(),Set(),Set(),Set(),Set(),Set(),nothing,TopLevelStatement[])
+    BasicBlock(label) = new(label,Set(),Set(),Set(),Set(),Set(),Set(),nothing,TopLevelStatement[], true)
 end
 
 function addStatement(top_level, state, ast)
@@ -314,6 +315,7 @@ type Loop
     head :: Int
     back_edge :: Int
     members :: Set{Int}
+    exits :: Set{Int} # the blocks in the loop from which control may flow outside the loop
 end
 
 type DomLoops
@@ -336,6 +338,17 @@ end
 function findLoopMembers(head, back_edge, bbs)
     members = Set(head)
     flm_internal(back_edge, members, bbs)
+end
+
+function findLoopExits(L: Loop) 
+    for bb in L.memembers
+        for succ in bb.succs
+            if ⊈(succ.label, L.members)
+                add!(L.exits, bb.label)
+                break
+            end
+        end
+    end
 end
 
 function compute_dom_loops(bl::BlockLiveness)
@@ -402,6 +415,7 @@ function compute_dom_loops(bl::BlockLiveness)
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 dprintln(3,"loop members = ", members, " type = ", typeof(members))
                 new_loop = Loop(succ_id, bb_index, members)
+                findLoopExits(new_loop)
                 dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 push!(loops, new_loop)
             end
