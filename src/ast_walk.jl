@@ -119,37 +119,62 @@ function test_reordering_distributivity(head, args)
   
   if head == :(*)
     if typeof(args[1]) <: AbstractSparseMatrix
-        (typeof(args[2]) <: AbstractSparseMatrix) ? return : 
-        (typeof(args[2]) <: Vector) ? return :
-        (typeof(args[2]) <: Number) ? return : 
-        (state.cur_bb.reordering_distributive = false; return)        
+        if (typeof(args[2]) <: AbstractSparseMatrix) ||
+           (typeof(args[2]) <: Vector) || 
+           (typeof(args[2]) <: Number)
+            return 
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
     end
     if typeof(args[1]) <: Number
-        (typeof(args[2]) <: AbstractSparseMatrix) ? return : 
-        (typeof(args[2]) <: Vector) ? return : 
-        (state.cur_bb.reordering_distributive = false; return)        
+        if (typeof(args[2]) <: AbstractSparseMatrix) || 
+           (typeof(args[2]) <: Vector)
+            return
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
   end
   if head == :(+) || head == :(-)
     if typeof(args[1]) <: AbstractSparseMatrix
-        (typeof(args[2]) <: AbstractSparseMatrix) ? return : 
-        (state.cur_bb.reordering_distributive = false; return)        
+        if (typeof(args[2]) <: AbstractSparseMatrix) 
+            return
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
     end
     if typeof(args[1]) <: Vector
-        (typeof(args[2]) <: Vector) ? return : 
-        (state.cur_bb.reordering_distributive = false; return)        
+        if (typeof(args[2]) <: Vector)
+            return
+        else 
+            state.cur_bb.reordering_distributive = false
+            return
+        end
     end
   end
   if head == :(\)
     if typeof(args[1]) <: AbstractSparseMatrix
-        (typeof(args[2]) <: Vector) ? return : 
-        (state.cur_bb.reordering_distributive = false; return)        
+        if (typeof(args[2]) <: Vector)
+            return
+        else 
+            state.cur_bb.reordering_distributive = false
+            return
+        end
     end
   end
   if head == :dot
-    (typeof(args[1]) <: Vector) && (typeof(args[2]) <: Vector) ? return : 
-    (state.cur_bb.reordering_distributive = false; return)        
+    if (typeof(args[1]) <: Vector) && (typeof(args[2]) <: Vector) 
+        return
+    else
+        state.cur_bb.reordering_distributive = false
+        return
+    end        
   end
-    throw(string("test_reordering_distributivity: unknown AST (", typeof(ast), ",", ast, ")"))
+  throw(string("test_reordering_distributivity: unknown AST (", typeof(ast), ",", ast, ")"))
 end
 
 function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_level, read)

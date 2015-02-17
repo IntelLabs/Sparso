@@ -116,7 +116,7 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
       assert(ast.head == :lambda)
 
       lives      = LivenessAnalysis.from_expr(ast)
-      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
+#      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
 

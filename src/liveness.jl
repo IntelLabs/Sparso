@@ -340,7 +340,7 @@ function findLoopMembers(head, back_edge, bbs)
     flm_internal(back_edge, members, bbs)
 end
 
-function findLoopExits(L: Loop) 
+function findLoopExits(L::Loop) 
     for bb in L.memembers
         for succ in bb.succs
             if ⊈(succ.label, L.members)
