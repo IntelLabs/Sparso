@@ -173,8 +173,8 @@ end
 
 # Try reordering, then insert knobs.
 # TODO: combine the two together so that we scan AST only once.
-function sparse_analyze(ast, lives, loop_info, uniqSet)
-  dprintln(2, "sparse_analyze: ", ast, " ", lives, " ", loop_info, " ", uniqSet)
+function sparse_analyze(ast, lives, loop_info)
+  dprintln(2, "sparse_analyze: ", ast, " ", lives, " ", loop_info)
   ast1 = reorder(ast, lives, loop_info)
 #  ast2 = insert_knobs(ast1, lives, loop_info)
   return ast1

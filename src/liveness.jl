@@ -316,6 +316,10 @@ type Loop
     back_edge :: Int
     members :: Set{Int}
     exits :: Set{Int} # the blocks in the loop from which control may flow outside the loop
+
+    function Loop(h :: Int, b :: Int, m :: Set{Int})
+      new (h, b, m, Set{Int}())
+    end
 end
 
 type DomLoops
@@ -340,11 +344,12 @@ function findLoopMembers(head, back_edge, bbs)
     flm_internal(back_edge, members, bbs)
 end
 
-function findLoopExits(L::Loop) 
-    for bb in L.memembers
+function findLoopExits(L::Loop, bbs) 
+    for bbindex in L.members
+        bb = bbs[bbindex]
         for succ in bb.succs
-            if ⊈(succ.label, L.members)
-                add!(L.exits, bb.label)
+            if in(succ.label, L.members)
+                push!(L.exits, bb.label)
                 break
             end
         end
@@ -415,7 +420,7 @@ function compute_dom_loops(bl::BlockLiveness)
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 dprintln(3,"loop members = ", members, " type = ", typeof(members))
                 new_loop = Loop(succ_id, bb_index, members)
-                findLoopExits(new_loop)
+                findLoopExits(new_loop, bl.basic_blocks)
                 dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 push!(loops, new_loop)
             end
