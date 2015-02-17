@@ -348,7 +348,7 @@ function findLoopExits(L::Loop, bbs)
     for bbindex in L.members
         bb = bbs[bbindex]
         for succ in bb.succs
-            if in(succ.label, L.members)
+            if !in(succ.label, L.members)
                 push!(L.exits, bb.label)
                 break
             end
