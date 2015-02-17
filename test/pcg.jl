@@ -216,7 +216,7 @@ maxiter = 1000
 
 for matrix in matrices
   println(matrix)
-  A = MatrixMarket.mmread("../../data/$matrix.mtx")
+  A = MatrixMarket.mmread("data/$matrix.mtx")
 
   N   = size(A, 1)
   b   = ones(Float64, N)
