@@ -120,7 +120,7 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
 
-      analyze_res = sparse_analyze(ast, lives, loop_info)
+      analyze_res = sparse_analyze(ast, lives, loop_info, uniqSet)
 #      analyze_res = sparse_analyze(ast, lives, loop_info, invariants)
       if analyze_res != nothing
         state.mapNameFuncInfo[fs] = analyze_res
@@ -182,11 +182,11 @@ end
 
 function foo(x)
   println("foo = ", x)
-#  z1 = zeros(100)
-#  sum = 0.0
-#  for i = 1:100
-#    sum = sum + z1[i] 
-#  end
+  z1 = zeros(100)
+  sum = 0.0
+  for i = 1:100
+    sum = sum + z1[i] 
+  end
   x+1
 end
 
