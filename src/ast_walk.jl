@@ -89,8 +89,6 @@ function from_call(ast::Array{Any,1}, depth, callback, cbdata, top_level_number,
   args = ast[2:end]
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
 
-  test_reordering_distributivity(fun, args)
-  
   if length(args) > 0
     dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
@@ -110,71 +108,6 @@ end
 function get_one(ast)
   assert(length(ast) == 1)
   ast[1]
-end
-
-function test_reordering_distributivity(head, args)
-  if !state.cur_bb.reordering_distributive
-    return  # already known not distributive
-  end
-  
-  if head == :(*)
-    if typeof(args[1]) <: AbstractSparseMatrix
-        if (typeof(args[2]) <: AbstractSparseMatrix) ||
-           (typeof(args[2]) <: Vector) || 
-           (typeof(args[2]) <: Number)
-            return 
-        else
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-    if typeof(args[1]) <: Number
-        if (typeof(args[2]) <: AbstractSparseMatrix) || 
-           (typeof(args[2]) <: Vector)
-            return
-        else
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-  end
-  if head == :(+) || head == :(-)
-    if typeof(args[1]) <: AbstractSparseMatrix
-        if (typeof(args[2]) <: AbstractSparseMatrix) 
-            return
-        else
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-    if typeof(args[1]) <: Vector
-        if (typeof(args[2]) <: Vector)
-            return
-        else 
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-  end
-  if head == :(\)
-    if typeof(args[1]) <: AbstractSparseMatrix
-        if (typeof(args[2]) <: Vector)
-            return
-        else 
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-  end
-  if head == :dot
-    if (typeof(args[1]) <: Vector) && (typeof(args[2]) <: Vector) 
-        return
-    else
-        state.cur_bb.reordering_distributive = false
-        return
-    end        
-  end
-  throw(string("test_reordering_distributivity: unknown AST (", typeof(ast), ",", ast, ")"))
 end
 
 function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_level, read)

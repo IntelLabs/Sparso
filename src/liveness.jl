@@ -555,6 +555,73 @@ function from_assignment(ast::Array{Any,1}, depth, state, callback, cbdata)
   state.read = true
 end
 
+function test_reordering_distributivity(head, args, state)
+  if !state.cur_bb.reordering_distributive
+    return  # already known not distributive
+  end
+  
+  if head == :(*)
+    if typeof(args[1]) <: AbstractSparseMatrix
+        if (typeof(args[2]) <: AbstractSparseMatrix) ||
+           (typeof(args[2]) <: Vector) || 
+           (typeof(args[2]) <: Number)
+            return 
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+    if typeof(args[1]) <: Number
+        if (typeof(args[2]) <: AbstractSparseMatrix) || 
+           (typeof(args[2]) <: Vector)
+            return
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+  end
+  if head == :(+) || head == :(-)
+    if typeof(args[1]) <: AbstractSparseMatrix
+        if (typeof(args[2]) <: AbstractSparseMatrix) 
+            return
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+    if typeof(args[1]) <: Vector
+        if (typeof(args[2]) <: Vector)
+            return
+        else 
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+  end
+  if head == :(\)
+    if typeof(args[1]) <: AbstractSparseMatrix
+        if (typeof(args[2]) <: Vector)
+            return
+        else 
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+  end
+  if head == :dot
+    if (typeof(args[1]) <: Vector) && (typeof(args[2]) <: Vector) 
+        return
+    else
+        state.cur_bb.reordering_distributive = false
+        return
+    end        
+  end
+  throw(string("test_reordering_distributivity: unknown AST (", typeof(ast), ",", ast, ")"))
+end
+
+
+
 function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   assert(length(ast) >= 1)
   local fun  = ast[1]
