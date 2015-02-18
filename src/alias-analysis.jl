@@ -246,6 +246,8 @@ function from_call(state, env, expr::Any)
     return NotArray
   elseif is(fun_, :alloc)
     return next_node(state)
+  elseif is(fun_, :fill!)
+    return from_expr(state, env, args[1])
   else
     dprintln(2, "AA: unknown call ", fun_)
     # For unknown calls, conservative assumption is that after 

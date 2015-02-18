@@ -2,6 +2,22 @@ module LivenessAnalysis
 
 import Base.show
 
+# A dictionary mapping a symbol to its type (like SparseMatrixCSC)
+# TODO: when recursive liveness analysis is enabled, each lambda should have
+# such a dictionary.
+global sym2Type
+#::Dict{Symbol, Any}
+
+function add_sym_type(sym, typ)
+    if sym2Type[sym] == nothing
+        sym2Type[sym] = typ
+    else 
+        assert(sym2Type[sym] == typ, "We assume a symbol does not change type")
+    end
+end
+
+get_sym_type(sym) = sym2Type[sym]
+
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
 
@@ -316,6 +332,10 @@ type Loop
     back_edge :: Int
     members :: Set{Int}
     exits :: Set{Int} # the blocks in the loop from which control may flow outside the loop
+
+    function Loop(h :: Int, b :: Int, m :: Set{Int})
+      new (h, b, m, Set{Int}())
+    end
 end
 
 type DomLoops
@@ -340,11 +360,12 @@ function findLoopMembers(head, back_edge, bbs)
     flm_internal(back_edge, members, bbs)
 end
 
-function findLoopExits(L: Loop) 
-    for bb in L.memembers
+function findLoopExits(L::Loop, bbs) 
+    for bbindex in L.members
+        bb = bbs[bbindex]
         for succ in bb.succs
-            if ⊈(succ.label, L.members)
-                add!(L.exits, bb.label)
+            if !in(succ.label, L.members)
+                push!(L.exits, bb.label)
                 break
             end
         end
@@ -415,7 +436,7 @@ function compute_dom_loops(bl::BlockLiveness)
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 dprintln(3,"loop members = ", members, " type = ", typeof(members))
                 new_loop = Loop(succ_id, bb_index, members)
-                findLoopExits(new_loop)
+                findLoopExits(new_loop, bl.basic_blocks)
                 dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 push!(loops, new_loop)
             end
@@ -513,6 +534,12 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   local param = ast[1]
   local meta  = ast[2]
   local body  = ast[3]
+
+  # Init a dictionary for the symbols.
+  # TODO: push the current functioin's dictionary into a stack, once we enable
+  # inter-procedural liveness analysis
+  sym2Type = Dict{Symbol, Any}()
+  
   from_expr(body, depth, state, false, callback, cbdata)
 end
 
@@ -549,6 +576,73 @@ function from_assignment(ast::Array{Any,1}, depth, state, callback, cbdata)
   from_expr(lhs, depth, state, false, callback, cbdata)
   state.read = true
 end
+
+function test_reordering_distributivity(head, args, state)
+  if !state.cur_bb.reordering_distributive
+    return  # already known not distributive
+  end
+  
+  if head == :(*)
+    if typeof(args[1]) <: AbstractSparseMatrix
+        if (typeof(args[2]) <: AbstractSparseMatrix) ||
+           (typeof(args[2]) <: Vector) || 
+           (typeof(args[2]) <: Number)
+            return 
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+    if typeof(args[1]) <: Number
+        if (typeof(args[2]) <: AbstractSparseMatrix) || 
+           (typeof(args[2]) <: Vector)
+            return
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+  end
+  if head == :(+) || head == :(-)
+    if typeof(args[1]) <: AbstractSparseMatrix
+        if (typeof(args[2]) <: AbstractSparseMatrix) 
+            return
+        else
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+    if typeof(args[1]) <: Vector
+        if (typeof(args[2]) <: Vector)
+            return
+        else 
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+  end
+  if head == :(\)
+    if typeof(args[1]) <: AbstractSparseMatrix
+        if (typeof(args[2]) <: Vector)
+            return
+        else 
+            state.cur_bb.reordering_distributive = false
+            return
+        end
+    end
+  end
+  if head == :dot
+    if (typeof(args[1]) <: Vector) && (typeof(args[2]) <: Vector) 
+        return
+    else
+        state.cur_bb.reordering_distributive = false
+        return
+    end        
+  end
+  throw(string("test_reordering_distributivity: unknown AST (", typeof(ast), ",", ast, ")"))
+end
+
+
 
 function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   assert(length(ast) >= 1)
@@ -827,6 +921,7 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
     dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
     add_access(state.cur_bb, ast.name, state.read, state.top_level_number)
+    add_sym_type(ast.name, ast.typ)
   elseif asttyp == TopNode    # name
     #skip
   elseif asttyp == GetfieldNode

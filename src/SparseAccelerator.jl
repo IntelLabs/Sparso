@@ -116,7 +116,7 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
       assert(ast.head == :lambda)
 
       lives      = LivenessAnalysis.from_expr(ast)
-      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
+#      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
 
@@ -139,6 +139,56 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
   end
   return nothing
 end
+
+function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number, is_top_level, read)
+  dprintln(2,"opt_calls_insert_trampoline ", x)
+  if typeof(x) == Expr
+    if x.head == :call
+      call_expr = x.args[1]
+      call_sig_args = x.args[2:end]
+
+      test_reordering_distributivity(call_expr, call_sig_args, state)
+
+      dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_arg_tuple, " typeof(call_expr) = ", typeof(call_expr))
+
+      new_func_name = string("opt_calls_trampoline_", string(call_expr))
+      new_func_sym  = symbol(new_func_name)
+      new_func_str  = string("function ", new_func_name, " ( ")
+
+      for i = 2:length(x.args)
+        new_arg = AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, state)
+        assert(isa(new_arg,Array))
+        assert(length(new_arg) == 1)
+        x.args[i] = new_arg[1]
+
+        new_func_str = string(new_func_str, x.args[i])
+        if i != length(x.args)
+          new_func_str = string(new_func_str, ",")
+        end
+      end
+      new_func_str = string(new_func_str, ")\n")
+      new_func_str = string(new_func_str, call_expr, "(")
+      for i = 2:length(x.args)
+        new_func_str = string(new_func_str, x.args[i])
+        if i != length(x.args)
+          new_func_str = string(new_func_str, ",")
+        end
+      end
+      new_func_str = string(new_func_str, ")\n")
+      new_func_str = string(new_func_str, "end\n")
+
+      trampoline_func = eval(quote $new_func_str end)
+
+      dprintln(2, "new_func = ", new_func_str)
+      x.args[1] = new_func_sym
+      dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
+
+      return x
+    end    
+  end
+  nothing
+end
+
 
 function opt_calls(x, state :: memoizeState, top_level_number, is_top_level, read)
   if typeof(x) == Expr
@@ -172,21 +222,26 @@ end
 
 gSparseAccelerateState = memoizeState()
 
-macro acc(ast)
+function convert_expr(ast)
   println(2, "Mtest ", ast, " ", typeof(ast), " gSparseAccelerateState = ", gSparseAccelerateState)
-  res = AstWalker.AstWalk(ast, opt_calls, gSparseAccelerateState)
+  res = AstWalker.AstWalk(ast, opt_calls_insert_trampoline, gSparseAccelerateState)
   assert(isa(res,Array))
   assert(length(res) == 1)
   return esc(res[1])
+#  return esc(ast)
+end
+
+macro acc(ast)
+  convert_expr(ast)
 end
 
 function foo(x)
   println("foo = ", x)
-#  z1 = zeros(100)
-#  sum = 0.0
-#  for i = 1:100
-#    sum = sum + z1[i] 
-#  end
+  z1 = zeros(100)
+  sum = 0.0
+  for i = 1:100
+    sum = sum + z1[i] 
+  end
   x+1
 end
 
@@ -212,10 +267,16 @@ function bar_new(x)
   x+20
 end
 
-y = 1
+function testit()
+#y = 1
+z = 7
 #@acc y = foo(bar(y))
-#@acc y = foo(7)
-println(y)
-processFuncCall(gSparseAccelerateState, foo, (Int64,))
+@acc y = foo(z)
+#println(y)
+#processFuncCall(gSparseAccelerateState, foo, (Int64,))
+convert_expr(quote y = foo(z) end)
+end
+
+testit()
 
 end   # end of module

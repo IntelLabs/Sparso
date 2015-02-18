@@ -1,6 +1,7 @@
-function RCM{Tv,Ti<:Integer}(M<:SparseMatrixCSC)
+function RCM{Tv,Ti<:Integer}(M::SparseMatrixCSC{Tv, Ti})
     #call to Jongsoo's library. Return a permutation matrix P
-    P = ccall((:RCM, pcl libary path), (Int, Int, Vector{Ti}, Vector{Ti}, Vector{Tv}), M.m, M.n, M.colptr, M.rowval, m.nzval)
+    #P = ccall((:RCM, pcl libary path), (Int, Int, Vector{Ti}, Vector{Ti}, Vector{Tv}), M.m, M.n, M.colptr, M.rowval, m.nzval)
+    P = eye(size(M, 1))
     return P
 end
 
@@ -10,20 +11,26 @@ end
 # A (column) vector v is reordered by row permutation, i.e. P'v
 # TODO: insert a new statement into the right place of AST and a basic block
 
-function reorder(M<:AbstractSparseMatrix, P::AbstractMatrix)
-    return :(M = P' * M * P)
+function reorder(S::Symbol, P::AbstractMatrix)
+    typ = get_sym_type(S)
+    if typ :< AbstractSparseMatrix
+        return :(M = P' * M * P)
+    elseif typ :< AbstractVector
+        return :(V = P' * V)
+    else
+        assert(false)
+    end 
 end
 
-function reorder(V::AbstractVector, P::AbstractMatrix)
-    return :(V = P' * V)
-end
-
-function reverseReorder(M::AbstractSparseMatrix, P::AbstractMatrix)
-    return :(M = P * M * P')
-end
-
-function reverseReorder(V::AbstractVector, P::AbstractMatrix)
-    return :(V = P * V)
+function reverseReorder(S::Symbol, P::AbstractMatrix)
+    typ = get_sym_type(S)
+    if typ :< AbstractSparseMatrix
+        return :(M = P * M * P')
+    elseif typ :< AbstractVector
+        return :(V = P * V)
+    else
+        assert(false)
+    end 
 end
 
 # Try to reorder sparse matrices and related (dense vectors) in the given loop
@@ -37,7 +44,10 @@ end
 #        at run time. So we would simply assume NO matrix/vector alias 
 #        with any other one.
 # TODO:  check that no two matrices/vectors alias dynamically at runtime
-#        by inserting the check to the function AST.
+#        by inserting the check to the function AST. The code would be like
+#        this: 
+#            if (A==B) aliased=true
+#            if (!aliased) M=P'*M*P
     
 function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     # If we reorder M inside L, consequently, some other matrices or vectors
@@ -75,7 +85,7 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
         for bbnum in L.members
             for stmt in bbs[bbnum].statements
                 if ⊈(stmt.use, reordedUses)
-                    if in(M.name, stmt.use) or !isempty(intersect(stmt.use, reordedDefs))
+                    if in(M.name, stmt.use) || !isempty(intersect(stmt.use, reordedDefs))
                         union!(reordedUses, stmt.use)
                         changed = true
                     end
@@ -106,8 +116,6 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     
     # Insert R(LiveIn) before the head
     for sym in reorderedBeforeL
-        # ISSUE: how to get the corresponding matrix/vector from the symbol?
-        # we cannot really pass a symbol here
         reorder(sym, P)
     end
     
@@ -120,8 +128,6 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
         
         #insert transformation here
         for sym in reverseReordered
-            # ISSUE: how to get the corresponding matrix/vector from the symbol?
-            # we cannot really pass a symbol here
             reverseReorder(sym, P)
         end
     end
@@ -129,13 +135,14 @@ end
 
 function reorder(funcAST, lives, loop_info)
     assert(funcAST.head == :lambda)
-    assert(length(funcAST) == 3)
-    local param = funcAST[1]
+    args = funcAST.args
+    assert(length(args) == 3)
+    local param = args[1]
 
     # Select a sparse matrix from the function AST's arguments. 
     # So far, choose the first sparse matrix in the arguments.
     # TODO: have a heuristic to choose the best candidate?
-    bool found = false
+    found = false
     for i = 1:length(param)
         if typeof(param[i]) <: AbstractSparseMatrix
             found = true
@@ -174,6 +181,6 @@ end
 function sparse_analyze(ast, lives, loop_info)
   dprintln(2, "sparse_analyze: ", ast, " ", lives, " ", loop_info)
   ast1 = reorder(ast, lives, loop_info)
-  ast2 = insert_knobs(ast1, lives, loop_info)
-  return ast2
+#  ast2 = insert_knobs(ast1, lives, loop_info)
+  return ast1
 end
