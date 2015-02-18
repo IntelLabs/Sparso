@@ -11,20 +11,26 @@ end
 # A (column) vector v is reordered by row permutation, i.e. P'v
 # TODO: insert a new statement into the right place of AST and a basic block
 
-function reorder(M::AbstractSparseMatrix, P::AbstractMatrix)
-    return :(M = P' * M * P)
+function reorder(S::Symbol, P::AbstractMatrix)
+    typ = get_sym_type(S)
+    if typ :< AbstractSparseMatrix
+        return :(M = P' * M * P)
+    elseif typ :< AbstractVector
+        return :(V = P' * V)
+    else
+        assert(false)
+    end 
 end
 
-function reorder(V::AbstractVector, P::AbstractMatrix)
-    return :(V = P' * V)
-end
-
-function reverseReorder(M::AbstractSparseMatrix, P::AbstractMatrix)
-    return :(M = P * M * P')
-end
-
-function reverseReorder(V::AbstractVector, P::AbstractMatrix)
-    return :(V = P * V)
+function reverseReorder(S::Symbol, P::AbstractMatrix)
+    typ = get_sym_type(S)
+    if typ :< AbstractSparseMatrix
+        return :(M = P * M * P')
+    elseif typ :< AbstractVector
+        return :(V = P * V)
+    else
+        assert(false)
+    end 
 end
 
 # Try to reorder sparse matrices and related (dense vectors) in the given loop
@@ -38,7 +44,10 @@ end
 #        at run time. So we would simply assume NO matrix/vector alias 
 #        with any other one.
 # TODO:  check that no two matrices/vectors alias dynamically at runtime
-#        by inserting the check to the function AST.
+#        by inserting the check to the function AST. The code would be like
+#        this: 
+#            if (A==B) aliased=true
+#            if (!aliased) M=P'*M*P
     
 function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     # If we reorder M inside L, consequently, some other matrices or vectors
@@ -107,8 +116,6 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     
     # Insert R(LiveIn) before the head
     for sym in reorderedBeforeL
-        # ISSUE: how to get the corresponding matrix/vector from the symbol?
-        # we cannot really pass a symbol here
         reorder(sym, P)
     end
     
@@ -121,8 +128,6 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
         
         #insert transformation here
         for sym in reverseReordered
-            # ISSUE: how to get the corresponding matrix/vector from the symbol?
-            # we cannot really pass a symbol here
             reverseReorder(sym, P)
         end
     end

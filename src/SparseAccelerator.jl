@@ -135,8 +135,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
     if x.head == :call
       call_expr = x.args[1]
       call_sig_args = x.args[2:end]
-
-      dprintln(2, "Start opt_calls = ", call_expr, " type = ", typeof(call_expr), " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
+      dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
 
       new_func_name = string("opt_calls_trampoline_", string(call_expr))
       new_func_sym  = symbol(new_func_name)

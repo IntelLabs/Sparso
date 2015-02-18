@@ -48,3 +48,10 @@ If reordering is distributive over every computation in the graph, then
 R(G) is a graph in which every live-in value is reordered, while all the computation nodes remain
 the same. Therefore, to preserve the semantics of the graph, we should reverse reorder the final
 results of the graph, i.e., the live out values of the graph.
+
+Over what computations R is NOT distributive: 
+    Triangular solver // R would change the rows so that the input matrix is no longer triangular
+    Unknown functions
+
+For real field, 
+    P' = P.'
