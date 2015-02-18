@@ -149,8 +149,6 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
 
       test_reordering_distributivity(call_expr, call_sig_args, state)
 
-      return nothing
-
       dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_arg_tuple, " typeof(call_expr) = ", typeof(call_expr))
 
       new_func_name = string("opt_calls_trampoline_", string(call_expr))
