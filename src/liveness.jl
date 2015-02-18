@@ -650,6 +650,9 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   local args = ast[2:end]
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
   dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
+   
+  test_reordering_distributivity(fun, args, state)
+
   # symbols don't need to be translated
   if typeof(fun) != Symbol
       from_expr(fun, depth, state, false, callback, cbdata)
