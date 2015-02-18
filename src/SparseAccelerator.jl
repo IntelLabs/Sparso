@@ -6,10 +6,6 @@ include("ast_walk.jl")
 include("liveness.jl")
 include("alias-analysis.jl")
 
-#using ..AstWalker
-#using ..LivenessAnalysis
-#using ..AliasAnalysis
-
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=3
 
@@ -34,6 +30,7 @@ end
 include("sparse-analyze.jl")
 
 function typeOfOpr(x)
+#  dprintln(3,"typeOfOpr ", x, " type = ", typeof(x))
   if isa(x, Expr) x.typ
   elseif isa(x, SymbolNode) x.typ
   else typeof(x) 
@@ -41,10 +38,11 @@ function typeOfOpr(x)
 end   
 
 type memoizeState
-  mapNameFuncInfo :: Dict{Any, Any}
+  mapNameFuncInfo :: Dict{Any, Any}   # tracks the mapping from unoptimized function name to optimized function name
+  trampolineSet   :: Set{Any}         # tracks whether we've previously created a trampoline for a given function name and signature
 
   function memoizeState()
-    new (Dict{Any,Any}())
+    new (Dict{Any,Any}(), Set{Any}())
   end
 end
 
@@ -83,7 +81,7 @@ function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
   return invariants
 end
 
-function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
+function processFuncCall(func_expr, call_sig_arg_tuple)
   fetyp = typeof(func_expr)
 
   dprintln(3,"processFuncCall ", func_expr, " ", call_sig_arg_tuple, " ", fetyp)
@@ -99,10 +97,6 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
 
   if ftyp == Function
     fs = (func, call_sig_arg_tuple)
-
-    if haskey(state.mapNameFuncInfo, fs)
-      return state.mapNameFuncInfo[fs]
-    end
 
     dprintln(3,"Attempt to optimize ", func)
     ct = code_typed(func, call_sig_arg_tuple)
@@ -122,17 +116,11 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
 
       analyze_res = sparse_analyze(ast, lives, loop_info)
 #      analyze_res = sparse_analyze(ast, lives, loop_info, invariants)
-      if analyze_res != nothing
-        state.mapNameFuncInfo[fs] = analyze_res
-      end
       return analyze_res
     end
   elseif ftyp == LambdaStaticData
     fs = (func, call_sig_arg_tuple)
 
-    if haskey(state.mapNameFuncInfo, fs)
-      return state.mapNameFuncInfo[fs]
-    end
     dprintln(3,"Adding ", func, " to functionsToProcess from LambdaStaticData")
     # FIX FIX FIX
     throw(string("Didn't add the case to handle LambdaStaticData in processFuncCall yet."))
@@ -140,49 +128,67 @@ function processFuncCall(state :: memoizeState, func_expr, call_sig_arg_tuple)
   return nothing
 end
 
+gSparseAccelerateState = memoizeState()
+
 function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number, is_top_level, read)
-  dprintln(2,"opt_calls_insert_trampoline ", x)
   if typeof(x) == Expr
     if x.head == :call
       call_expr = x.args[1]
       call_sig_args = x.args[2:end]
 
-      test_reordering_distributivity(call_expr, call_sig_args, state)
-
-      return nothing
-
-      dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_arg_tuple, " typeof(call_expr) = ", typeof(call_expr))
+      dprintln(2, "Start opt_calls = ", call_expr, " type = ", typeof(call_expr), " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
 
       new_func_name = string("opt_calls_trampoline_", string(call_expr))
       new_func_sym  = symbol(new_func_name)
-      new_func_str  = string("function ", new_func_name, " ( ")
 
       for i = 2:length(x.args)
         new_arg = AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, state)
         assert(isa(new_arg,Array))
         assert(length(new_arg) == 1)
         x.args[i] = new_arg[1]
-
-        new_func_str = string(new_func_str, x.args[i])
-        if i != length(x.args)
-          new_func_str = string(new_func_str, ",")
-        end
       end
-      new_func_str = string(new_func_str, ")\n")
-      new_func_str = string(new_func_str, call_expr, "(")
-      for i = 2:length(x.args)
-        new_func_str = string(new_func_str, x.args[i])
-        if i != length(x.args)
-          new_func_str = string(new_func_str, ",")
+
+      tmtup = (call_expr, call_sig_args)
+      if !in(tmtup, state.trampolineSet)
+        dprintln(3,"Creating new trampoline for ", call_expr)
+        push!(state.trampolineSet, tmtup)
+        println(new_func_sym)
+        for i = 1:length(call_sig_args)
+          println("    ", call_sig_args[i])
         end
+ 
+       @eval function ($new_func_sym)(orig_func, $(call_sig_args...))
+              call_sig = Expr(:tuple)
+
+              call_sig.args = map(typeOfOpr, Any[ $(call_sig_args...) ]) 
+              call_sig_arg_tuple = eval(call_sig)
+              println(call_sig_arg_tuple)
+
+              fs = ($new_func_sym, call_sig_arg_tuple)
+
+              if haskey(gSparseAccelerateState.mapNameFuncInfo, fs)
+                func_to_call = gSparseAccelerateState.mapNameFuncInfo[fs]
+              else
+                process_res = processFuncCall(orig_func, call_sig_arg_tuple)
+
+                if process_res != nothing
+                  dprintln(3,"processFuncCall DID optimize ", orig_func)
+                  func_to_call = process_res
+                else
+                  dprintln(3,"processFuncCall didn't optimize ", orig_func)
+                  func_to_call = orig_func
+                end
+                gSparseAccelerateState.mapNameFuncInfo[fs] = func_to_call
+              end
+
+              println("running ", $new_func_name, " fs = ", fs)
+              func_to_call($(call_sig_args...))
+            end
       end
-      new_func_str = string(new_func_str, ")\n")
-      new_func_str = string(new_func_str, "end\n")
 
-      trampoline_func = eval(quote $new_func_str end)
+      resolved_name = @eval SparseAccelerator.$new_func_sym
+      x.args = [ resolved_name, call_expr, x.args[2:end] ]
 
-      dprintln(2, "new_func = ", new_func_str)
-      x.args[1] = new_func_sym
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
       return x
@@ -192,59 +198,37 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
 end
 
 
-function opt_calls(x, state :: memoizeState, top_level_number, is_top_level, read)
-  if typeof(x) == Expr
-    if x.head == :call
-      call_expr = x.args[1]
-      call_sig = Expr(:tuple)
-      call_sig.args = map(typeOfOpr, x.args[2:end])
-      call_sig_arg_tuple = eval(call_sig)
-
-      dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_arg_tuple)
-
-      for i = 2:length(x.args)
-        new_arg = AstWalker.AstWalk(x.args[i], opt_calls, state)
-        assert(isa(new_arg,Array))
-        assert(length(new_arg) == 1)
-        x.args[i] = new_arg[1]
-      end
-
-      process_res = processFuncCall(state, call_expr, call_sig_arg_tuple)
-
-      if process_res != nothing
-        x.args[1] = process_res
-        println(2, "Replaced call_name = ", call_name, " type = ", typeof(call_name), " new = ", x.args[1])
-      end
-
-      return x
-    end    
-  end
-  nothing
-end
-
-gSparseAccelerateState = memoizeState()
-
 function convert_expr(ast)
-  println(2, "Mtest ", ast, " ", typeof(ast), " gSparseAccelerateState = ", gSparseAccelerateState)
+  dprintln(2, "Mtest ", ast, " ", typeof(ast), " gSparseAccelerateState = ", gSparseAccelerateState)
   res = AstWalker.AstWalk(ast, opt_calls_insert_trampoline, gSparseAccelerateState)
   assert(isa(res,Array))
   assert(length(res) == 1)
+  dprintln(2,res[1])
   return esc(res[1])
-#  return esc(ast)
 end
+
 
 macro acc(ast)
   convert_expr(ast)
 end
 
+
 function foo(x)
-  println("foo = ", x)
+  println("foo = ", x, " type = ", typeof(x))
   z1 = zeros(100)
   sum = 0.0
   for i = 1:100
     sum = sum + z1[i] 
   end
+#  bt = backtrace()
+#  Base.show_backtrace(STDOUT, bt)
+#  println("")
   x+1
+end
+
+function foo2(x,y)
+  println("foo2")
+  x+y
 end
 
 function foo_new(x)
@@ -273,12 +257,14 @@ function testit()
 #y = 1
 z = 7
 #@acc y = foo(bar(y))
-@acc y = foo(z)
-#println(y)
-#processFuncCall(gSparseAccelerateState, foo, (Int64,))
-convert_expr(quote y = foo(z) end)
+#println(macroexpand(quote @acc y = foo(z) end))
+#@acc y = foo(z)
+#@acc y = foo(y)
+println(y)
+#processFuncCall(foo, (Int64,))
+#convert_expr(quote y = foo(z) end)
 end
 
-testit()
+#testit()
 
 end   # end of module
