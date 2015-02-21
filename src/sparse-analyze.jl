@@ -66,16 +66,7 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     #       if uses(S) contains M or any element in reorderedDefs
     #    reordedDefs = union of defs(S) forall statement S
     #       if uses(S) contains any element in reorderedUses
-    
-    # Test if all the basic blocks of this loop contain only computations over
-    # which reordering is distributive
-    bbs = lives.basic_blocks
-    for bbnum in L.members
-        if !(bbs[bbnum].cur_bb.reordering_distributive)
-            return funcAST # Cannot do reordering. Return the original AST
-        end
-    end
-    
+        
     reordedUses = Set{Symbol}()
     reordedDefs = Set{Symbol}()
 

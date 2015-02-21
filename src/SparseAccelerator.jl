@@ -109,10 +109,198 @@ function updateLambdaMeta(expr, symbolInfo)
     expr.args[2] = meta
     dprintln(3, "Lambda is updated:", expr)
 end
-    
-function inferTypes(expr, symbolInfo)
 
-end    
+# In our type inference, we put inferred types into the typ field for expressions.
+# A symbol's type is still looked up from a dictionary.
+# TODO for Todd: when generating a new AST from CFG after our optimizations, ignore
+# those fields set up by our type inference.
+function typeOfNode(ast, symbolInfo) 
+  local asttyp = typeof(ast)
+  if asttyp == Expr
+    return ast.typ
+  elseif asttyp == SymbolNode
+    return ast.typ
+  elseif asttyp == Symbol
+    return symbolInfo[ast][2]
+  else 
+    return nothing
+  end
+end
+    
+function inferTypesForCall(head, args, symbolInfo, distributive)
+  if head == :(*)
+    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
+        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix) ||
+           (typeOfNode(args[2], symbolInfo) <: Number)
+            return (AbstractSparseMatrix, distributive)
+        elseif (typeOfNode(args[2], symbolInfo) <: Vector)
+            return (Vector, distributive)
+        else
+            return (Any, false)
+        end
+    end
+    if typeOfNode(args[1], symbolInfo) <: Number
+        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix)
+            return (AbstractSparseMatrix, distributive)
+        elseif (typeOfNode(args[2], symbolInfo) <: Vector)
+            return (Vector, distributive)
+        else
+            return (Any, false)
+        end
+    end
+  end
+  if head == :(+) || head == :(-)
+    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
+        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix) 
+            return (AbstractSparseMatrix, distributive)
+        else
+            return (Any, false)
+        end
+    end
+    if typeOfNode(args[1], symbolInfo) <: Vector
+        if (typeOfNode(args[2], symbolInfo) <: Vector)
+            return (Vector, distributive)
+        else 
+            return (Any, false)
+        end
+    end
+  end
+  if head == :(\)
+    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
+        if (typeOfNode(args[2], symbolInfo) <: Vector)
+            return (Vector, distributive)
+        else 
+            return (Any, false)
+        end
+    end
+  end
+  if head == :dot
+    if (typeOfNode(args[1], symbolInfo) <: Vector) && (typeOfNode(args[2], symbolInfo) <: Vector) 
+        return (Number, distributive)
+    else
+        return (Any, false)
+    end        
+  end
+  if head == :(==) || head == :(!=) || head == :(<) || head == :(<=) || 
+     head == :(>) || head == :(>=) # Numeric comparison 
+    return inferTypesForBinaryOP(args, symbolInfo, distributive)
+  end
+  if head == :(~) # Bitwise operator
+    return inferTypes(args[1], symbolInfo, distributive)
+  end
+  if head == :(&) || head == :(|) || head == :($) ||
+     head == :(>>>) || head == :(>>) || head == :(<<) # Bitwise operators
+    return inferTypesForBinaryOP(args, symbolInfo, distributive)
+  end
+  if head == :(+) || head == :(-) # Arithmetic operators
+    if (length(args) == 1) 
+        return inferTypes(args[1], symbolInfo, distributive)
+    else
+        return inferTypesForBinaryOP(args, symbolInfo, distributive)
+    end
+  end
+  if head == :(*) || head == :(/) || head == :(\) ||  # Arithmetic operators
+     head == :(^) || head == :(%) 
+    return inferTypesForBinaryOP(args, symbolInfo, distributive)
+  end
+  if head == :(!) # Negation on bool
+    return inferTypes(args[1], symbolInfo, distributive)
+  end
+  if head == :norm 
+    return inferTypes(args, symbolInfo, distributive)
+  end
+  if isa(head, TopNode)
+    return inferTypesForCall(head.name, args, symbolInfo, distributive)
+  end
+  throw(string("inferTypesForCall: unknown AST (", head, ",", args, ")"))
+end
+
+function inferTypesForBinaryOP(ast, symbolInfo, distributive)
+  assert(length(ast) == 2)
+  local lhs = ast[1]
+  local rhs = ast[2]
+  (typ, distributive) = inferTypes(rhs, symbolInfo, distributive)
+  (typ, distributive) = inferTypes(lhs, symbolInfo, distributive)
+  (typ, distributive)
+end
+
+function inferTypesForExprs(ast, symbolInfo, distributive)
+  local len = length(ast)
+  local typ
+  for i = 1:len
+    (typ, distributive) = inferTypes(ast[i], symbolInfo, distributive)
+  end
+  (typ, distributive)
+end
+
+function inferTypesForIf(args, symbolInfo, distributive)
+    # The structure of the if node is an array of length 2.
+    # The first index is the conditional.
+    # The second index is the label of the else section.
+    assert(length(args) == 2)
+    if_clause  = args[1]
+
+    return inferTypes(if_clause, symbolInfo, distributive)
+end
+
+# :lambda expression
+# ast = [ parameters, meta (local, types, etc), body ]
+function inferTypesForLambda(ast, symbolInfo, distributive)
+  assert(length(ast) == 3)
+  local body  = ast[3]
+  return inferTypes(body, symbolInfo, distributive)
+end
+
+# Recursively infer types of the nodes in the AST. Meanwhile, test for
+# reordering distributivity      
+# TODO: if only for reordering purpose, once we know distributive is false, we
+# can stop inferring types, since we cannot do reordering optimization anyway.
+function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
+  local asttyp = typeof(ast)
+  dprintln(2,"inferTypes ", asttyp)
+
+  if isa(ast, Tuple)
+    for i = 1:length(ast)
+        distributive |= inferTypes(ast[i], symbolInfo, distributive)
+    end
+  elseif asttyp == Expr
+    local head = ast.head
+    local args = ast.args
+    dprintln(2, "Expr ", head, " ", args)
+    if head == :lambda
+        return inferTypesForLambda(args, symbolInfo, distributive)
+    elseif head == :body
+        return inferTypesForExprs(args, symbolInfo, distributive)
+    elseif head == :(=) || head == :(+=) || head == :(-=) || head == :(*=) || 
+           head == :(/=) || head == :(\=) || head == :(%=) || head == :(^=) ||
+           head == :(&=) || head == :(|=) || head == :($=) || head == :(>>>=) ||
+           head == :(>>=) || head == :(<<=)  # Updating operators
+        return inferTypesForBinaryOP(args, symbolInfo, distributive)
+    elseif head == :return
+        return inferTypes(args, symbolInfo, distributive)
+    elseif head == :call || head == :call1
+        return inferTypesForCall(args[1], args[2:end], symbolInfo, distributive)
+    elseif head == :gotoifnot
+        return inferTypesForIf(args, symbolInfo, distributive)
+    elseif head == :line
+    else
+        throw(string("inferTypes: unknown Expr head :", head))
+    end
+  elseif asttyp == SymbolNode
+    ast.typ = symbolInfo[ast.Name][2]
+    return (ast.typ, distributive)
+  elseif asttyp == Symbol || asttyp == SymbolNode || asttyp == LabelNode ||
+         asttyp == GotoNode || asttyp == LineNumberNode ||
+         asttyp == ASCIIString || asttyp == LambdaStaticData
+  elseif asttyp <: Number
+      return (Number, distributive)
+  elseif asttyp.name == Array.name # Example: Array{Any,1}
+      return (Vector, distributive)
+  else
+      throw(string("inferTypes: unknown AST type :", asttyp, " ", ast))
+  end
+  return (asttyp, distributive)
+end
 
 function processFuncCall(func_expr, call_sig_arg_tuple)
   fetyp = typeof(func_expr)
@@ -162,7 +350,10 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
       # Although we know the types of the symbols from typed AST, we do not know the types 
       # of the (intermediate) nodes of lowered AST. So do a simple type inference on the 
       # lowered AST
-      inferTypes(ast.args[3], symbolInfo)
+      (typ, distributive) = inferTypes(ast.args[3], symbolInfo, true)
+      if !distributive
+        return nothing
+      end
 
       lives      = LivenessAnalysis.from_expr(ast)
 #      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)

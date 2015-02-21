@@ -64,7 +64,6 @@ type BasicBlock
     live_out
     depth_first_number
     statements :: Array{TopLevelStatement,1}
-    reordering_distributive :: Bool # Is reordering distributive over all the computations in the block?
 
     BasicBlock(label) = new(label,Set(),Set(),Set(),Set(),Set(),Set(),nothing,TopLevelStatement[], true)
 end
@@ -555,73 +554,6 @@ function from_assignment(ast::Array{Any,1}, depth, state, callback, cbdata)
   state.read = true
 end
 
-function test_reordering_distributivity(head, args, state)
-  if !state.cur_bb.reordering_distributive
-    return  # already known not distributive
-  end
-  
-  if head == :(*)
-    if typeof(args[1]) <: AbstractSparseMatrix
-        if (typeof(args[2]) <: AbstractSparseMatrix) ||
-           (typeof(args[2]) <: Vector) || 
-           (typeof(args[2]) <: Number)
-            return 
-        else
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-    if typeof(args[1]) <: Number
-        if (typeof(args[2]) <: AbstractSparseMatrix) || 
-           (typeof(args[2]) <: Vector)
-            return
-        else
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-  end
-  if head == :(+) || head == :(-)
-    if typeof(args[1]) <: AbstractSparseMatrix
-        if (typeof(args[2]) <: AbstractSparseMatrix) 
-            return
-        else
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-    if typeof(args[1]) <: Vector
-        if (typeof(args[2]) <: Vector)
-            return
-        else 
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-  end
-  if head == :(\)
-    if typeof(args[1]) <: AbstractSparseMatrix
-        if (typeof(args[2]) <: Vector)
-            return
-        else 
-            state.cur_bb.reordering_distributive = false
-            return
-        end
-    end
-  end
-  if head == :dot
-    if (typeof(args[1]) <: Vector) && (typeof(args[2]) <: Vector) 
-        return
-    else
-        state.cur_bb.reordering_distributive = false
-        return
-    end        
-  end
-  throw(string("test_reordering_distributivity: unknown AST (", head, ",", args, ")"))
-end
-
-
-
 function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   assert(length(ast) >= 1)
   local fun  = ast[1]
@@ -629,8 +561,6 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
   dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
    
-  test_reordering_distributivity(fun, args, state)
-
   # symbols don't need to be translated
   if typeof(fun) != Symbol
       from_expr(fun, depth, state, false, callback, cbdata)
@@ -902,7 +832,6 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
     dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
     add_access(state.cur_bb, ast.name, state.read, state.top_level_number)
-    add_sym_type(ast.name, ast.typ)
   elseif asttyp == TopNode    # name
     #skip
   elseif asttyp == GetfieldNode
