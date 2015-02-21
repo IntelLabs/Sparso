@@ -81,6 +81,39 @@ function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
   return invariants
 end
 
+function buildSymbol2TypeDict(expr)
+    assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
+    local meta  = expr.args[2]
+    dprintln(3, "meta is:", meta)
+    symbolInfo = Dict{Symbol, Any}()
+    for info in meta[2]
+        symbolInfo[info[1]] = info
+        dprintln(3,"Add symbolInfo: ", info[1], "==>", symbolInfo[info[1]])
+    end
+    dprintln(3, "SI is ", symbolInfo)
+    symbolInfo
+end
+
+function updateLambdaMeta(expr, symbolInfo)
+    assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
+    
+    # First, populate the type info of symbols into the metadata.
+    local meta  = expr.args[2]
+    dprintln(3, "meta is:", meta)
+    
+    for i in 1:length(meta[2])
+        info = meta[2][i]
+        #TODO: graceful exit of analysis in case the key is not in the dictionary
+        meta[2][i] = symbolInfo[info[1]]
+    end
+    expr.args[2] = meta
+    dprintln(3, "Lambda is updated:", expr)
+end
+    
+function inferTypes(expr, symbolInfo)
+
+end    
+
 function processFuncCall(func_expr, call_sig_arg_tuple)
   fetyp = typeof(func_expr)
 
@@ -105,11 +138,37 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
     dprintln(3,"ct[1] = ", ct[1])
     dprintln(3,"typeof(ct[1]) = ", typeof(ct[1]))
     if typeof(ct[1]) == Expr
-      ast = ct[1]
-      dprintln(3,"ct head = ", ast.head) 
+      # We get the type info from the typed AST, but do analysis on the lowered AST.
+      # Lowered AST is close to math level, while typed AST may contain detailed
+      # internal implementations of the math expressions due to optimizations done
+      # during type inference (such as inlining, tuple elimination, etc.)
+      # Our analyses target math expressions, not depend on how they are implemented.
+      symbolInfo = buildSymbol2TypeDict(ct[1])
+
+      cl = code_lowered(func, call_sig_arg_tuple)
+      dprintln(3,"cl = ", cl)
+      dprintln(3,"typeof(cl) = ", typeof(cl))
+      dprintln(3,"cl[1] = ", cl[1])
+      dprintln(3,"typeof(cl[1]) = ", typeof(cl[1]))
+           
+      ast = cl[1]
+      dprintln(3,"cl head = ", ast.head) 
       assert(ast.head == :lambda)
+      body = ast.args[3]
+
+      # Populate the lambda's meta info for symbols with what we know from the typed AST
+      updateLambdaMeta(ast, symbolInfo)
+
+      # Unfortunately, the nodes of typed AST and lowered AST may not be 1:1 correspondence.
+      # Although we know the types of the symbols from typed AST, we do not know the types 
+      # of the (intermediate) nodes of lowered AST. So do a simple type inference on the 
+      # lowered AST
+      inferTypes(ast.args[3], symbolInfo)
 
       lives      = LivenessAnalysis.from_expr(ast)
+      dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
+      body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+      dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
 #      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
@@ -129,6 +188,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
 end
 
 gSparseAccelerateState = memoizeState()
+LivenessAnalysis.set_debug_level(4)
 
 function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number, is_top_level, read)
   if typeof(x) == Expr

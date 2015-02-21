@@ -4,22 +4,6 @@ include("ast_walk.jl")
 
 import Base.show
 
-# A dictionary mapping a symbol to its type (like SparseMatrixCSC)
-# TODO: when recursive liveness analysis is enabled, each lambda should have
-# such a dictionary.
-#global sym2Type
-#::Dict{Symbol, Any}
-
-#function add_sym_type(sym, typ)
-#    if sym2Type[sym] == nothing
-#        sym2Type[sym] = typ
-#    else 
-#        assert(sym2Type[sym] == typ, "We assume a symbol does not change type")
-#    end
-#end
-
-#get_sym_type(sym) = sym2Type[sym]
-
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
 
@@ -670,12 +654,6 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   local param = ast[1]
   local meta  = ast[2]
   local body  = ast[3]
-
-  # Init a dictionary for the symbols.
-  # TODO: push the current functioin's dictionary into a stack, once we enable
-  # inter-procedural liveness analysis
-  sym2Type = Dict{Symbol, Any}()
-  
   from_expr(body, depth, state, false, callback, cbdata)
 end
 

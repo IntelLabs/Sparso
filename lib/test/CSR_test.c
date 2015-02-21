@@ -1,7 +1,7 @@
-#include <cstdio>
-#include <cassert>
+#include <stdio.h>
+#include <assert.h>
 
-#include "CSR.hpp"
+#include "CSR_Interface.h"
 
 /* Expected output
 
@@ -27,13 +27,13 @@ int main()
     assert(10 == m);
     int nnz = rowPtr[m];
     assert(nnz == sizeof(colIdx)/sizeof(colIdx[0]));
-    CSR A(m, m, rowPtr, colIdx, values);
-    A.printInDense();
-    printf("original banwdith: %d\n", A.getBandwidth());
+    CSR_Handle *A = CSR_Create(m, m, rowPtr, colIdx, values);
+    CSR_PrintInDense(A);
+    printf("original banwdith: %d\n", CSR_GetBandwidth(A));
 
     printf("RCM permutation\n");
     int perm[m], inversePerm[m];
-    A.getRCMPermutation(perm, inversePerm);
+    CSR_GetRCMPemutation(A, perm, inversePerm);
     for (int i = 0; i < m; ++i) {
       printf("%d ", inversePerm[i]);
     }
@@ -42,11 +42,14 @@ int main()
     int rowPtr2[m + 1];
     int colIdx2[nnz];
     double values2[nnz];
-    CSR A2(m, m, rowPtr2, colIdx2, values2);
+    CSR_Handle *A2 = CSR_Create(m, m, rowPtr2, colIdx2, values2);
 
-    A.permute(&A2, perm, inversePerm);
-    A2.printInDense();
-    printf("RCM permuted bandwidth: %d\n\n", A2.getBandwidth());
+    CSR_Permute(A, A2, perm, inversePerm);
+    CSR_PrintInDense(A2);
+    printf("RCM permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
+
+    CSR_Destroy(A2);
+    CSR_Destroy(A);
   }
 
   {
@@ -58,13 +61,13 @@ int main()
     int m = sizeof(rowPtr)/sizeof(rowPtr[0]) - 1;
     int nnz = rowPtr[m];
     assert(nnz == sizeof(colIdx)/sizeof(colIdx[0]));
-    CSR A(m, m, rowPtr, colIdx, values);
-    A.printInDense();
-    printf("original banwdith: %d\n", A.getBandwidth());
+    CSR_Handle *A = CSR_Create(m, m, rowPtr, colIdx, values);
+    CSR_PrintInDense(A);
+    printf("original banwdith: %d\n", CSR_GetBandwidth(A));
 
     printf("RCM permutation\n");
     int perm[m], inversePerm[m];
-    A.getRCMPermutation(perm, inversePerm);
+    CSR_GetRCMPemutation(A, perm, inversePerm);
     for (int i = 0; i < m; ++i) {
       printf("%d ", inversePerm[i]);
     }
@@ -73,11 +76,14 @@ int main()
     int rowPtr2[m + 1];
     int colIdx2[nnz];
     double values2[nnz];
-    CSR A2(m, m, rowPtr2, colIdx2, values2);
+    CSR_Handle *A2 = CSR_Create(m, m, rowPtr2, colIdx2, values2);
 
-    A.permute(&A2, perm, inversePerm);
-    A2.printInDense();
-    printf("RCM permuted bandwidth: %d\n", A2.getBandwidth());
+    CSR_Permute(A, A2, perm, inversePerm);
+    CSR_PrintInDense(A2);
+    printf("RCM permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
+
+    CSR_Destroy(A2);
+    CSR_Destroy(A);
   }
 
   return 0;

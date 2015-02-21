@@ -1,2 +1,2 @@
-test/CSR_test: test/CSR_test.cpp CSR.cpp
+test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp
 	icpc -fopenmp -g -I. -o $@ $^
