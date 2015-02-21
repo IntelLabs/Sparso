@@ -342,6 +342,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
       ast = cl[1]
       dprintln(3,"cl head = ", ast.head) 
       assert(ast.head == :lambda)
+      body = ast.args[3]
 
       # Populate the lambda's meta info for symbols with what we know from the typed AST
       updateLambdaMeta(ast, symbolInfo)
@@ -356,6 +357,9 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
       end
 
       lives      = LivenessAnalysis.from_expr(ast)
+      dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
+      body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+      dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
 #      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
@@ -375,6 +379,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
 end
 
 gSparseAccelerateState = memoizeState()
+LivenessAnalysis.set_debug_level(4)
 
 function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number, is_top_level, read)
   if typeof(x) == Expr
