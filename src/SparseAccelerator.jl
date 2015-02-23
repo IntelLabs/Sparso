@@ -221,6 +221,9 @@ function inferTypesForCall(head, args, symbolInfo, distributive)
   if head == :norm 
     return inferTypesForCall(:dot, [args[1], args[1]], symbolInfo, distributive)
   end
+  if head == :sqrt
+    return inferTypes(args[1], symbolInfo, distributive)   
+  end
   if isa(head, TopNode)
     return inferTypesForCall(head.name, args, symbolInfo, distributive)
   end
@@ -396,7 +399,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
 
-      analyze_res = sparse_analyze(ast, lives, loop_info)
+      analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
 #      analyze_res = sparse_analyze(ast, lives, loop_info, invariants)
       return analyze_res
     end
