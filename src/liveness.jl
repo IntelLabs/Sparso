@@ -68,7 +68,7 @@ type BasicBlock
     depth_first_number
     statements :: Array{TopLevelStatement,1}
  
-    BasicBlock(label) = new(label,Set(),Set(),Set(),Set(),nothing,Set(),Set(),nothing,TopLevelStatement[], true)
+    BasicBlock(label) = new(label,Set(),Set(),Set(),Set(),nothing,Set(),Set(),nothing,TopLevelStatement[])
 end
 
 function addStatement(top_level, state, ast)
