@@ -129,10 +129,6 @@ function show(io::IO, bb::BasicBlock)
         for k in tls[j].use
             print(io, " ", k)
         end
-        print(io," ) DefAfterUse(")
-        for k in tls[j].def_after_use
-            print(io, " ", k)
-        end
         print(io," ) LiveIn(")
         for k in tls[j].live_in
             print(io, " ", k)
