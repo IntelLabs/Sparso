@@ -81,30 +81,16 @@ function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
   return invariants
 end
 
-function buildSymbol2TypeDict(expr)
-    assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
-    local meta  = expr.args[2]
-    symbolInfo = Dict{Symbol, Any}()
-    for info in meta[2]
-        symbolInfo[info[1]] = info
-        dprintln(4,"Add symbolInfo: ", info[1], "==>", symbolInfo[info[1]])
-    end
-    dprintln(3, "SI is ", symbolInfo)
-    symbolInfo
-end
-
-function updateLambdaMeta(expr, symbolInfo)
+function initSymbol2TypeDict(expr, call_sig_arg_tuple)
     assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
     
-    # First, populate the type info of symbols into the metadata.
-    local meta  = expr.args[2]
-    for i in 1:length(meta[2])
-        info = meta[2][i]
-        #TODO: graceful exit of analysis in case the key is not in the dictionary
-        meta[2][i] = symbolInfo[info[1]]
+    local param = expr.args[1]
+    symbolInfo = Dict{Symbol, Any}()
+    for i = 1:length(param)
+        symbolInfo[param[i]] = call_sig_arg_tuple[i]
+        dprintln(4,"Add symbolInfo: ", param[i], "==>", symbolInfo[param[i]])
     end
-    expr.args[2] = meta
-    dprintln(3, "Lambda is updated:", expr)
+    symbolInfo
 end
 
 # In our type inference, we put inferred types into the typ field for expressions.
@@ -118,10 +104,26 @@ function typeOfNode(ast, symbolInfo)
   elseif asttyp == SymbolNode
     return ast.typ
   elseif asttyp == Symbol
-    return symbolInfo[ast][2]
-  else 
-    return Nothing
+    return symbolInfo[ast]
+  else
+    return asttyp
   end
+end
+
+function assignType(lhs, rhs, symbolInfo)
+    # Usually, the left hand side should be a symbol(node) or a tuple of symbol(node)s
+    if isa(lhs, Tuple)
+        for i = 1:length(lhs)
+                assignType(lhs[i], typeOfNode(rhs[i], symbolInfo), symbolInfo)
+        end
+    elseif typeof(lhs) == SymbolNode
+        ast.typ = typeOfNode(rhs, symbolInfo)
+    elseif typeof(lhs) == Symbol
+        symbolInfo[lhs] = typeOfNode(rhs, symbolInfo)
+    else
+        throw("Unhandled LHS in assignment ", lhs, " type is ", typeof(lhs))
+    end
+    nothing
 end
 
 # Our type inference annotates Expr or SymbolNode with the following types:
@@ -291,8 +293,12 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
            head == :(/=) || head == :(\=) || head == :(%=) || head == :(^=) ||
            head == :(&=) || head == :(|=) || head == :($=) || head == :(>>>=) ||
            head == :(>>=) || head == :(<<=)  # Updating operators
-        (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-        typ = ltyp
+        assert(length(args) == 2)
+        local lhs = args[1]
+        local rhs = args[2]
+        (rtyp, distributive) = inferTypes(rhs, symbolInfo, distributive)
+        assignType(lhs, rhs, symbolInfo)
+        typ = rtyp
         dprintln(2, "\tAssignment (", typ, ", ", distributive, ")")
     elseif head == :return
         (typ, distributive) = inferTypes(args, symbolInfo, distributive)
@@ -310,11 +316,11 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
     ast.typ = typ
     return (typ, distributive) 
   elseif asttyp == SymbolNode
-    ast.typ = symbolInfo[ast.Name][2]
+    ast.typ = symbolInfo[ast.Name]
     dprintln(2, "\tSymbolNode (", ast.typ, ", ", distributive, ")")
     return (ast.typ, distributive)
   elseif asttyp == Symbol
-    typ = symbolInfo[ast][2]
+    typ = symbolInfo[ast]
     dprintln(2, "\tSymbol (", typ, ", ", distributive, ")")
     return (typ, distributive)
   elseif asttyp == LabelNode ||
@@ -357,28 +363,22 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
     fs = (func, call_sig_arg_tuple)
 
     dprintln(3,"Attempt to optimize ", func)
-    ct = code_typed(func, call_sig_arg_tuple)
-    dprintln(3,"ct = ", ct)
-    dprintln(3,"typeof(ct) = ", typeof(ct))
-    dprintln(3,"ct[1] = ", ct[1])
-    dprintln(3,"typeof(ct[1]) = ", typeof(ct[1]))
-    if typeof(ct[1]) == Expr
-      # We get the type info from the typed AST, but do analysis on the lowered AST.
+    cl = code_lowered(func, call_sig_arg_tuple)
+    dprintln(3,"cl = ", cl)
+    
+    if typeof(cl[1]) == Expr
+      # We do analysis on the lowered AST, instead of typed AST.
       # Lowered AST is close to math level, while typed AST may contain detailed
       # internal implementations of the math expressions due to optimizations done
       # during type inference (such as inlining, tuple elimination, etc.)
       # Our analyses target math expressions, not depend on how they are implemented.
-      symbolInfo = buildSymbol2TypeDict(ct[1])
 
-      cl = code_lowered(func, call_sig_arg_tuple)
-      dprintln(3,"cl = ", cl)
-           
       ast = cl[1]
       assert(ast.head == :lambda)
       body = ast.args[3]
 
       # Populate the lambda's meta info for symbols with what we know from the typed AST
-      updateLambdaMeta(ast, symbolInfo)
+      symbolInfo = initSymbol2TypeDict(ast, call_sig_arg_tuple)
 
       # Unfortunately, the nodes of typed AST and lowered AST may not be 1:1 correspondence.
       # Although we know the types of the symbols from typed AST, we do not know the types 

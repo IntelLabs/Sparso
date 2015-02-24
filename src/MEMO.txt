@@ -42,7 +42,8 @@ The computations over which reordering is distributive:
     n*v // R(n*v)= P'*(n*v)= n*(P'*v) = n*R(v)
     if(n) // Result of if is a boolean (0: false, 1:true). R(if(n))=R(n!=0)=(R(n)!=0)=if(R(n))
     else  // = if(n==0). Then similar to above
-    any other expressions involving only numbers
+    any other expressions involving only numbers and returning only numbers:
+        f(x:<Number):<Number ==> R(f(x)) == f(x) == f(R(x))
     
 If reordering is distributive over every computation in the graph, then
 R(G) is a graph in which every live-in value is reordered, while all the computation nodes remain
