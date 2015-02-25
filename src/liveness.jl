@@ -42,18 +42,16 @@ type TopLevelStatement
     index
     def
     use
-    def_after_use
     live_in
     live_out
     expr
 
-    TopLevelStatement(i, ex) = new(i,Set(),Set(),Set(),Set(),Set(), ex)
+    TopLevelStatement(i, ex) = new(i,Set(),Set(),Set(),Set(), ex)
 end
 
 type AccessSummary
     def
     use
-    def_after_use
 end
 
 type BasicBlock
@@ -131,10 +129,6 @@ function show(io::IO, bb::BasicBlock)
         for k in tls[j].use
             print(io, " ", k)
         end
-        print(io," ) DefAfterUse(")
-        for k in tls[j].def_after_use
-            print(io, " ", k)
-        end
         print(io," ) LiveIn(")
         for k in tls[j].live_in
             print(io, " ", k)
@@ -175,8 +169,8 @@ function add_access(bb, sym, read, top_level_index)
 
     if in(sym, tls.use)
         if !read
-            dprintln(3, "sym already in tls.use so adding to def_after_use")
-            push!(tls.def_after_use, sym)
+            dprintln(3, "sym already in tls.use so adding to def")
+            push!(tls.def, sym)
         end
 
         dprintln(3, "sym already in tls.use")
@@ -417,7 +411,7 @@ function createFunctionBody(bl :: BlockLiveness)
 end
 
 function isDef(x, live_info)
-  in(x,live_info.def) || in(x,live_info.def_after_use)
+  in(x,live_info.def)
 end
 
 # Search for a statement with the given number in the liveness information.

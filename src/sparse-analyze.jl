@@ -36,7 +36,7 @@ end
 function effectedByReordering(S, symbolInfo)
     s1 = Set{Symbol}()
     for sym in S
-        typ = symbolInfo[sym][2]
+        typ = symbolInfo[sym]
         if typ <: AbstractArray
             push!(s1, sym)
         end
@@ -61,7 +61,6 @@ end
 #            if (!aliased) M=P'*M*P
     
 function reorder(funcAST, L, M, lives, symbolInfo)
-    dprintln(2, "**************************************************")
     dprintln(2, "Reorder: loop=", L, " Matrix=", M)
 
     # If we reorder M inside L, consequently, some other matrices or vectors
@@ -90,10 +89,6 @@ function reorder(funcAST, L, M, lives, symbolInfo)
         for stmt in bbs[bbnum].statements
             uses[stmt] = effectedByReordering(stmt.use, symbolInfo)
             defs[stmt] = effectedByReordering(stmt.def, symbolInfo)
-            println("** Stmt=", stmt)
-            println("   def = ", defs[stmt])
-            println("   use = ", uses[stmt])
-            
         end
     end
     
