@@ -60,15 +60,15 @@ type BasicBlock
     label
     def
     use
-    preds 
-    succs
+    preds :: Set{BasicBlock}
+    succs :: Set{BasicBlock}
     fallthrough_succ
     live_in
     live_out
     depth_first_number
     statements :: Array{TopLevelStatement,1}
  
-    BasicBlock(label) = new(label,Set(),Set(),Set(),Set(),nothing,Set(),Set(),nothing,TopLevelStatement[])
+    BasicBlock(label) = new(label,Set(),Set(),Set{BasicBlock}(),Set{BasicBlock}(),nothing,Set(),Set(),nothing,TopLevelStatement[])
 end
 
 function addStatement(top_level, state, ast)
@@ -245,11 +245,13 @@ function show(io::IO, bl::BlockLiveness)
 end
 
 function getMaxBB(bl::BlockLiveness)
-    max(keys(bl.basic_blocks))
+    dprintln(3,"getMaxBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
+    maximum(collect(keys(bl.basic_blocks)))
 end
 
 function getMinBB(bl::BlockLiveness)
-    min(keys(bl.basic_blocks))
+    dprintln(3,"getMinBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
+    minimum(collect(keys(bl.basic_blocks)))
 end
 
 type UpdateLabelState
@@ -286,14 +288,59 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
     return nothing
 end
 
-function changeEndingLabel(bb, after, new_bb_id)
-    state = UpdateLabelState(after.label, new_bb_id.label)
+function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
+    state = UpdateLabelState(after.label, new_bb.label)
     dprintln(2, "changeEndingLabel ", bb.statements[end].expr)
     new_last_stmt = AstWalker.AstWalk(bb.statements[end].expr, update_label, state)
     assert(state.changed)
     assert(isa(new_last_stmt,Array))
     assert(length(new_last_stmt) == 1)
     bb.statements[end].expr = new_last_stmt[1]
+end
+
+function insertBefore(bl::BlockLiveness, after :: Int)
+    dprintln(2,"insertBefore ", after)
+    assert(haskey(bl.basic_blocks, after))
+
+    bb_after = bl.basic_blocks[after]
+
+    if after < -2
+      new_bb_id = getMinBB(bl) - 1
+    else 
+      new_bb_id = getMaxBB(bl) + 1
+    end
+
+    dprintln(2,"new_bb_id = ", new_bb_id)
+
+    # Create the new basic block.
+    new_bb = BasicBlock(new_bb_id)
+    push!(new_bb.succs, bb_after)
+    new_bb.preds    = bb_after.preds
+    new_bb.live_in  = bb_after.live_in
+    new_bb.live_out = new_bb.live_in
+    bl.basic_blocks[new_bb_id] = new_bb
+
+    # Since new basic block id is positive and the successor basic block is also positive, we
+    # need to jump at the end of the new basic block to its successor.
+    if after > -2
+      new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
+      push!(new_bb.statements, new_goto_stmt)
+    end
+
+    bb_after.preds  = Set{BasicBlock}()
+    push!(bb_after.preds, new_bb)
+
+    # Sanity check that if a block has multiple incoming edges that it must have a positive label.
+    if length(new_bb.preds) > 1
+      assert(after > -2)
+    end
+
+    for pred in new_bb.preds
+      dprintln(2,"pred = ", pred.label)
+      replaceSucc(pred, bb_after, new_bb)
+    end
+
+    bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
 end
 
 function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
@@ -307,25 +354,20 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
       new_bb_id = getMinBB(bl) - 1
     else 
       new_bb_id = getMaxBB(bl) + 1
-
-      # Since the basic block id is positive, there is some conditional at the end of the basic block
-      # that contains the label number to jump to.  This number must be changed to the id of the basic
-      # block that is being inserted.
-      changeEndingLabel(bb_before, after, new_bb_id)
     end
-
-    # Hook up the new basic block id in the preds and succs of the before and after basic blocks.
-    delete!(bb_before.succs, after)
-    push!(bb_before.succs, new_bb_id)
-    delete!(bb_after.preds, before)
-    push!(bb_after.preds, new_bb_id)
 
     # Create the new basic block.
     new_bb = BasicBlock(new_bb_id)
-    push!(new_bb.preds, before)
-    push!(new_bb.succs, after)
+    push!(new_bb.preds, bb_before)
+    push!(new_bb.succs, bb_after)
     new_bb.live_in  = bb_before.live_out
     new_bb.live_out = new_bb.live_in
+    bl.basic_blocks[new_bb_id] = new_bb
+
+    # Hook up the new basic block id in the preds and succs of the before and after basic blocks.
+    replaceSucc(bb_before, bb_after, new_bb)
+    delete!(bb_after.preds, bb_before)
+    push!(bb_after.preds, new_bb)
 
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
