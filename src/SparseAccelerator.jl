@@ -29,6 +29,12 @@ end
 
 include("sparse-analyze.jl")
 
+testing_mode = false
+function enable_testing_mode()
+  dprintln(1,"enabling testing mode")
+  global testing_mode = true
+end
+
 function typeOfOpr(x)
 #  dprintln(3,"typeOfOpr ", x, " type = ", typeof(x))
   if isa(x, Expr) x.typ
@@ -393,8 +399,13 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
 
       lives      = LivenessAnalysis.from_expr(ast)
       dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
-      body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
-      dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
+      dprintln(3,"testing_mode = ", testing_mode)
+      if testing_mode
+        LivenessAnalysis.insertBetween(lives, 2, 4)
+        #LivenessAnalysis.insertBefore(lives, 2)
+        body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+        dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
+      end
 #      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
       loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 #      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
