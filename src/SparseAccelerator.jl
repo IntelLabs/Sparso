@@ -397,7 +397,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
         return nothing
       end
 
-      lives      = LivenessAnalysis.from_expr(ast)
+      lives      = LivenessAnalysis.initial_expr(ast)
       dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
       dprintln(3,"testing_mode = ", testing_mode)
       if testing_mode

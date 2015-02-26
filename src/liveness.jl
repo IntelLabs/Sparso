@@ -337,6 +337,26 @@ function insertBefore(bl::BlockLiveness, after :: Int)
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
 end
 
+function getMaxStatementNum(bb :: BasicBlock)
+    res = 0
+
+    for s in bb.statements
+      res = maximum(res, s.index)
+    end
+
+    return res
+end
+
+function getDistinctStatementNum(bl :: BlockLiveness)
+    res = 0
+
+    for bb in bl.basic_blocks
+      res = maximum(res, getMaxStatementNum(bb))
+    end
+
+    return res + 1
+end
+
 function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     assert(haskey(bl.basic_blocks, before))
     assert(haskey(bl.basic_blocks, after))
@@ -366,11 +386,19 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
     if after > -2
-      new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
+      new_goto_stmt = TopLevelStatement(getDistinctStatementNum(bl), GotoNode(after))
       push!(new_bb.statements, new_goto_stmt)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+end
+
+function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
+    live_res = expr_state()
+    live_res.basic_blocks = bl.basic_blocks
+    live_res.cur_bb = block
+    live_res.top_level_number = getDistinctStatementNum(bl)
+    from_expr(stmt, 1, live_res, true, not_handled, nothing)
 end
 
 function createFunctionBody(bl :: BlockLiveness)
@@ -603,6 +631,21 @@ function compute_dom_loops(bl::BlockLiveness)
     end
 
     DomLoops(dom_dict, loops)
+end
+
+function recompute_live_ranges(state, dfn)
+    for bb in state.basic_blocks
+        empty!(bb.live_in)
+        empty!(bb.live_out)
+        for s in bb.statements
+          empty!(s.live_in)
+          empty!(s.live_out)
+        end
+    end
+
+    compute_live_ranges(state, dfn)
+
+    nothing
 end
 
 function compute_live_ranges(state, dfn)
@@ -838,7 +881,8 @@ function countSymbolDefs(s, lives)
   return count
 end
 
-function from_expr(ast::Any)
+# ENTRY
+function initial_expr(ast::Any)
   from_expr(ast, not_handled, nothing)
 end
 
