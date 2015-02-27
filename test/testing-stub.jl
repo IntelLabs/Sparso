@@ -4,6 +4,33 @@ include("../src/SparseAccelerator.jl")
 using SparseAccelerator
 using MatrixMarket
 
+function cg(x, A, b, tol, maxiter)
+    r = b - A * x
+    rel_err = 1
+    p = r
+    rz = dot(r, r)
+    normr0 = sqrt(rz)
+    k = 1
+    while k <= maxiter
+        old_rz = rz
+        Ap = A*p # This takes most time. Compiler can reorder A to make faster
+        alpha = old_rz / dot(p, Ap)
+        x += alpha * p
+        r -= alpha * Ap
+        rz = dot(r, r)
+        rel_err = sqrt(rz)/normr0
+        #println(rel_err)
+        if rel_err < tol 
+            break
+        end
+        beta = rz/old_rz
+        p = r + beta * p
+        k += 1
+    end
+    return x, k, rel_err
+end
+
+
 function pcg(x, A, b, M, tol, maxiter)
     r = b - A * x
     z = M \ r
@@ -45,9 +72,12 @@ maxiter = 2 * N
 
 #println(names(typeof(methods(pcg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Float64, Int64)))))
 
-#ast = code_typed(pcg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Float64, Int64))
-
+#ast = code_lowered(pcg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Float64, Int64))
+#Base.tmerge(Int64, Float64)
+#acc_stub(ast[1])
 #insert_knobs(ast[1])
+
+@acc x = cg(x, A, b, tol, maxiter)
 
 @acc x = pcg(x, A, b, M, tol, maxiter)
 

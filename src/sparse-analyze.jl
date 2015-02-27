@@ -33,6 +33,17 @@ function reverseReorder(S::Symbol, P::AbstractMatrix)
     end 
 end
 
+function effectedByReordering(S, symbolInfo)
+    s1 = Set{Symbol}()
+    for sym in S
+        typ = symbolInfo[sym]
+        if typ <: AbstractArray
+            push!(s1, sym)
+        end
+    end
+    s1
+end 
+
 # Try to reorder sparse matrices and related (dense vectors) in the given loop
 # L is a loop region. M is a sparse matrix live into L. 
 # Lives is the set of matrices or vectors live into/out of L
@@ -49,7 +60,9 @@ end
 #            if (A==B) aliased=true
 #            if (!aliased) M=P'*M*P
     
-function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
+function reorder(funcAST, L, M, lives, symbolInfo)
+    dprintln(2, "Reorder: loop=", L, " Matrix=", M)
+
     # If we reorder M inside L, consequently, some other matrices or vectors
     # need to be reordered. For example, for the following code
     #       N = M * v 
@@ -62,37 +75,40 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     # statement S in loop L.  
     # Let us say "reorderedUses/Defs" are the matrices/vectors 
     # used/defined in L that got reordered. Then
-    #    reordedUses = union of uses(S) forall statement S 
+    #    reorderedUses = union of uses(S) forall statement S 
     #       if uses(S) contains M or any element in reorderedDefs
-    #    reordedDefs = union of defs(S) forall statement S
+    #    reorderedDefs = union of defs(S) forall statement S
     #       if uses(S) contains any element in reorderedUses
-    
-    # Test if all the basic blocks of this loop contain only computations over
-    # which reordering is distributive
+
     bbs = lives.basic_blocks
+    
+    # In liveness info, we need only matrices and vectors. Build this info
+    uses = Dict{Any, Set}()
+    defs = Dict{Any, Set}()
     for bbnum in L.members
-        if !(bbs[bbnum].cur_bb.reordering_distributive)
-            return funcAST # Cannot do reordering. Return the original AST
+        for stmt in bbs[bbnum].statements
+            uses[stmt] = effectedByReordering(stmt.use, symbolInfo)
+            defs[stmt] = effectedByReordering(stmt.def, symbolInfo)
         end
     end
     
-    reordedUses = Set{Symbol}()
-    reordedDefs = Set{Symbol}()
+    reorderedUses = Set{Symbol}()
+    reorderedDefs = Set{Symbol}()
 
     changed = true
     while changed
         changed = false
         for bbnum in L.members
             for stmt in bbs[bbnum].statements
-                if ⊈(stmt.use, reordedUses)
-                    if in(M.name, stmt.use) || !isempty(intersect(stmt.use, reordedDefs))
-                        union!(reordedUses, stmt.use)
+                if ⊈(uses[stmt], reorderedUses)
+                    if in(M, uses[stmt]) || !isempty(intersect(uses[stmt], reorderedDefs))
+                        union!(reorderedUses, uses[stmt])
                         changed = true
                     end
                 end
-                if ⊈(stmt.def, reorderedDefs)
-                    if !isempty(intersect(stmt.use, reordedUses))
-                        union!(reordedDefs, stmt.def)
+                if ⊈(defs[stmt], reorderedDefs)
+                    if !isempty(intersect(uses[stmt], reorderedUses))
+                        union!(reorderedDefs, defs[stmt])
                         changed = true
                     end
                 end
@@ -101,7 +117,11 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     end
     
     # The symbols that should be reordered before L are the reorderedUses live into L
-    reorderedBeforeL = intersect(reorderedUses, L.head.live_in)
+    headBlock = bbs[L.head]
+    reorderedBeforeL = intersect(reorderedUses, headBlock.live_in)
+    
+    dprintln(2, "To be reordered before L: ", reorderedBeforeL)
+    dprintln(2, "To be reordered inside L: ", reorderedDefs)
     
     # The symbols that are reordered inside L, due to the symbols reordered before L,
     # are simply the reorderedDefs
@@ -133,7 +153,7 @@ function reorder(funcAST, L, M::AbstractSparseMatrix, lives)
     end
 end
 
-function reorder(funcAST, lives, loop_info)
+function reorder(funcAST, lives, loop_info, symbolInfo)
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)
@@ -143,16 +163,17 @@ function reorder(funcAST, lives, loop_info)
     # So far, choose the first sparse matrix in the arguments.
     # TODO: have a heuristic to choose the best candidate?
     found = false
+    M = nothing
     for i = 1:length(param)
-        if typeof(param[i]) <: AbstractSparseMatrix
+        if typeOfNode(param[i], symbolInfo) <: AbstractSparseMatrix
             found = true
             M = param[i]
             break
         end
     end    
     if found 
-        for L in loop_info
-            reorder(funcAST, L, M, lives)
+        for L in loop_info.loops
+            reorder(funcAST, L, M, lives, symbolInfo)
         end
     end
 end
@@ -178,9 +199,10 @@ end
 
 # Try reordering, then insert knobs.
 # TODO: combine the two together so that we scan AST only once.
-function sparse_analyze(ast, lives, loop_info)
-  dprintln(2, "sparse_analyze: ", ast, " ", lives, " ", loop_info)
-  ast1 = reorder(ast, lives, loop_info)
+function sparse_analyze(ast, lives, loop_info, symbolInfo)
+  dprintln(2, "***************** Sparse analyze *****************")
+
+  ast1 = reorder(ast, lives, loop_info, symbolInfo)
 #  ast2 = insert_knobs(ast1, lives, loop_info)
   return ast1
 end
