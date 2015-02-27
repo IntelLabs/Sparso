@@ -14,6 +14,9 @@ int CSR_GetBandwidth(CSR_Handle *A);
 void CSR_PrintInDense(CSR_Handle *A);
 void CSR_Destroy(CSR_Handle *A);
 
+void reorderVector(double *v, double *tmp, const int *perm, int len);
+void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len);
+
 #ifdef __cplusplus
 }
 #endif
