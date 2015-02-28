@@ -335,13 +335,14 @@ function insertBefore(bl::BlockLiveness, after :: Int)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+    new_bb
 end
 
 function getMaxStatementNum(bb :: BasicBlock)
     res = 0
 
     for s in bb.statements
-      res = maximum(res, s.index)
+      res = max(res, s.index)
     end
 
     return res
@@ -350,8 +351,8 @@ end
 function getDistinctStatementNum(bl :: BlockLiveness)
     res = 0
 
-    for bb in bl.basic_blocks
-      res = maximum(res, getMaxStatementNum(bb))
+    for bb in values(bl.basic_blocks)
+      res = max(res, getMaxStatementNum(bb))
     end
 
     return res + 1
@@ -391,6 +392,8 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+    
+    new_bb
 end
 
 function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
@@ -547,18 +550,6 @@ function findLoopMembers(head, back_edge, bbs)
     flm_internal(back_edge, members, bbs)
 end
 
-function findLoopExits(L::Loop, bbs) 
-    for bbindex in L.members
-        bb = bbs[bbindex]
-        for succ in bb.succs
-            if !in(succ.label, L.members)
-                push!(L.exits, bb.label)
-                break
-            end
-        end
-    end
-end
-
 function compute_dom_loops(bl::BlockLiveness)
     change_found = true
     bbs_df_order = bl.depth_first_numbering
@@ -623,7 +614,6 @@ function compute_dom_loops(bl::BlockLiveness)
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 dprintln(3,"loop members = ", members, " type = ", typeof(members))
                 new_loop = Loop(succ_id, bb_index, members)
-                findLoopExits(new_loop, bl.basic_blocks)
                 dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 push!(loops, new_loop)
             end

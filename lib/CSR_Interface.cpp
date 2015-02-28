@@ -38,4 +38,22 @@ void CSR_Destroy(CSR_Handle *A)
   delete (CSR *)A;
 }
 
+// The first few parameters (numRows to v) represent the source matrix to be reordered. The next few
+// parameters (i1~v1) are the spaces that have been allocated to store the results. 
+// Perm and inversePerm are the spaces that have been allocated for permutation and inverse permutation
+// info; when getPermutation is true, this function computes and stores the info into them; otherwise,
+// they already contain the info, and this function just uses it.
+void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
+                 int *perm, int *inversePerm, bool getPermutation)
+{
+    CSR_Handle *A = CSR_Create(numRows, numCols, i, j, v);
+    if (getPermutation) {
+        CSR_GetRCMPemutation(A, perm, inversePerm);
+    }
+    CSR_Handle *newA = CSR_Create(numRows, numCols, i1, j1, v1);
+    CSR_Permute(A, newA, perm, inversePerm);
+    CSR_Destroy(newA);
+    CSR_Destroy(A);
+}
+
 }
