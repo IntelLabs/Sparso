@@ -1,8 +1,12 @@
 #TODO: remove this include once the package is ready
+include("../src/OptFramework.jl")
 include("../src/SparseAccelerator.jl")
 
-using SparseAccelerator
+using OptFramework
 using MatrixMarket
+
+sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
+OptFramework.setOptPasses([sparse_pass])
 
 function cg(x, A, b, tol, maxiter)
     r = b - A * x
