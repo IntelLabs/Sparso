@@ -55,6 +55,16 @@ function pcg(x, A, b, M, tol, maxiter)
 end
 
 A   = MatrixMarket.mmread("./data/MatrixMarket/BCSSTRUC2/bcsstk14.mtx")
+
+# Julia has only SparseMatrixCSC format so far. But for CG where SpMV is
+# important, CSR format is better in performance. However, CSC and CSR
+# are the same for symmetric matrices. So for them, we can treat CSC as CSR.
+# For a non-symmetric matrix A, to simulate CSR, we
+# can transpose A here, and Jongsoo's RCM will treated as a CSR representation,
+# even if the matrix type is still "SparseMatrixCSC".
+# Note: this actually changes the problem from Ax = b to A.'x = b. 
+# A   = A.'
+
 N   = size(A, 1)
 M   = speye(N) # Identity
 #M   = spdiagm(diag(A)) # Jacobi
