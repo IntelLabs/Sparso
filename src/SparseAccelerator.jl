@@ -1,7 +1,5 @@
 module SparseAccelerator
 
-export @acc
-
 include("ast_walk.jl")
 include("liveness.jl")
 include("alias-analysis.jl")
@@ -42,15 +40,6 @@ function typeOfOpr(x)
   else typeof(x) 
   end
 end   
-
-type memoizeState
-  mapNameFuncInfo :: Dict{Any, Any}   # tracks the mapping from unoptimized function name to optimized function name
-  trampolineSet   :: Set{Any}         # tracks whether we've previously created a trampoline for a given function name and signature
-
-  function memoizeState()
-    new (Dict{Any,Any}(), Set{Any}())
-  end
-end
 
 function findInvariants(members::Set, uniqSet::Set{Symbol}, bbs)
     invariants = Set{Symbol}()
@@ -351,216 +340,40 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
   return (asttyp, distributive)
 end
 
-function processFuncCall(func_expr, call_sig_arg_tuple)
-  fetyp = typeof(func_expr)
+function SparseOptimize(ast, call_sig_arg_tuple)
+  dprintln(3,"SparseOptimize args = ", call_sig_arg_tuple, "\n", ast, "\n")
 
-  dprintln(3,"processFuncCall ", func_expr, " ", call_sig_arg_tuple, " ", fetyp)
-  func = eval(func_expr)
-  dprintln(3,"func = ", func, " type = ", typeof(func))
+  # Populate the lambda's meta info for symbols with what we know from the typed AST
+  symbolInfo = initSymbol2TypeDict(ast, call_sig_arg_tuple)
 
-  ftyp = typeof(func)
-  dprintln(4,"After name resolution: func = ", func, " type = ", ftyp)
-  if ftyp == DataType
-    return nothing
-  end
-  assert(ftyp == Function || ftyp == IntrinsicFunction || ftyp == LambdaStaticData)
-
-  if ftyp == Function
-    fs = (func, call_sig_arg_tuple)
-
-    dprintln(3,"Attempt to optimize ", func)
-    cl = code_lowered(func, call_sig_arg_tuple)
-    dprintln(3,"cl = ", cl)
-    
-    if typeof(cl[1]) == Expr
-      # We do analysis on the lowered AST, instead of typed AST.
-      # Lowered AST is close to math level, while typed AST may contain detailed
-      # internal implementations of the math expressions due to optimizations done
-      # during type inference (such as inlining, tuple elimination, etc.)
-      # Our analyses target math expressions, not depend on how they are implemented.
-
-      ast = cl[1]
-      assert(ast.head == :lambda)
-      body = ast.args[3]
-
-      # Populate the lambda's meta info for symbols with what we know from the typed AST
-      symbolInfo = initSymbol2TypeDict(ast, call_sig_arg_tuple)
-
-      # Unfortunately, the nodes of typed AST and lowered AST may not be 1:1 correspondence.
-      # Although we know the types of the symbols from typed AST, we do not know the types 
-      # of the (intermediate) nodes of lowered AST. So do a simple type inference on the 
-      # lowered AST
-      (typ, distributive) = inferTypes(ast.args[3], symbolInfo, true)
-      dprintln(3,"After our type inference, cl = ", cl)
+  # Unfortunately, the nodes of typed AST and lowered AST may not be 1:1 correspondence.
+  # Although we know the types of the symbols from typed AST, we do not know the types 
+  # of the (intermediate) nodes of lowered AST. So do a simple type inference on the 
+  # lowered AST
+  (typ, distributive) = inferTypes(ast, symbolInfo, true)
+  dprintln(3,"After our type inference, typ = ", typ, " distributive = ", distributive)
       
-      if !distributive
-        return nothing
-      end
-
-      lives      = LivenessAnalysis.initial_expr(ast)
-      dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
-      dprintln(3,"testing_mode = ", testing_mode)
-      if testing_mode
-        LivenessAnalysis.insertBetween(lives, 2, 4)
-        #LivenessAnalysis.insertBefore(lives, 2)
-        body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
-        dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
-      end
-#      uniqSet    = AliasAnalysis.analyze_lambda(ast, lives)
-      loop_info  = LivenessAnalysis.compute_dom_loops(lives)
-#      invariants = findAllInvariants(loop_info, uniqSet, lives.basic_blocks)
-
-      analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
-#      analyze_res = sparse_analyze(ast, lives, loop_info, invariants)
-      return analyze_res
-    end
-  elseif ftyp == LambdaStaticData
-    fs = (func, call_sig_arg_tuple)
-
-    dprintln(3,"Adding ", func, " to functionsToProcess from LambdaStaticData")
-    # FIX FIX FIX
-    throw(string("Didn't add the case to handle LambdaStaticData in processFuncCall yet."))
+  if !distributive
+    return ast
   end
-  return nothing
+
+  body = ast.args[3]
+
+  lives = LivenessAnalysis.initial_expr(ast)
+  dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
+  dprintln(3,"testing_mode = ", testing_mode)
+  if testing_mode
+    LivenessAnalysis.insertBetween(lives, 2, 4)
+    #LivenessAnalysis.insertBefore(lives, 2)
+    body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+    dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
+  end
+  loop_info  = LivenessAnalysis.compute_dom_loops(lives)
+
+  analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
+  return analyze_res
 end
 
-gSparseAccelerateState = memoizeState()
 LivenessAnalysis.set_debug_level(4)
-
-function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number, is_top_level, read)
-  if typeof(x) == Expr
-    if x.head == :call
-      call_expr = x.args[1]
-      call_sig_args = x.args[2:end]
-      dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
-
-      new_func_name = string("opt_calls_trampoline_", string(call_expr))
-      new_func_sym  = symbol(new_func_name)
-
-      for i = 2:length(x.args)
-        new_arg = AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, state)
-        assert(isa(new_arg,Array))
-        assert(length(new_arg) == 1)
-        x.args[i] = new_arg[1]
-      end
-
-      tmtup = (call_expr, call_sig_args)
-      if !in(tmtup, state.trampolineSet)
-        dprintln(3,"Creating new trampoline for ", call_expr)
-        push!(state.trampolineSet, tmtup)
-        println(new_func_sym)
-        for i = 1:length(call_sig_args)
-          println("    ", call_sig_args[i])
-        end
- 
-       @eval function ($new_func_sym)(orig_func, $(call_sig_args...))
-              call_sig = Expr(:tuple)
-
-              call_sig.args = map(typeOfOpr, Any[ $(call_sig_args...) ]) 
-              call_sig_arg_tuple = eval(call_sig)
-              println(call_sig_arg_tuple)
-
-              fs = ($new_func_sym, call_sig_arg_tuple)
-
-              if haskey(gSparseAccelerateState.mapNameFuncInfo, fs)
-                func_to_call = gSparseAccelerateState.mapNameFuncInfo[fs]
-              else
-                process_res = processFuncCall(orig_func, call_sig_arg_tuple)
-
-                if process_res != nothing
-                  dprintln(3,"processFuncCall DID optimize ", orig_func)
-                  func_to_call = process_res
-                else
-                  dprintln(3,"processFuncCall didn't optimize ", orig_func)
-                  func_to_call = orig_func
-                end
-                gSparseAccelerateState.mapNameFuncInfo[fs] = func_to_call
-              end
-
-              println("running ", $new_func_name, " fs = ", fs)
-              func_to_call($(call_sig_args...))
-            end
-      end
-
-      resolved_name = @eval SparseAccelerator.$new_func_sym
-      x.args = [ resolved_name, call_expr, x.args[2:end] ]
-
-      dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
-
-      return x
-    end    
-  end
-  nothing
-end
-
-
-function convert_expr(ast)
-  dprintln(2, "Mtest ", ast, " ", typeof(ast), " gSparseAccelerateState = ", gSparseAccelerateState)
-  res = AstWalker.AstWalk(ast, opt_calls_insert_trampoline, gSparseAccelerateState)
-  assert(isa(res,Array))
-  assert(length(res) == 1)
-  dprintln(2,res[1])
-  return esc(res[1])
-end
-
-
-macro acc(ast)
-  convert_expr(ast)
-end
-
-
-function foo(x)
-  println("foo = ", x, " type = ", typeof(x))
-  z1 = zeros(100)
-  sum = 0.0
-  for i = 1:100
-    sum = sum + z1[i] 
-  end
-#  bt = backtrace()
-#  Base.show_backtrace(STDOUT, bt)
-#  println("")
-  x+1
-end
-
-function foo2(x,y)
-  println("foo2")
-  x+y
-end
-
-function foo_new(x)
-  println("foo_new = ", x)
-  x+10
-end
-
-function bar(x)
-  println("bar = ", x)
-
-  z1 = zeros(100)
-  sum = 0.0
-  for i = 1:100
-    sum = sum + z1[i] 
-  end
-
-  x+2
-end
-
-function bar_new(x)
-  println("bar_new = ", x)
-  x+20
-end
-
-function testit()
-#y = 1
-z = 7
-#@acc y = foo(bar(y))
-#println(macroexpand(quote @acc y = foo(z) end))
-#@acc y = foo(z)
-#@acc y = foo(y)
-println(y)
-#processFuncCall(foo, (Int64,))
-#convert_expr(quote y = foo(z) end)
-end
-
-#testit()
 
 end   # end of module
