@@ -1,12 +1,35 @@
+export CSR_ReorderMatrix, reorderVector, reverseReorderVector
+
+# In reordering, we insert some calls to the following 3 functions. So they are executed secretly
+function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
+  ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
+               Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cint}, Ptr{Cint}, Cbool),
+               A.m, A.n, A.colptr, A.rowval, A.nzval, 
+               newA.colptr, newA.rowval, newA.nzval,
+               P, Pprime, getPermuation)
+end
+
+function reorderVector(V::Vector, newV::Vector, P::Vector)
+   ccall((:reorderVector, "../lib/libcsr.so"), Void,
+         (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
+         V, newV, P, length(V))
+end
+
+function reverseReorderVector(V::Vector, newV::Vector, Pprime::Vector)
+   ccall((:reorderVectorWithInversePerm, "../lib/libcsr.so"), Void,
+         (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
+         V, newV, Pprime, length(V))
+end
+
 function allocateForPermutation(M::Symbol, lives, block)
     P = gensym("P")
-    stmt = :($P = similar{Cint}($M))
+    stmt = :($P = Array(Cint, size($M, 2)))
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
     Pprime = gensym("Pprime")
-    stmt = quote
-        $Pprime = similar{Cint}($M)
-    end
+    stmt = :($Pprime = Array(Cint, size($M, 2)))
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     (P, Pprime)
 end
@@ -17,32 +40,25 @@ end
 # function must be called to reorder matrix M first, and then for other matrices
 function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, lives, block)
     # Allocate space that stores the reordering result in Julia
-    newA = gensym(A)
-    stmt = quote
-        # TODO: Here we hard code the sparse matrix format and element type. Should make it
-        # general in future
-        $newA = SparseMatrixCSC{Cdouble, Cint}($A.m, $A.n, similar{Cint}($A.colptr),
-                                similar{Cint}($A.rowval), similar{Cdouble}($A.nzval)) 
-    end
+    # TODO: Here we hard code the sparse matrix format and element type. Should make it
+    # general in future
+    newA = gensym(string(A))
+    stmt = :(  
+        $newA = SparseMatrixCSC($A.m, $A.n, 
+                  Array(Cint, size($A.colptr, 1)), 
+                  Array(Cint, size($A.rowval, 1)), 
+                  Array(Cdouble, size($A.nzval, 1))) 
+    )
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
     # Do the actual reordering in the C library
     getPermuation = (A == M) ? true : false
-    stmt = quote 
-        ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
-                                    Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-                                    Ptr{Cint}, Ptr{Cint}, Cbool),
-                                    $A.m, $A.n, $A.colptr, $A.rowval, $A.nzval, 
-                                    $newA.colptr, $newA.rowval, $newA.nzval,
-                                    $P, $Pprime, $getPermuation)
-    end
+    stmt = :(CSR_ReorderMatrix($A, $newA, $P, $Pprime, $getPermuation))
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
-    # Update the original matrix with the new data
-    # ISSUE: will this copy the data? That is too expensive.
-    stmt = quote
-        $A = $new_A
-    end
+    # Update the original matrix with the new data. Note: assignment between
+    # two arrays actually make them aliased. So there is no copy cost
+    stmt = :( $A = $newA )
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
 end
 
@@ -52,47 +68,33 @@ reverseReorderMatrix(sym, M, P, Pprime, lives, landingPad) =
 
 function reorderVector(V::Symbol, P::Symbol, lives, block)
     # Allocate space that stores the reordering result in Julia
-    newV = gensym(V)
-    stmt = quote
-        # TODO: Here we hard code the element type. Should make it general in future
-        $newV = similar{Cdouble}($V) 
-    end
+    # TODO: Here we hard code the element type. Should make it general in future
+    newV = gensym(string(V))
+    stmt = :( $newV = Array(Cdouble, size($V, 1))) 
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
     # Do the actual reordering in the C library
-    stmt = quote 
-        ccall((:reorderVector, "../lib/libcsr.so"), (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-                                                $V, $newV, $P, length($V))
-    end
+    stmt = :(reorderVector($V, $newV, $P))
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
     # Update the original vector with the new data
-    stmt = quote
-        $V = $new_V
-    end
+    stmt = :( $V = $newV )
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
 end
 
 function reverseReorderVector(V::Symbol, Pprime::Symbol, lives, block)
     # Allocate space that stores the reordering result in Julia
-    newV = gensym(V)
-    stmt = quote
-        # TODO: Here we hard code the element type. Should make it general in future
-        $newV = similar{Cdouble}($V) 
-    end
+    # TODO: Here we hard code the element type. Should make it general in future
+    newV = gensym(string(V))
+    stmt = :( $newV = Array(Cdouble, size($V, 1))) 
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
     # Do the actual reordering in the C library
-    stmt = quote 
-        ccall((:reorderVectorWithInversePerm, "../lib/libcsr.so"), (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-                                    $V, $newV, $Pprime, length($V))
-    end
+    stmt = :(reorderVectorWithInversePerm($V, $newV, $Pprime))
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
     
     # Update the original vector with the new data
-    stmt = quote
-        $V = $new_V
-    end
+    stmt = :( $V = $newV )
     LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
 end
 
@@ -217,13 +219,18 @@ function reorder(funcAST, L, M, lives, symbolInfo)
     # Now reorder other arrays
     for sym in reorderedBeforeL
         if sym != M
-            if typeOfNode(sym) <: AstractMatrix
+            if typeOfNode(sym, symbolInfo) <: AbstractMatrix
                 reorderMatrix(sym, M, P, Pprime, lives, landingPad)
             else
                 reorderVector(sym, P, lives, landingPad)
             end
         end
     end
+    
+    if(DEBUG_LVL >= 2)
+        println("******** Landing pad before L ********")
+        show(landingPad);
+    end 
     
     # At the exit of the loop, we need to reverse reorder those that live out of the loop,
     # to recover their original order before they are getting used outside of the loop
@@ -243,15 +250,25 @@ function reorder(funcAST, L, M, lives, symbolInfo)
                 end
                 
                 for sym in reverseReordered
-                    if typeOfNode(sym) <: AstractMatrix
+                    if typeOfNode(sym, symbolInfo) <: AbstractMatrix
                         reverseReorderMatrix(sym, M, P, Pprime, lives, landingPad)
                     else
                         reverseReorderVector(sym, Pprime, lives, landingPad)
                     end
                 end
+                
+                if(DEBUG_LVL >= 2)
+                    println("******** Landing pad after L for bb ", bbnum, " ********")
+                    show(landingPad);
+                end 
             end
         end
     end
+
+    if(DEBUG_LVL >= 2)
+        println("******** CFG after reordering: ********")
+        show(lives);
+    end 
 end
 
 function reorder(funcAST, lives, loop_info, symbolInfo)
