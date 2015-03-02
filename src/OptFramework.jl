@@ -127,15 +127,24 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
 
       cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple)
       dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
+      if typeof(cur_ast) != Expr
+        dprintln(0, "cur_ast after opt pass not an expression. type = ", typeof(cur_ast))
+      end
     end
 
     if last_lowered == true
-       method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
-       # Must be going from lowered AST to type AST.
-       (cur_ast, ty) = typeinf(cur_ast, method[1], method[2])
-       if !isa(tree,Expr)
-          cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, tree)
-       end
+      assert(typeof(cur_ast) == Expr)
+      assert(cur_ast.head == :lambda)
+      body = cur_ast.args[3]
+      dprintln(3,"Last opt pass worked on lowered.\n", body)
+      
+
+      method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
+      # Must be going from lowered AST to type AST.
+      (cur_ast, ty) = typeinf(cur_ast, method[1], method[2])
+      if !isa(tree,Expr)
+         cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, tree)
+      end
     end
 
     # Write the modifed code back to the function.
