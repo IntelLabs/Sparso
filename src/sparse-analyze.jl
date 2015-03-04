@@ -1,5 +1,26 @@
 export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 
+# This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
+DEBUG_LVL=3
+
+function set_debug_level(x)
+    global DEBUG_LVL = x
+end
+
+# A debug print routine.
+function dprint(level,msgs...)
+    if(DEBUG_LVL >= level)
+        print(msgs...)
+    end 
+end
+
+# A debug print routine.
+function dprintln(level,msgs...)
+    if(DEBUG_LVL >= level)
+        println(msgs...)
+    end 
+end
+
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
   ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
@@ -17,20 +38,20 @@ function reorderVector(V::Vector, newV::Vector, P::Vector)
          V, newV, P, length(V))
 end
 
-function reverseReorderVector(V::Vector, newV::Vector, Pprime::Vector)
+function reverseReorderVector(V::Vector, newV::Vector, P::Vector)
    ccall((:reorderVectorWithInversePerm, "../lib/libcsr.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         V, newV, Pprime, length(V))
+         V, newV, P, length(V))
 end
 
-function allocateForPermutation(M::Symbol, lives, block)
+function allocateForPermutation(M::Symbol, new_stmts)
     P = gensym("P")
     stmt = :($P = Array(Cint, size($M, 2)))
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     
     Pprime = gensym("Pprime")
     stmt = :($Pprime = Array(Cint, size($M, 2)))
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     (P, Pprime)
 end
 
@@ -38,7 +59,7 @@ end
 # analysis. If A and M are the same, we also compute permutation and inverse permutation
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
 # function must be called to reorder matrix M first, and then for other matrices
-function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, lives, block)
+function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the sparse matrix format and element type. Should make it
     # general in future
@@ -49,53 +70,52 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, lives, b
                   Array(Cint, size($A.rowval, 1)), 
                   Array(Cdouble, size($A.nzval, 1))) 
     )
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
     getPermuation = (A == M) ? true : false
     stmt = :(CSR_ReorderMatrix($A, $newA, $P, $Pprime, $getPermuation))
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     
     # Update the original matrix with the new data. Note: assignment between
     # two arrays actually make them aliased. So there is no copy cost
     stmt = :( $A = $newA )
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
 end
 
-                        
-reverseReorderMatrix(sym, M, P, Pprime, lives, landingPad) = 
-       reorderMatrix(sym, M, Pprime, P, lives, landingPad)
+reverseReorderMatrix(sym, M, P, Pprime, landingPad) = 
+       reorderMatrix(sym, M, Pprime, P, landingPad)
 
-function reorderVector(V::Symbol, P::Symbol, lives, block)
+function reorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
     stmt = :( $newV = Array(Cdouble, size($V, 1))) 
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
     stmt = :(reorderVector($V, $newV, $P))
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     
     # Update the original vector with the new data
     stmt = :( $V = $newV )
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
 end
 
-function reverseReorderVector(V::Symbol, Pprime::Symbol, lives, block)
+function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
     stmt = :( $newV = Array(Cdouble, size($V, 1))) 
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = :(reorderVectorWithInversePerm($V, $newV, $Pprime))
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    stmt = :(reorderVectorWithInversePerm($V, $newV, $P))
+    push!(new_stmts, stmt)
     
     # Update the original vector with the new data
     stmt = :( $V = $newV )
-    LivenessAnalysis.addStatementToEndOfBlock(lives, block, stmt)
+    push!(new_stmts, stmt)
 end
 
 function effectedByReordering(S, symbolInfo)
@@ -128,6 +148,11 @@ end
 #        have the same size and type(?)
 function reorder(funcAST, L, M, lives, symbolInfo)
     dprintln(2, "Reorder: loop=", L, " Matrix=", M)
+
+    if(DEBUG_LVL >= 2)
+        println("******** CFG before reordering: ********")
+        show(lives);
+    end 
 
     # If we reorder M inside L, consequently, some other matrices or vectors
     # need to be reordered. For example, for the following code
@@ -200,40 +225,35 @@ function reorder(funcAST, L, M, lives, symbolInfo)
     reordered = union(reorderedBeforeL, reorderedDefs)
            
     #TODO: benefit-cost analysis
-        
-    # Insert R(LiveIn) before the head. If the head has more than,
-    # one predecessor, insert an empty block before the head.
-    landingPad = nothing
-    if length(headBlock.preds) == 1
-        landingPad = first(headBlock.preds)
-    else
-        landingPad = LivenessAnalysis.insertBefore(lives, L.head)
-    end
+      
+    # New a vector to hold the new reordering statements R(LiveIn) before the loop. 
+    # We do not insert them into the CFG at this moment, since that will change the
+    # pred-succ and live info, leading to some subtle errors. We need CFG not changed
+    # until all new statements are ready.
+    new_stmts_before_L = Expr[]
 
     # Allocate space to store the permutation and inverse permutation info
-    (P, Pprime) = allocateForPermutation(M, lives, landingPad)
+    (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
 
     # Compute P and Pprime, and reorder M
-    reorderMatrix(M, M, P, Pprime, lives, landingPad)
+    reorderMatrix(M, M, P, Pprime, new_stmts_before_L)
     
     # Now reorder other arrays
     for sym in reorderedBeforeL
         if sym != M
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                reorderMatrix(sym, M, P, Pprime, lives, landingPad)
+                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L)
             else
-                reorderVector(sym, P, lives, landingPad)
+                reorderVector(sym, P, new_stmts_before_L)
             end
         end
     end
-    
-    if(DEBUG_LVL >= 2)
-        println("******** Landing pad before L ********")
-        show(landingPad);
-    end 
-    
+        
     # At the exit of the loop, we need to reverse reorder those that live out of the loop,
     # to recover their original order before they are getting used outside of the loop
+    # We remember those in an array. Each element is a tuple 
+    # (bb label, succ label, the new statements to be inserted on the edge from bb to succ)
+    new_stmts_after_L =  Any[]
     for bbnum in L.members
         bb = bbs[bbnum]
         for succ in bb.succs
@@ -242,26 +262,37 @@ function reorder(funcAST, L, M, lives, symbolInfo)
                 if isempty(reverseReordered)
                     continue
                 end
-                landingPad = nothing
-                if length(succ.preds) == 1
-                    landingPad = succ
-                else
-                    landingPad = LivenessAnalysis.insertBetween(lives, bbnum, succ.label)
-                end
+                
+                new_stmts = (bbnum, succ.label,  Expr[])
+                push!(new_stmts_after_L, new_stmts)
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                        reverseReorderMatrix(sym, M, P, Pprime, lives, landingPad)
+                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts)
                     else
-                        reverseReorderVector(sym, Pprime, lives, landingPad)
+                        reverseReorderVector(sym, P, new_stmts[3])
                     end
                 end
-                
-                if(DEBUG_LVL >= 2)
-                    println("******** Landing pad after L for bb ", bbnum, " ********")
-                    show(landingPad);
-                end 
             end
+        end
+    end
+
+    # Now actually change the CFG.
+    (new_bb, new_goto_stmt) = LivenessAnalysis.insertBefore(lives, L.head)
+    for stmt in new_stmts_before_L
+        LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+    end
+    if new_goto_stmt != nothing
+      push!(new_bb.statements, new_goto_stmt)
+    end
+    
+    for (pred, succ, new_stmts) in new_stmts_after_L
+        (new_bb, new_goto_stmt) = LivenessAnalysis.insertBetween(lives, pred, succ)
+        for stmt in new_stmts
+            LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+        end
+        if new_goto_stmt != nothing
+          push!(new_bb.statements, new_goto_stmt)
         end
     end
 
@@ -294,6 +325,11 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
             reorder(funcAST, L, M, lives, symbolInfo)
         end
     end
+    
+    body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+    funcAST.args[3] = body_reconstructed
+    
+    funcAST
 end
 
 # Try to insert knobs to an expression
