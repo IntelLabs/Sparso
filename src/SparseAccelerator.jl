@@ -340,7 +340,10 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
   return (asttyp, distributive)
 end
 
-function SparseOptimize(ast, call_sig_arg_tuple)
+function SparseOptimize(ast, call_sig_arg_tuple, lambda :: LambdaStaticData, call_sig_args)
+  assert(typeof(ast) == Expr)
+  assert(ast.head == :lambda)
+
   dprintln(3,"SparseOptimize args = ", call_sig_arg_tuple, "\n", ast, "\n")
 
   # Populate the lambda's meta info for symbols with what we know from the typed AST
@@ -371,6 +374,9 @@ function SparseOptimize(ast, call_sig_arg_tuple)
   loop_info  = LivenessAnalysis.compute_dom_loops(lives)
 
   analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
+  dprintln(3,"result after sparse_analyze\n", analyze_res, " type = ", typeof(analyze_res))
+  assert(typeof(analyze_res) == Expr)
+  assert(analyze_res.head == :lambda)
   return analyze_res
 end
 

@@ -69,10 +69,10 @@ type memoizeState
   end
 end
 
-function processFuncCall(func_expr, call_sig_arg_tuple)
+function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
   fetyp = typeof(func_expr)
 
-  dprintln(3,"processFuncCall ", func_expr, " ", call_sig_arg_tuple, " ", fetyp)
+  dprintln(3,"processFuncCall ", func_expr, " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args)
   func = eval(func_expr)
   dprintln(3,"func = ", func, " type = ", typeof(func))
 
@@ -105,7 +105,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
     else
       (cur_ast, ty) = Base.typeinf(method[3].func.code, method[1], method[2])
       # typeof(cur_ast) = Array{Uint8,1}
-      if !isa(tree,Expr)
+      if !isa(cur_ast,Expr)
          cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
       end
     end
@@ -125,21 +125,30 @@ function processFuncCall(func_expr, call_sig_arg_tuple)
       end
       last_lowered = optPasses[i].lowered
 
-      cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple)
+      cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple, method[3].func.code, call_sig_args)
       dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
+      if typeof(cur_ast) != Expr
+        dprintln(0, "cur_ast after opt pass not an expression. type = ", typeof(cur_ast))
+      end
     end
 
     if last_lowered == true
-       method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
-       # Must be going from lowered AST to type AST.
-       (cur_ast, ty) = typeinf(cur_ast, method[1], method[2])
-       if !isa(tree,Expr)
-          cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, tree)
-       end
+      assert(typeof(cur_ast) == Expr)
+      assert(cur_ast.head == :lambda)
+      body = cur_ast.args[3]
+      dprintln(3,"Last opt pass worked on lowered.\n", body)
+      
+
+      method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
+      # Must be going from lowered AST to type AST.
+      (cur_ast, ty) = typeinf(cur_ast, method[1], method[2])
+      if !isa(tree,Expr)
+         cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, tree)
+      end
     end
 
     # Write the modifed code back to the function.
-    methods[3].func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), methods[3].func.code, cur_ast)
+    method[3].func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
 
     return new_func
   end
@@ -176,9 +185,9 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
         dprintln(3,"Creating new trampoline for ", call_expr)
         # Remember that we've created a trampoline for this pair.
         push!(state.trampolineSet, tmtup)
-        println(new_func_sym)
+        dprintln(2, new_func_sym)
         for i = 1:length(call_sig_args)
-          println("    ", call_sig_args[i])
+          dprintln(2, "    ", call_sig_args[i])
         end
  
        # Define the trampoline.
@@ -198,7 +207,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
                 func_to_call = gOptFrameworkState.mapNameFuncInfo[fs]
               else
                 # ... else see if we can optimize it.
-                process_res = processFuncCall(orig_func, call_sig_arg_tuple)
+                process_res = processFuncCall(orig_func, call_sig_arg_tuple, $call_sig_args)
 
                 if process_res != nothing
                   # We did optimize it in some way we will call the optimized version.
@@ -238,7 +247,7 @@ function convert_expr(ast)
   res = AstWalker.AstWalk(ast, opt_calls_insert_trampoline, gOptFrameworkState)
   assert(isa(res,Array))
   assert(length(res) == 1)
-  dprintln(2,res[1])
+  dprintln(2,"converted expression = ", res[1])
   return esc(res[1])
 end
 
