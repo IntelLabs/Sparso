@@ -126,9 +126,18 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       last_lowered = optPasses[i].lowered
 
       cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple, method[3].func.code, call_sig_args)
-      dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
-      if typeof(cur_ast) != Expr
-        dprintln(0, "cur_ast after opt pass not an expression. type = ", typeof(cur_ast))
+
+      if typeof(cur_ast) == Function
+        dprintln(3,"Optimization pass returned a function.")
+        if i != length(optPasses)
+          dprintln(0,"A non-final optimization pass returned a Function so later optimization passes will not run.")
+        end
+        return cur_ast
+      else
+        dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
+        if typeof(cur_ast) != Expr
+          dprintln(0, "cur_ast after opt pass not an expression. type = ", typeof(cur_ast))
+        end
       end
     end
 
