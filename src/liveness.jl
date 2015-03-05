@@ -85,7 +85,7 @@ function addStatement(top_level, state, ast)
 end
 
 function show(io::IO, bb::BasicBlock)
-    print(io,bb.label, ": Pred(")
+    print(io, "BasicBlock ", bb.label, ": Pred(")
     for j in bb.preds
         print(io," ",j.label)
     end
@@ -93,7 +93,7 @@ function show(io::IO, bb::BasicBlock)
     for j in bb.succs
         print(io," ",j.label)
     end
-    print(io," ) fallthrough = ", bb.fallthrough_succ, " Defs(")
+    print(io," ) fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label, " Defs(")
     for j in bb.def
         print(io, " ", j)
     end
@@ -121,26 +121,27 @@ function show(io::IO, bb::BasicBlock)
         println(io,"Basic block without any statements.")
     end
     for j = 1:length(tls)
-        print(io,"    ",tls[j].index," Defs(")
-        for k in tls[j].def
-            print(io, " ", k)
+        print(io, "    ",tls[j].index, "  ", tls[j].expr)
+        if(DEBUG_LVL >= 5)
+            print(io,"  Defs(")
+            for k in tls[j].def
+                print(io, " ", k)
+            end
+            print(io," ) Uses(")
+            for k in tls[j].use
+                print(io, " ", k)
+            end
+            print(io," ) LiveIn(")
+            for k in tls[j].live_in
+                print(io, " ", k)
+            end
+            print(io," ) LiveOut(")
+            for k in tls[j].live_out
+                print(io, " ", k)
+            end
+            print(io," )")
         end
-        print(io," ) Uses(")
-        for k in tls[j].use
-            print(io, " ", k)
-        end
-        print(io," ) LiveIn(")
-        for k in tls[j].live_in
-            print(io, " ", k)
-        end
-        print(io," ) LiveOut(")
-        for k in tls[j].live_out
-            print(io, " ", k)
-        end
-        println(io," )")
-        if DEBUG_LVL >= 4
-            println(io,"        ", tls[j].expr)
-        end
+        println(io)
     end
 end
 
@@ -233,8 +234,9 @@ end
 
 function show(io::IO, bl::BlockLiveness)
     println(io)
-    for i in bl.basic_blocks
-       println(io, i)
+    for i in values(bl.basic_blocks)
+       show(io, i)
+       println(io)
     end
 end
 
@@ -292,6 +294,7 @@ function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
     bb.statements[end].expr = new_last_stmt[1]
 end
 
+# TODO: Todd, should not we update loop member info as well?
 function insertBefore(bl::BlockLiveness, after :: Int)
     dprintln(2,"insertBefore ", after)
     assert(haskey(bl.basic_blocks, after))
@@ -316,9 +319,9 @@ function insertBefore(bl::BlockLiveness, after :: Int)
 
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
+    new_goto_stmt = nothing
     if after > -2
       new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
-      push!(new_bb.statements, new_goto_stmt)
     end
 
     bb_after.preds  = Set{BasicBlock}()
@@ -335,7 +338,7 @@ function insertBefore(bl::BlockLiveness, after :: Int)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
-    new_bb
+    (new_bb, new_goto_stmt)
 end
 
 function getMaxStatementNum(bb :: BasicBlock)
@@ -358,6 +361,7 @@ function getDistinctStatementNum(bl :: BlockLiveness)
     return res + 1
 end
 
+# TODO: Todd, should not we update loop member info as well?
 function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     assert(haskey(bl.basic_blocks, before))
     assert(haskey(bl.basic_blocks, after))
@@ -386,14 +390,14 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
 
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
+    new_goto_stmt = nothing
     if after > -2
       new_goto_stmt = TopLevelStatement(getDistinctStatementNum(bl), GotoNode(after))
-      push!(new_bb.statements, new_goto_stmt)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
     
-    new_bb
+    (new_bb, new_goto_stmt)
 end
 
 function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
