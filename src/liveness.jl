@@ -85,7 +85,7 @@ function addStatement(top_level, state, ast)
 end
 
 function show(io::IO, bb::BasicBlock)
-    print(io,bb.label, ": Pred(")
+    print(io, "BasicBlock ", bb.label, ": Pred(")
     for j in bb.preds
         print(io," ",j.label)
     end
@@ -93,7 +93,7 @@ function show(io::IO, bb::BasicBlock)
     for j in bb.succs
         print(io," ",j.label)
     end
-    print(io," ) fallthrough = ", bb.fallthrough_succ, " Defs(")
+    print(io," ) fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label, " Defs(")
     for j in bb.def
         print(io, " ", j)
     end
@@ -121,26 +121,27 @@ function show(io::IO, bb::BasicBlock)
         println(io,"Basic block without any statements.")
     end
     for j = 1:length(tls)
-        print(io,"    ",tls[j].index," Defs(")
-        for k in tls[j].def
-            print(io, " ", k)
+        print(io, "    ",tls[j].index, "  ", tls[j].expr)
+        if(DEBUG_LVL >= 5)
+            print(io,"  Defs(")
+            for k in tls[j].def
+                print(io, " ", k)
+            end
+            print(io," ) Uses(")
+            for k in tls[j].use
+                print(io, " ", k)
+            end
+            print(io," ) LiveIn(")
+            for k in tls[j].live_in
+                print(io, " ", k)
+            end
+            print(io," ) LiveOut(")
+            for k in tls[j].live_out
+                print(io, " ", k)
+            end
+            print(io," )")
         end
-        print(io," ) Uses(")
-        for k in tls[j].use
-            print(io, " ", k)
-        end
-        print(io," ) LiveIn(")
-        for k in tls[j].live_in
-            print(io, " ", k)
-        end
-        print(io," ) LiveOut(")
-        for k in tls[j].live_out
-            print(io, " ", k)
-        end
-        println(io," )")
-        if DEBUG_LVL >= 4
-            println(io,"        ", tls[j].expr)
-        end
+        println(io)
     end
 end
 
@@ -233,8 +234,9 @@ end
 
 function show(io::IO, bl::BlockLiveness)
     println(io)
-    for i in bl.basic_blocks
-       println(io, i)
+    for i in values(bl.basic_blocks)
+       show(io, i)
+       println(io)
     end
 end
 
@@ -292,6 +294,7 @@ function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
     bb.statements[end].expr = new_last_stmt[1]
 end
 
+# TODO: Todd, should not we update loop member info as well?
 function insertBefore(bl::BlockLiveness, after :: Int)
     dprintln(2,"insertBefore ", after)
     assert(haskey(bl.basic_blocks, after))
@@ -316,9 +319,9 @@ function insertBefore(bl::BlockLiveness, after :: Int)
 
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
+    new_goto_stmt = nothing
     if after > -2
       new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
-      push!(new_bb.statements, new_goto_stmt)
     end
 
     bb_after.preds  = Set{BasicBlock}()
@@ -335,13 +338,14 @@ function insertBefore(bl::BlockLiveness, after :: Int)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+    (new_bb, new_goto_stmt)
 end
 
 function getMaxStatementNum(bb :: BasicBlock)
     res = 0
 
     for s in bb.statements
-      res = maximum(res, s.index)
+      res = max(res, s.index)
     end
 
     return res
@@ -350,13 +354,14 @@ end
 function getDistinctStatementNum(bl :: BlockLiveness)
     res = 0
 
-    for bb in bl.basic_blocks
-      res = maximum(res, getMaxStatementNum(bb))
+    for bb in values(bl.basic_blocks)
+      res = max(res, getMaxStatementNum(bb))
     end
 
     return res + 1
 end
 
+# TODO: Todd, should not we update loop member info as well?
 function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     assert(haskey(bl.basic_blocks, before))
     assert(haskey(bl.basic_blocks, after))
@@ -385,12 +390,14 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
 
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
+    new_goto_stmt = nothing
     if after > -2
       new_goto_stmt = TopLevelStatement(getDistinctStatementNum(bl), GotoNode(after))
-      push!(new_bb.statements, new_goto_stmt)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+    
+    (new_bb, new_goto_stmt)
 end
 
 function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
@@ -497,7 +504,7 @@ function compute_dfn_internal(basic_blocks, cur_bb, cur_dfn, visited, bbs_df_ord
     end
 
     bbs_df_order[cur_dfn] = cur_bb
-    bb.depth_first_number = cur_bb
+    bb.depth_first_number = cur_dfn
     cur_dfn - 1
 end
 
@@ -545,18 +552,6 @@ end
 function findLoopMembers(head, back_edge, bbs)
     members = Set(head)
     flm_internal(back_edge, members, bbs)
-end
-
-function findLoopExits(L::Loop, bbs) 
-    for bbindex in L.members
-        bb = bbs[bbindex]
-        for succ in bb.succs
-            if !in(succ.label, L.members)
-                push!(L.exits, bb.label)
-                break
-            end
-        end
-    end
 end
 
 function compute_dom_loops(bl::BlockLiveness)
@@ -623,7 +618,6 @@ function compute_dom_loops(bl::BlockLiveness)
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 dprintln(3,"loop members = ", members, " type = ", typeof(members))
                 new_loop = Loop(succ_id, bb_index, members)
-                findLoopExits(new_loop, bl.basic_blocks)
                 dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 push!(loops, new_loop)
             end
@@ -1043,6 +1037,9 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
         from_exprs(args, depth+1, state, callback, cbdata)
     elseif head == :tuple
         throw(string("tuple found"))
+    elseif head == :(.)
+        # skip handling fields of a type
+        # ISSUE: will this cause precision issue, or correctness issue? I guess it is precision?
     else
         throw(string("from_expr: unknown Expr head :", head))
     end

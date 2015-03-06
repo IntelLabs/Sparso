@@ -56,3 +56,13 @@ Over what computations R is NOT distributive:
 
 For real field, 
     P' = P.'
+
+Inverse is reorderable in theory, but not for some implementation with assumptions on the shape of the matrix.
+For example, inverse of triangular matrix is not reorderable, since that breaks the assumption of
+the triangular solver.
+
+Also, print of a matrix cannot be reordered, because that breaks the expectation of the users.
+
+If user requires "bitwise reproducibility", we cannot do reordering either, since floating-point 
+operations are not associable.
+    
