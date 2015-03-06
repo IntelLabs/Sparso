@@ -118,9 +118,10 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       if optPasses[i].lowered != last_lowered
         method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
         # Must be going from lowered AST to type AST.
-        (cur_ast, ty) = typeinf(cur_ast, method[1], method[2])
-        if !isa(tree,Expr)
-           cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, tree)
+        linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
+        (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
+        if !isa(cur_ast,Expr)
+           cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, cur_ast)
         end
       end
       last_lowered = optPasses[i].lowered
@@ -149,10 +150,11 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       
 
       method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
+      linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
       # Must be going from lowered AST to type AST.
-      (cur_ast, ty) = typeinf(cur_ast, method[1], method[2])
-      if !isa(tree,Expr)
-         cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, tree)
+      (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
+      if !isa(cur_ast,Expr)
+         cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, cur_ast)
       end
     end
 
