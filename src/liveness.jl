@@ -404,6 +404,25 @@ function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
     from_expr(stmt, 1, live_res, true, not_handled, nothing)
 end
 
+function getBbBodyOrder(bl :: BlockLiveness)
+    res = Int64[]
+
+    for i = 1:length(bl.depth_first_numbering)
+      cur = bl.depth_first_numbering[i]
+      if !in(cur, res)
+        push!(res, cur)
+        cur_bb = bl.basic_blocks[cur]
+        if cur_bb.fallthrough_succ != nothing
+          fallthrough_id = cur_bb.fallthrough_succ.label
+          assert(!in(fallthrough_id, res))
+          push!(res, fallthrough_id) 
+        end
+      end
+    end
+
+    return res
+end
+
 function createFunctionBody(bl :: BlockLiveness)
     res = Any[]
 
