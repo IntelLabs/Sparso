@@ -26,10 +26,10 @@ function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector,
   ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Cbool),
-               A.m, A.n, A.colptr, A.rowval, A.nzval, 
-               newA.colptr, newA.rowval, newA.nzval,
-               P, Pprime, getPermuation)
+               Ptr{Cint}, Ptr{Cint}, Bool),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 
+               pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
+               pointer(P), pointer(Pprime), getPermuation)
 end
 
 function reorderVector(V::Vector, newV::Vector, P::Vector)
@@ -265,6 +265,8 @@ function reorder(funcAST, L, M, lives, symbolInfo)
                 
                 new_stmts = (bbnum, succ.label,  Expr[])
                 push!(new_stmts_after_L, new_stmts)
+                
+                dprintln(2, "ReverseReorder on edge ", bbnum, " --> ", succ.label)
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix

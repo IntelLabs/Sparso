@@ -1,3 +1,6 @@
+// In this file, we assume the input matrix is in CSR format, in which  
+// rowPtr and colIdx are 0-based.
+
 #include <cstdio>
 #include <vector>
 
@@ -153,6 +156,21 @@ int CSR::getBandwidth() const
 
 void CSR::printInDense() const
 {
+  // Raw format
+  printf("RowPtr: ");
+  for (int i = 0; i <= m; i++) {
+    printf("%d ", rowPtr[i]);
+  }
+  printf("\nColIdx: ");
+  for (int i = 0; i < rowPtr[m]; i++) {
+    printf("%d ", colIdx[i]);
+  }
+  printf("\nValues: ");
+  for (int i = 0; i < rowPtr[m]; i++) {
+    printf("%f ", values[i]);
+  }
+  printf("\n\n");
+
   for (int i = 0; i < m; ++i) {
     int jj = 0;
     printf("%d: ", i);
