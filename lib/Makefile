@@ -1,10 +1,17 @@
 CXX=g++
 
-test/CSR0_test: test/CSR0_test.c CSR0.cpp CSR_Interface.cpp Vector.cpp
-	$(CXX) -fopenmp -g -I. -o $@ $^
+CFLAGS = -I. -fopenmp
+ifeq (yes, $(DBG))
+  CFLAGS += -g -O0 -DNDEBUG
+else
+  CFLAGS += -O3 -DNDEBUG
+endif
 
+test/CSR0_test: test/CSR0_test.c CSR0.cpp CSR_Interface.cpp Vector.cpp
+	$(CXX) $(CFLAGS) -o $@ $^
+	
 test/CSR1_test: test/CSR1_test.c CSR1.cpp CSR_Interface.cpp Vector.cpp
-	$(CXX) -fopenmp -g -I. -o $@ $^
+	$(CXX) $(CFLAGS) -o $@ $^
 	
 # 0 based CSR library
 lib0: CSR0.cpp CSR_Interface.cpp Vector.cpp
