@@ -108,7 +108,26 @@ function pcg(x, A, b, M, tol, maxiter)
     return x #, k
 end
 
-A   = MatrixMarket.mmread("./data/MatrixMarket/BCSSTRUC2/bcsstk14.mtx")
+#A   = MatrixMarket.mmread("./data/MatrixMarket/BCSSTRUC2/bcsstk14.mtx")
+# From CSR_test.c in lib/test
+A = SparseMatrixCSC{Cdouble, Cint}(
+        10,   #m 
+        10,   #n
+        Cint[1, 3, 7, 10, 14, 17, 21, 25, 27, 28, 29 ],  #colptr
+    #int rowPtr[] =    { 0,    2,          6,       9,          13,      16,         20,         24,   26,27, 28 };
+        Cint[4, 6, 3, 5, 7, 10, 2, 4, 5, 1, 3, 6, 9, 2, 3, 7, 1, 4, 7, 8, 2, 5, 6, 8, 6, 7, 4, 2], #rowval
+    #int colIdx[] =    { 3, 5, 2, 4, 6, 9, 1, 3, 4, 0, 2, 5, 8, 1, 2, 6, 0, 3, 6, 7, 1, 4, 5, 7, 5, 6, 3, 1 };
+        
+        Cdouble[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
+)
+
+println("******************* A is *************")
+println(A)
+
+B = full(A)
+println("******************* B is *************")
+println(B)
+
 
 # Julia has only SparseMatrixCSC format so far. But for CG where SpMV is
 # important, CSR format is better in performance. However, CSC and CSR
@@ -144,13 +163,13 @@ maxiter = 2 * N
 #println("******************* typed AST **************")
 #println(ast)
 
-#cg_reordered(x, A, b, tol, maxiter)
+cg_reordered(x, A, b, tol, maxiter)
 
 #Base.tmerge(Int64, Float64)
 #acc_stub(ast[1])
 #insert_knobs(ast[1])
 
-@acc x = cg(x, A, b, tol, maxiter)
+#@acc x = cg(x, A, b, tol, maxiter)
 
 #@acc x = pcg(x, A, b, M, tol, maxiter)
 

@@ -1,3 +1,6 @@
+// In this file, we assume the input matrix is in CSR format, in which  
+// rowPtr and colIdx are 0-based.
+
 #include <cstdio>
 #include <vector>
 
@@ -78,7 +81,7 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
     if (i < iEnd) {
       int row = inversePerm ? inversePerm[i] : i;
       int begin = rowPtr[row], end = rowPtr[row + 1];
-      rowPtrSum[tid + 1] = out->rowPtr[i] + end - begin;
+      rowPtrSum[tid + 1] = out->rowPtr[i] - 1 + end - begin;
     }
     else {
       rowPtrSum[tid + 1] = 0;
@@ -153,6 +156,21 @@ int CSR::getBandwidth() const
 
 void CSR::printInDense() const
 {
+printf("******** raw format:\n");
+printf("  rowPtr: ");
+    for (int i = 0; i <= m; i++) {
+        printf("%d ", rowPtr[i]);
+    }
+printf("\n  colIdx: ");
+    for (int i = 0; i < rowPtr[m]; i++) {
+        printf("%d ", colIdx[i]);
+    }
+printf("\n  values: ");
+    for (int i = 0; i < rowPtr[m]; i++) {
+        printf("%f ", values[i]);
+    }
+printf("\n*****\n");
+
   for (int i = 0; i < m; ++i) {
     int jj = 0;
     printf("%d: ", i);
