@@ -36,7 +36,7 @@ static Graph *constructBoostTaskGraph(const CSR& A)
 
 static void getInversePerm(int *inversePerm, const int *perm, int n)
 {
-//#pragma omp parallel for
+#pragma omp parallel for
 #pragma simd
   for (int i = 0; i < n; ++i) {
     inversePerm[perm[i]] = i;
@@ -63,7 +63,7 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
   int rowPtrSum[omp_get_max_threads() + 1];
   rowPtrSum[0] = 0;
 
-//#pragma omp parallel
+#pragma omp parallel
   {
     int nthreads = omp_get_num_threads();
     int tid = omp_get_thread_num();
@@ -88,8 +88,8 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
       rowPtrSum[tid + 1] = 0;
     }
 
-//#pragma omp barrier
-//#pragma omp single
+#pragma omp barrier
+#pragma omp single
     {
       for (int tid = 1; tid < nthreads; ++tid) {
         rowPtrSum[tid + 1] += rowPtrSum[tid];
@@ -107,7 +107,7 @@ void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm) co
 {
   permuteRowPtr_(out, rowInversePerm);
 
-////#pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < m; ++i) {
     int row = rowInversePerm ? rowInversePerm[i] : i;
     int begin = rowPtr[row] - 1, end = rowPtr[row + 1] - 1;
@@ -157,25 +157,24 @@ int CSR::getBandwidth() const
 
 void CSR::printInDense() const
 {
-printf("******** raw format:\n");
-printf("  rowPtr: ");
-    for (int i = 0; i <= m; i++) {
-        printf("%d ", rowPtr[i]);
-    }
-printf("\n  colIdx: ");
-    for (int i = 0; i < rowPtr[m] - 1; i++) {
-        printf("%d ", colIdx[i]);
-    }
-printf("\n  values: ");
-    for (int i = 0; i < rowPtr[m] - 1; i++) {
-        printf("%f ", values[i]);
-    }
-printf("\n*****\n");
+  // Raw format
+  printf("RowPtr: ");
+  for (int i = 0; i <= m; i++) {
+    printf("%d ", rowPtr[i]);
+  }
+  printf("\nColIdx: ");
+  for (int i = 0; i < rowPtr[m] - 1; i++) {
+    printf("%d ", colIdx[i]);
+  }
+  printf("\nValues: ");
+  for (int i = 0; i < rowPtr[m] - 1; i++) {
+    printf("%f ", values[i]);
+  }
+  printf("\n\n");
 
-/*
   for (int i = 0; i < m; ++i) {
     int jj = 0;
-    printf("%d: ", i + 1);
+    printf("%d: ", i);
     for (int j = rowPtr[i] - 1; j < rowPtr[i + 1] - 1; ++j) {
       int c = colIdx[j] - 1;
       for (; jj < c; ++jj) printf("0 ");
@@ -185,5 +184,4 @@ printf("\n*****\n");
     for (; jj < m; ++jj) printf("0 ");
     printf("\n");
   }
-*/  
 }
