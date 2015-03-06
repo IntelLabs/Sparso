@@ -7,6 +7,9 @@ else
   CFLAGS += -O3 -DNDEBUG
 endif
 
+test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp
+	$(CXX) $(CFLAGS) -o $@ $^
+
 test/CSR0_test: test/CSR0_test.c CSR0.cpp CSR_Interface.cpp Vector.cpp
 	$(CXX) $(CFLAGS) -o $@ $^
 	
