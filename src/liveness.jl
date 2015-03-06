@@ -230,6 +230,10 @@ end
 type BlockLiveness
     basic_blocks :: Dict{Int,BasicBlock}
     depth_first_numbering
+
+    function BlockLiveness(bb, dfn)
+      new (bb, dfn)
+    end
 end
 
 function show(io::IO, bl::BlockLiveness)
@@ -298,6 +302,7 @@ end
 function insertBefore(bl::BlockLiveness, after :: Int)
     dprintln(2,"insertBefore ", after)
     assert(haskey(bl.basic_blocks, after))
+    dump_bb(bl)
 
     bb_after = bl.basic_blocks[after]
 
@@ -338,6 +343,7 @@ function insertBefore(bl::BlockLiveness, after :: Int)
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+    dump_bb(bl)
     (new_bb, new_goto_stmt)
 end
 
@@ -363,8 +369,10 @@ end
 
 # TODO: Todd, should not we update loop member info as well?
 function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
+    dprintln(2,"insertBetween before = ", before, " after = ", after)
     assert(haskey(bl.basic_blocks, before))
     assert(haskey(bl.basic_blocks, after))
+    dump_bb(bl)
 
     bb_before = bl.basic_blocks[before]
     bb_after  = bl.basic_blocks[after]
@@ -375,10 +383,16 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
       new_bb_id = getMaxBB(bl) + 1
     end
 
+    after_is_fallthrough = (bb_before.fallthrough_succ.label == after)
+    dprintln(2,"new_bb_id = ", new_bb_id, " after is fallthrough = ", after_is_fallthrough)
+
     # Create the new basic block.
     new_bb = BasicBlock(new_bb_id)
     push!(new_bb.preds, bb_before)
     push!(new_bb.succs, bb_after)
+    if after_is_fallthrough
+      new_bb.fallthrough_succ = bb_after
+    end
     new_bb.live_in  = bb_before.live_out
     new_bb.live_out = new_bb.live_in
     bl.basic_blocks[new_bb_id] = new_bb
@@ -391,12 +405,14 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
     new_goto_stmt = nothing
-    if after > -2
+    if after > -2 && !after_is_fallthrough
       new_goto_stmt = TopLevelStatement(getDistinctStatementNum(bl), GotoNode(after))
     end
 
     bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
     
+    dump_bb(bl)
+
     (new_bb, new_goto_stmt)
 end
 
@@ -716,14 +732,17 @@ function connect_finish(state)
     connect(state.cur_bb, state.basic_blocks[-2], true)
 end
 
-function dump_bb(state, dfn)
+function dump_bb(bl :: BlockLiveness)
     if DEBUG_LVL >= 4
       f = open("bbs.dot","w")
       println(f, "digraph bbs {")
     end
 
-    for i = 1:length(dfn)
-        bb = state.basic_blocks[dfn[i]]
+    body_order = getBbBodyOrder(bl)
+    println("body_order = ", body_order)
+
+    for i = 1:length(body_order)
+        bb = bl.basic_blocks[body_order[i]]
         dprint(2,bb)
 
         if DEBUG_LVL >= 4
@@ -737,6 +756,7 @@ function dump_bb(state, dfn)
       println(f, "}")
       close(f)
     end
+
 end
 
 uncompressed_ast(l::LambdaStaticData) =
@@ -911,8 +931,9 @@ function from_expr(ast::Any, callback, cbdata)
   dprintln(3,"dfn = ", dfn)
   compute_live_ranges(live_res, dfn)
   dprintln(2,"Dumping basic block info from_expr.")
-  dump_bb(live_res, dfn)
-  BlockLiveness(live_res.basic_blocks, dfn)
+  ret = BlockLiveness(live_res.basic_blocks, dfn)
+  dump_bb(ret)
+  return ret
 end
 
 function from_label(label, state, callback, cbdata)
