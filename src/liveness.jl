@@ -238,9 +238,11 @@ end
 
 function show(io::IO, bl::BlockLiveness)
     println(io)
-    for i in values(bl.basic_blocks)
-       show(io, i)
-       println(io)
+    body_order = getBbBodyOrder(bl)
+    for i = 1:length(body_order)
+      bb = bl.basic_blocks[body_order[i]]
+      show(io, bb)
+      println(io)
     end
 end
 
@@ -756,7 +758,6 @@ function dump_bb(bl :: BlockLiveness)
       println(f, "}")
       close(f)
     end
-
 end
 
 uncompressed_ast(l::LambdaStaticData) =
