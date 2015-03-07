@@ -35,13 +35,13 @@ end
 function reorderVector(V::Vector, newV::Vector, P::Vector)
    ccall((:reorderVector, "../lib/libcsr1.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         V, newV, P, length(V))
+         pointer(V), pointer(newV), pointer(P), length(V))
 end
 
 function reverseReorderVector(V::Vector, newV::Vector, P::Vector)
    ccall((:reorderVectorWithInversePerm, "../lib/libcsr1.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         V, newV, P, length(V))
+         pointer(V), pointer(newV), pointer(P), length(V))
 end
 
 function allocateForPermutation(M::Symbol, new_stmts)
@@ -110,7 +110,7 @@ function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = :(reorderVectorWithInversePerm($V, $newV, $P))
+    stmt = :(reverseReorderVector($V, $newV, $P))
     push!(new_stmts, stmt)
     
     # Update the original vector with the new data

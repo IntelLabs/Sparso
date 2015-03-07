@@ -4,7 +4,7 @@ using Base.Test
 function cg(x, A, b, tol, maxiter)
     r = b - A * x
     rel_err = 1
-    p = r
+    p = copy(r) #NOTE: do not write "p=r"! That would make p and r aliased (the same variable)
     rz = dot(r, r)
     normr0 = sqrt(rz)
     k = 1
@@ -34,7 +34,7 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     normr0 = norm(r)
     rel_err = 1
     z = inv_d .* r
-    p = z
+    p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
     while k <= maxiter
@@ -149,7 +149,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
     bwdTriSolve!(U, z)
     #z = M \ r
 
-    p = z
+    p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
     while k <= maxiter
@@ -183,7 +183,7 @@ function pcg(x, A, b, M, tol, maxiter)
     normr0 = norm(r)
     rel_err = 1
     z = M \ r
-    p = z
+    p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
     while k <= maxiter

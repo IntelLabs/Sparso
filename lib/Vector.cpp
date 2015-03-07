@@ -1,4 +1,4 @@
-void reorderVector(double *v, double *tmp, const int *perm, int len)
+extern "C" void reorderVector(double *v, double *tmp, const int *perm, int len)
 {
   if (!perm) return;
 
@@ -13,7 +13,7 @@ void reorderVector(double *v, double *tmp, const int *perm, int len)
   }
 }
 
-void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len)
+extern "C" void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len)
 {
   if (!inversePerm) return;
 
