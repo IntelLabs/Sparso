@@ -10,7 +10,7 @@ endif
 test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp
 	$(CXX) $(CFLAGS) -o $@ $^
 
-test/CSR0_test: test/CSR_0based_indexing_small_test.c CSR.cpp CSR_Interface.cpp Vector.cpp
+test/CSR_small_test: test/CSR_small_test.c CSR.cpp CSR_Interface.cpp Vector.cpp
 	$(CXX) $(CFLAGS) -o $@ $^
 	
 test/CSR1_test: test/CSR_1based_indexing_test.c CSR1.cpp CSR_Interface.cpp Vector.cpp

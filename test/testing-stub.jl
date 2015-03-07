@@ -163,13 +163,13 @@ maxiter = 2 * N
 #println("******************* typed AST **************")
 #println(ast)
 
-cg_reordered(x, A, b, tol, maxiter)
+#cg_reordered(x, A, b, tol, maxiter)
 
 #Base.tmerge(Int64, Float64)
 #acc_stub(ast[1])
 #insert_knobs(ast[1])
 
-#@acc x = cg(x, A, b, tol, maxiter)
+@acc x = cg(x, A, b, tol, maxiter)
 
 #@acc x = pcg(x, A, b, M, tol, maxiter)
 
