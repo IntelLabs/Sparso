@@ -301,7 +301,7 @@ function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
 end
 
 # TODO: Todd, should not we update loop member info as well?
-function insertBefore(bl::BlockLiveness, after :: Int)
+function insertBefore(bl::BlockLiveness, after :: Int, excludeBackEdge :: Bool = false, back_edge = nothing)
     dprintln(2,"insertBefore ", after)
     assert(haskey(bl.basic_blocks, after))
     dump_bb(bl)
@@ -319,11 +319,16 @@ function insertBefore(bl::BlockLiveness, after :: Int)
     # Create the new basic block.
     new_bb = BasicBlock(new_bb_id)
     push!(new_bb.succs, bb_after)
-    new_bb.preds    = bb_after.preds
-    new_bb.live_in  = bb_after.live_in
-    new_bb.live_out = new_bb.live_in
+    
+    for pred in bb_after.preds
+        if !excludeBackEdge || pred.label != back_edge
+            push!(new_bb.preds, pred)
+        end
+    end
+    new_bb.live_in = copy(bb_after.live_in)
+    new_bb.live_out = copy(new_bb.live_in)
     bl.basic_blocks[new_bb_id] = new_bb
-
+    
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
     new_goto_stmt = nothing
@@ -562,10 +567,9 @@ type Loop
     head :: Int
     back_edge :: Int
     members :: Set{Int}
-    exits :: Set{Int} # the blocks in the loop from which control may flow outside the loop
 
     function Loop(h :: Int, b :: Int, m :: Set{Int})
-      new (h, b, m, Set{Int}())
+      new (h, b, m)
     end
 end
 

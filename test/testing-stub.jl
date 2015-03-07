@@ -180,7 +180,13 @@ println("rel_err: ", rel_err1)
 #acc_stub(ast[1])
 #insert_knobs(ast[1])
 
-@acc x = cg(x, A, b, tol, maxiter)
+x   = zeros(Float64, N)
+@acc x2 = cg(x, A, b, tol, maxiter)
+x2, k2, rel_err2 = x2
+println("***** After accelerated cg:")
+println("x: ", x2)
+println("k: ", k2)
+println("rel_err: ", rel_err2)
 
 #@acc x = pcg(x, A, b, M, tol, maxiter)
 

@@ -224,6 +224,10 @@ function inferTypesForCall(head, args, symbolInfo, distributive)
   if isa(head, TopNode)
     return inferTypesForCall(head.name, args, symbolInfo, distributive)
   end
+  if head == :copy
+    return inferTypes(args[1], symbolInfo, distributive)
+  end
+  
   throw(string("inferTypesForCall: unknown AST (", head, ",", args, ")"))
 end
 

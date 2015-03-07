@@ -23,6 +23,7 @@ end
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
+  println("******* Reordering matrix!")
   ccall((:CSR_ReorderMatrix, "../lib/libcsr1.so"), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
@@ -33,12 +34,16 @@ function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector,
 end
 
 function reorderVector(V::Vector, newV::Vector, P::Vector)
+    println("******* Reordering vector!")
+
    ccall((:reorderVector, "../lib/libcsr1.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end
 
 function reverseReorderVector(V::Vector, newV::Vector, P::Vector)
+   println("******* Reverse reordering vector!")
+
    ccall((:reorderVectorWithInversePerm, "../lib/libcsr1.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
@@ -280,7 +285,7 @@ function reorder(funcAST, L, M, lives, symbolInfo)
     end
 
     # Now actually change the CFG.
-    (new_bb, new_goto_stmt) = LivenessAnalysis.insertBefore(lives, L.head)
+    (new_bb, new_goto_stmt) = LivenessAnalysis.insertBefore(lives, L.head, true, L.back_edge)
     for stmt in new_stmts_before_L
         LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
     end
