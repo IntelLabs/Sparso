@@ -116,6 +116,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
     for i = 1:length(optPasses)
       if optPasses[i].lowered != last_lowered
+        method[3].isstaged = true
         method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
         # Must be going from lowered AST to type AST.
         linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
@@ -146,9 +147,9 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       assert(typeof(cur_ast) == Expr)
       assert(cur_ast.head == :lambda)
       body = cur_ast.args[3]
-      dprintln(3,"Last opt pass worked on lowered.\n", body)
-      
+      dprintln(3,"Last opt pass worked on lowered. isstaged = ", method[3].isstaged, "\n", body)
 
+      method[3].isstaged = true
       method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
       linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
       # Must be going from lowered AST to type AST.
@@ -156,6 +157,9 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       if !isa(cur_ast,Expr)
          cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, cur_ast)
       end
+
+      body = cur_ast.args[3]
+      dprintln(3,"Last opt pass after converting to typed AST.\n", body)
     end
 
     # Write the modifed code back to the function.
