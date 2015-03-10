@@ -1,4 +1,4 @@
-export CSR_ReorderMatrix, reorderVector, reverseReorderVector, getField
+export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=3
@@ -60,11 +60,6 @@ function allocateForPermutation(M::Symbol, new_stmts)
     (P, Pprime)
 end
 
-function getField(a, b) 
-    Expr(:call, TopNode(:getfield), a, b)
-#        TypedExpr(Function, :call, TopNode(:getfield), inner_call, QuoteNode(sym))
-end
-
 # A is the matrix to be reordered. M is the seed matrix we have chosen for doing reorderig 
 # analysis. If A and M are the same, we also compute permutation and inverse permutation
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
@@ -76,11 +71,11 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     newA = gensym(string(A))
     stmt = :(  
         $newA = SparseMatrixCSC(
-                  getField($A, QuoteNode(m)), 
-                  getField($A, QuoteNode(n)),         
-                  Array(Cint, size(getField($A, QuoteNode(colptr)), 1)), 
-                  Array(Cint, size(getField($A, QuoteNode(rowval)), 1)), 
-                  Array(Cdouble, size(getField($A, QuoteNode(nzval)), 1))) 
+                  Expr(:call, TopNode(:getfield), $A, QuoteNode(m)), 
+                  Expr(:call, TopNode(:getfield), $A, QuoteNode(n)), 
+                  Array(Cint, size(Expr(:call, TopNode(:getfield), $A, QuoteNode(colptr)), 1)), 
+                  Array(Cint, size(Expr(:call, TopNode(:getfield), $A, QuoteNode(rowval)), 1)), 
+                  Array(Cint, size(Expr(:call, TopNode(:getfield), $A, QuoteNode(nzval)), 1))) 
     )
     push!(new_stmts, stmt)
     
