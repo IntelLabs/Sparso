@@ -75,7 +75,7 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
                   getfield($A,:n), 
                   Array(Cint, size(getfield($A, :colptr), 1)), 
                   Array(Cint, size(getfield($A, :rowval), 1)), 
-                  Array(Cint, size(getfield($A, :nzval), 1))) 
+                  Array(Cdouble, size(getfield($A, :nzval), 1))) 
     )
     push!(new_stmts, stmt)
     
