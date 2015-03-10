@@ -71,11 +71,11 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     newA = gensym(string(A))
     stmt = :(  
         $newA = SparseMatrixCSC(
-                  Expr(:call, TopNode(:getfield), $A, QuoteNode(m)), 
-                  Expr(:call, TopNode(:getfield), $A, QuoteNode(n)), 
-                  Array(Cint, size(Expr(:call, TopNode(:getfield), $A, QuoteNode(colptr)), 1)), 
-                  Array(Cint, size(Expr(:call, TopNode(:getfield), $A, QuoteNode(rowval)), 1)), 
-                  Array(Cint, size(Expr(:call, TopNode(:getfield), $A, QuoteNode(nzval)), 1))) 
+                  getfield($A,:m), 
+                  getfield($A,:n), 
+                  Array(Cint, size(getfield($A, :colptr), 1)), 
+                  Array(Cint, size(getfield($A, :rowval), 1)), 
+                  Array(Cint, size(getfield($A, :nzval), 1))) 
     )
     push!(new_stmts, stmt)
     
