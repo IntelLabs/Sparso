@@ -1085,6 +1085,8 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     elseif head == :(.)
         # skip handling fields of a type
         # ISSUE: will this cause precision issue, or correctness issue? I guess it is precision?
+    elseif head == :quote
+        from_exprs(args, depth+1, state, callback, cbdata)
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
