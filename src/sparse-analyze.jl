@@ -1,4 +1,4 @@
-export CSR_ReorderMatrix, reorderVector, reverseReorderVector
+export CSR_ReorderMatrix, reorderVector, reverseReorderVector, getField
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=3
@@ -25,10 +25,10 @@ end
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
   println("******* Reordering matrix!")
   ccall((:CSR_ReorderMatrix, "../lib/libcsr1.so"), Void,
-              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Bool),
-               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
                pointer(P), pointer(Pprime), getPermuation)
 end
@@ -60,6 +60,11 @@ function allocateForPermutation(M::Symbol, new_stmts)
     (P, Pprime)
 end
 
+function getField(a, b) 
+    Expr(:call, TopNode(:getfield), a, b)
+#        TypedExpr(Function, :call, TopNode(:getfield), inner_call, QuoteNode(sym))
+end
+
 # A is the matrix to be reordered. M is the seed matrix we have chosen for doing reorderig 
 # analysis. If A and M are the same, we also compute permutation and inverse permutation
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
@@ -70,10 +75,12 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     # general in future
     newA = gensym(string(A))
     stmt = :(  
-        $newA = SparseMatrixCSC($A.m, $A.n, 
-                  Array(Cint, size($A.colptr, 1)), 
-                  Array(Cint, size($A.rowval, 1)), 
-                  Array(Cdouble, size($A.nzval, 1))) 
+        $newA = SparseMatrixCSC(
+                  getField($A, QuoteNode(m)), 
+                  getField($A, QuoteNode(n)),         
+                  Array(Cint, size(getField($A, QuoteNode(colptr)), 1)), 
+                  Array(Cint, size(getField($A, QuoteNode(rowval)), 1)), 
+                  Array(Cdouble, size(getField($A, QuoteNode(nzval)), 1))) 
     )
     push!(new_stmts, stmt)
     
