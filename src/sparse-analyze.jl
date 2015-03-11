@@ -65,17 +65,25 @@ end
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
 # function must be called to reorder matrix M first, and then for other matrices
 function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts)
+return nothing
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the sparse matrix format and element type. Should make it
     # general in future
     newA = gensym(string(A))
-    stmt = :(  
-        $newA = SparseMatrixCSC(
-                  getfield($A,:m), 
-                  getfield($A,:n), 
-                  Array(Cint, size(getfield($A, :colptr), 1)), 
-                  Array(Cint, size(getfield($A, :rowval), 1)), 
-                  Array(Cdouble, size(getfield($A, :nzval), 1))) 
+    stmt = Expr(:(=), newA,
+        Expr(:call, :SparseMatrixCSC, 
+                  Expr(:call, TopNode(:getfield), A, :m),
+                  Expr(:call, TopNode(:getfield), A, :n), 
+                  Expr(:call, :Array, :Cint, 
+                    Expr(:call, TopNode(:arraylen), 
+                        Expr(:call, TopNode(:getfield), A, :colptr))),
+                  Expr(:call, :Array, :Cint, 
+                    Expr(:call, TopNode(:arraylen), 
+                        Expr(:call, TopNode(:getfield), A, :rowval))),
+                  Expr(:call, :Array, :Cdouble, 
+                    Expr(:call, TopNode(:arraylen), 
+                        Expr(:call, TopNode(:getfield), A, :nzval)))                        
+        )
     )
     push!(new_stmts, stmt)
     
@@ -94,6 +102,7 @@ reverseReorderMatrix(sym, M, P, Pprime, landingPad) =
        reorderMatrix(sym, M, Pprime, P, landingPad)
 
 function reorderVector(V::Symbol, P::Symbol, new_stmts)
+return nothing
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
@@ -110,6 +119,7 @@ function reorderVector(V::Symbol, P::Symbol, new_stmts)
 end
 
 function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
+return nothing
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
@@ -312,6 +322,7 @@ function reorder(funcAST, L, M, lives, symbolInfo)
 end
 
 function reorder(funcAST, lives, loop_info, symbolInfo)
+return funcAST
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)

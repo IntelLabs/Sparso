@@ -151,6 +151,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
       method[3].isstaged = true
       method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
+      println("arg is ***: ", call_sig_arg_tuple)
       linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
       # Must be going from lowered AST to type AST.
       (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])

@@ -57,3 +57,24 @@ ast = code_typed(cg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float6
 println("******************* typed AST for cg **************")
 println(ast)
 
+ast = code_lowered(cg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Float64, Int64))
+println("******************* inferred AST for cg **************")
+println(ast)
+
+
+call_sig_arg_tuple = (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Float64, Int64)
+
+# code copied and modified from OptFramework.jl
+    method = Base._methods(cg, call_sig_arg_tuple, -1)
+    assert(length(method) == 1)
+    method = method[1]
+
+    println("Initial code to optimize = ", ast)
+
+      method[3].isstaged = true
+      method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, ast)
+      println("arg is ***: ", call_sig_arg_tuple)
+      linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
+      # Must be going from lowered AST to type AST.
+      (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
+

@@ -357,12 +357,12 @@ function SparseOptimize(ast, call_sig_arg_tuple, lambda :: LambdaStaticData, cal
   # Although we know the types of the symbols from typed AST, we do not know the types 
   # of the (intermediate) nodes of lowered AST. So do a simple type inference on the 
   # lowered AST
-  (typ, distributive) = inferTypes(ast, symbolInfo, true)
-  dprintln(3,"After our type inference, typ = ", typ, " distributive = ", distributive)
+#  (typ, distributive) = inferTypes(ast, symbolInfo, true)
+#  dprintln(3,"After our type inference, typ = ", typ, " distributive = ", distributive)
       
-  if !distributive
-    return ast
-  end
+#  if !distributive
+#    return ast
+#  end
 
   body = ast.args[3]
 
