@@ -24,57 +24,21 @@ function cg(x, A, b, tol, maxiter)
     return x, k, rel_err
 end
 
-
-function pcg(x, A, b, M, tol, maxiter)
-    r = b - A * x
-    z = M \ r
-    p = z
-    rz = dot(r, z)
-    k = 1
-    while k <= maxiter
-        old_rz = rz
-        α = old_rz / dot(p, A * p)
-        x += α * p
-        r -= α * A * p 
-        if norm(r) < tol 
-            break
-        end
-        z = M \ r  
-        rz = dot(r, z)
-        β = rz/old_rz
-        p = z + β * p
-        k += 1
-    end
-    return x #, k
-end
-
-
-ast = code_typed(pcg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Float64, Int64), optimize=false)
-println("******************* typed AST for pcg *************")
-println(ast)
-
-ast = code_typed(cg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Float64, Int64), optimize=false)
-println("******************* typed AST for cg **************")
-println(ast)
-
-ast = code_lowered(cg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Float64, Int64))
-println("******************* inferred AST for cg **************")
-println(ast)
-
-
 call_sig_arg_tuple = (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Float64, Int64)
+ast = code_lowered(cg, call_sig_arg_tuple)
+println("******************* lowered AST for cg **************")
+println(ast)
 
 # code copied and modified from OptFramework.jl
-    method = Base._methods(cg, call_sig_arg_tuple, -1)
-    assert(length(method) == 1)
-    method = method[1]
+method = Base._methods(cg, call_sig_arg_tuple, -1)
+assert(length(method) == 1)
+method = method[1]
 
-    println("Initial code to optimize = ", ast)
+println("Initial code to optimize = ", ast)
 
-      method[3].isstaged = true
-      method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, ast)
-      println("arg is ***: ", call_sig_arg_tuple)
-      linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
-      # Must be going from lowered AST to type AST.
-      (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
+method[3].isstaged = true
+method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, ast)
+linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
+# Must be going from lowered AST to type AST.
+(cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
 
