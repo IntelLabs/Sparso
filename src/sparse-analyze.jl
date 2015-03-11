@@ -65,7 +65,6 @@ end
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
 # function must be called to reorder matrix M first, and then for other matrices
 function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts)
-return nothing
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the sparse matrix format and element type. Should make it
     # general in future
@@ -102,7 +101,6 @@ reverseReorderMatrix(sym, M, P, Pprime, landingPad) =
        reorderMatrix(sym, M, Pprime, P, landingPad)
 
 function reorderVector(V::Symbol, P::Symbol, new_stmts)
-return nothing
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
@@ -119,7 +117,6 @@ return nothing
 end
 
 function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
-return nothing
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
@@ -322,7 +319,6 @@ function reorder(funcAST, L, M, lives, symbolInfo)
 end
 
 function reorder(funcAST, lives, loop_info, symbolInfo)
-return funcAST
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)
