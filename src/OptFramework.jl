@@ -69,6 +69,14 @@ type memoizeState
   end
 end
 
+function loweredToTyped(func :: Function, loweredAst, call_sig_arg_tuple)
+  new_func_name = string(string(func), "_loweredToTyped")
+  nfsym = symbol(new_func_name)
+  new_func = Expr(:function, Expr(:call, nfsym, loweredAst.args[1]...), Expr(:block, loweredAst.args[3].args...))
+  eval_new_func = eval(new_func)
+  code_typed(eval_new_func, call_sig_arg_tuple)[1]
+end
+
 function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
   fetyp = typeof(func_expr)
 
@@ -116,14 +124,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
     for i = 1:length(optPasses)
       if optPasses[i].lowered != last_lowered
-        method[3].isstaged = true
-        method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
-        # Must be going from lowered AST to type AST.
-        linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
-        (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
-        if !isa(cur_ast,Expr)
-           cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, cur_ast)
-        end
+        cur_ast = loweredToTyped(func, cur_ast, call_sig_arg_tuple)
       end
       last_lowered = optPasses[i].lowered
 
@@ -149,14 +150,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       body = cur_ast.args[3]
       dprintln(3,"Last opt pass worked on lowered. isstaged = ", method[3].isstaged, "\n", body)
 
-      method[3].isstaged = true
-      method[3].func.code.ast = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
-      linfo = Base.func_for_method(method[3], call_sig_arg_tuple, method[2])
-      # Must be going from lowered AST to type AST.
-      (cur_ast, ty) = Base.typeinf(linfo, method[1], method[2])
-      if !isa(cur_ast,Expr)
-         cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), linfo, cur_ast)
-      end
+      cur_ast = loweredToTyped(func, cur_ast, call_sig_arg_tuple)
 
       body = cur_ast.args[3]
       dprintln(3,"Last opt pass after converting to typed AST.\n", body)
