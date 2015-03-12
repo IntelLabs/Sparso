@@ -28,6 +28,8 @@ public :
     }
   }
 
+  //void transpose(CSR *out) const;
+
   /**
    * get reverse Cuthill Mckee permutation that tends to reduce the bandwidth
    */
@@ -36,6 +38,9 @@ public :
   void permute(CSR *out, const int *columnPerm, const int *rowInversePerm) const;
 
   int getBandwidth() const;
+
+  void make0BasedIndexing() const; // assume it's originally in 1-based indexing. This function is not idempotent
+  void make1BasedIndexing() const; // assume it's originally in 0-based indexing.
 
   void printInDense() const;
 

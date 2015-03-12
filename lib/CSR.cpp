@@ -184,3 +184,181 @@ void CSR::printInDense() const
     printf("\n");
   }
 }
+
+/**
+ * idx = idx2*dim1 + idx1
+ * -> ret = idx1*dim2 + idx2
+ *        = (idx%dim1)*dim2 + idx/dim1
+ */
+static inline int transpose_idx(int idx, int dim1, int dim2)
+{
+  return idx%dim1*dim2 + idx/dim1;
+}
+
+#if 0
+void CSR::transpose(CSR *out)
+{
+   const double *A_data = A->values;
+   const int *A_i = A->rowPtr;
+   const int *A_j = A->colIdx;
+   int num_rowsA = A->m;
+   int num_colsA = A->n;
+   int num_nonzerosA = A->rowPtr[m];
+   const double *data = A->values;
+
+   int *AT_i = B->rowPtr;
+   int *AT_j = B->colIdx;
+   double *AT_data = B->values;
+
+   /*--------------------------------------------------------------
+    * First, ascertain that num_cols and num_nonzeros has been set.
+    * If not, set them.
+    *--------------------------------------------------------------*/
+
+   if (! num_nonzerosA)
+   {
+      num_nonzerosA = A_i[num_rowsA];
+   }
+
+   if (num_rowsA && ! num_colsA)
+   {
+      HYPRE_Int max_col = -1;
+      HYPRE_Int i, j;
+      for (i = 0; i < num_rowsA; ++i)
+      {
+          for (j = A_i[i]; j < A_i[i+1]; j++)
+          {
+              if (A_j[j] > max_col)
+                 max_col = A_j[j];
+          }
+      }
+      num_colsA = max_col+1;
+   }
+
+   double t = MPI_Wtime();
+
+   HYPRE_Int *bucket = hypre_CTAlloc(
+    HYPRE_Int, num_colsA*omp_get_max_threads());
+
+#define MIN(a, b) (((a) <= (b)) ? (a) : (b))
+
+#pragma omp parallel
+   {
+   int nthreads = omp_get_num_threads();
+   int tid = omp_get_thread_num();
+
+   int iPerThread = (num_rowsA + nthreads - 1)/nthreads;
+   int iBegin = MIN(iPerThread*tid, num_rowsA);
+   int iEnd = MIN(iBegin + iPerThread, num_rowsA);
+
+   HYPRE_Int i, j;
+   for (i = 0; i < num_colsA; ++i) {
+     bucket[tid*num_colsA + i] = 0;
+   }
+
+   // count the number of keys that will go into each bucket
+   for (j = A_i[iBegin]; j < A_i[iEnd]; ++j) {
+     int idx = A_j[j];
+     bucket[tid*num_colsA + idx]++;
+   }
+
+   // prefix sum
+ #pragma omp barrier
+
+   for (i = tid*num_colsA + 1; i < (tid + 1)*num_colsA; ++i) {
+     int transpose_i = transpose_idx(i, nthreads, num_colsA);
+     int transpose_i_minus_1 = transpose_idx(i - 1, nthreads, num_colsA);
+
+     bucket[transpose_i] += bucket[transpose_i_minus_1];
+   }
+
+ #pragma omp barrier
+ #pragma omp single
+   {
+     for (i = 1; i < nthreads; ++i) {
+       int j0 = num_colsA*i - 1, j1 = num_colsA*(i + 1) - 1;
+       int transpose_j0 = transpose_idx(j0, nthreads, num_colsA);
+       int transpose_j1 = transpose_idx(j1, nthreads, num_colsA);
+
+       bucket[transpose_j1] += bucket[transpose_j0];
+     }
+
+     AT_i[num_colsA] = num_nonzerosA;
+   }
+
+   if (tid > 0) {
+     int transpose_i0 = transpose_idx(num_colsA*tid - 1, nthreads, num_colsA);
+
+     for (i = tid*num_colsA; i < (tid + 1)*num_colsA - 1; ++i) {
+       int transpose_i = transpose_idx(i, nthreads, num_colsA);
+
+       bucket[transpose_i] += bucket[transpose_i0];
+     }
+   }
+
+ #pragma omp barrier
+
+   if (data) {
+      for (i = iEnd - 1; i >= iBegin; --i) {
+        for (j = A_i[i + 1] - 1; j >= A_i[i]; --j) {
+          int idx = A_j[j];
+          --bucket[tid*num_colsA + idx];
+
+          int offset = bucket[tid*num_colsA + idx];
+
+          AT_data[offset] = A_data[j];
+          AT_j[offset] = i;
+        }
+      }
+   }
+   else {
+      for (i = iEnd - 1; i >= iBegin; --i) {
+        for (j = A_i[i + 1] - 1; j >= A_i[i]; --j) {
+          int idx = A_j[j];
+          --bucket[tid*num_colsA + idx];
+
+          int offset = bucket[tid*num_colsA + idx];
+
+          AT_j[offset] = i;
+        }
+      }
+   }
+
+#pragma omp barrier
+
+#pragma omp for
+   for (i = 0; i < num_colsA; ++i) {
+     AT_i[i] = bucket[i];
+   }
+
+   } // omp parallel
+
+   hypre_TFree(bucket);
+
+   return 0;
+ }
+#endif
+
+ void CSR::make0BasedIndexing() const
+ {
+#pragma omp parallel for
+   for (int i = 0; i <= m; ++i) {
+     rowPtr[i]--;
+   }
+#pragma omp parallel for
+   for (int i = 0; i < rowPtr[m]; ++i) {
+     colIdx[i]--;
+   }
+ }
+
+ void CSR::make1BasedIndexing() const
+ {
+#pragma omp parallel for
+   for (int i = 0; i < rowPtr[m]; ++i) {
+     colIdx[i]++;
+   }
+#pragma omp parallel for
+   for (int i = 0; i <= m; ++i) {
+     rowPtr[i]++;
+   }
+ }
