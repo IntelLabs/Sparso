@@ -14,8 +14,8 @@ function GD(X, Xt, y, lambda, xinit)
     (n,p) = size(X)
     tic()
     Xw = X*x
-    yXw = y.*Xw
     t += toq()
+    yXw = y.*Xw
 
     s = sum(mylogsumexp(-yXw))
     fk0 = s/n+(lambda/2)*norm(x)^2
@@ -33,8 +33,8 @@ function GD(X, Xt, y, lambda, xinit)
 
       tic()
       Xw = X*w
-      yXw = y.*Xw
       t += toq()
+      yXw = y.*Xw
 
       s = sum(mylogsumexp(-yXw))
       fk = s/n+(lambda/2)*norm(w)^2
