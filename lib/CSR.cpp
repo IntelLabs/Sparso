@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <vector>
 
+#define BOOST_GRAPH_USE_NEW_CSR_INTERFACE
 #include <boost/graph/compressed_sparse_row_graph.hpp>
 #include <boost/graph/cuthill_mckee_ordering.hpp>
 #include <boost/graph/bandwidth.hpp>
@@ -94,6 +95,7 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
         rowPtrSum[tid + 1] += rowPtrSum[tid];
       }
       out->rowPtr[m] = rowPtrSum[nthreads];
+      assert(out->rowPtr[m] == rowPtr[m]);
     }
 
     for (i = iBegin; i < iEnd; ++i) {
