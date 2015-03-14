@@ -2,7 +2,7 @@ CXX=icpc
 
 CFLAGS = -I. -fopenmp
 ifeq (yes, $(DBG))
-  CFLAGS += -g -O0 -DNDEBUG
+  CFLAGS += -g -O0
 else
   CFLAGS += -O3 -DNDEBUG
 endif
