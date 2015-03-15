@@ -51,11 +51,8 @@ mmread(filename::ASCIIString) = mmread(filename, false)
 
 function pagerank(A, p, r) # p: initial rank, r: damping factor
   t = 0
-  t2 = 0
-  t3 = 0
-  t4 = 0
 
-  d = vec(sum(A, 2)) # num of neighbors
+  d = max(vec(sum(A, 2)), 1) # num of neighbors
 
   for i = 1:100
     q = p./d
