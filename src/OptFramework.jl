@@ -201,7 +201,7 @@ end
 function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
   fetyp = typeof(func_expr)
 
-  dprintln(3,"processFuncCall ", func_expr, " module = ", Base.function_module(func_expr), " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args)
+  dprintln(3,"processFuncCall ", func_expr, " module = ", Base.function_module(func_expr, call_sig_arg_tuple), " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args)
   func = eval(func_expr)
   dprintln(3,"func = ", func, " type = ", typeof(func))
 
