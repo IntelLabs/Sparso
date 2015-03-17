@@ -231,7 +231,8 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
     # Get the AST on which the first optimization pass wants to work.
     if last_lowered == true
-      cur_ast = code_lowered(new_func, call_sig_arg_tuple)[1]
+      cur_ast = code_typed(new_func, call_sig_arg_tuple, optimize=false)[1]   # false means generate type information but don't otherwise optimize
+      #cur_ast = code_lowered(new_func, call_sig_arg_tuple)[1]
     else
       cur_ast = code_typed(new_func, call_sig_arg_tuple)[1]
     end

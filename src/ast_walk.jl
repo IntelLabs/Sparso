@@ -203,11 +203,11 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
   elseif asttyp == TopNode    # name
     dprintln(2,"TopNode type")
     #skip
-  elseif asttyp == GetfieldNode
-    mod = ast.value
-    name = ast.name
-    typ = ast.typ
-    dprintln(2,"GetfieldNode type ",typeof(mod))
+#  elseif asttyp == GetfieldNode
+#    mod = ast.value
+#    name = ast.name
+#    typ = ast.typ
+#    dprintln(2,"GetfieldNode type ",typeof(mod))
   elseif asttyp == QuoteNode
     value = ast.value
     #TODO: fields: value

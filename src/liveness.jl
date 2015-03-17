@@ -1108,11 +1108,11 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     add_access(state.cur_bb, ast.name, state.read, state.top_level_number)
   elseif asttyp == TopNode    # name
     #skip
-  elseif asttyp == GetfieldNode
-    addStatement(top_level, state, ast)
-    local mod = ast.value
-    local name = ast.name
-    dprintln(3,"GetfieldNode type ",typeof(mod))
+#  elseif asttyp == GetfieldNode
+#    addStatement(top_level, state, ast)
+#    local mod = ast.value
+#    local name = ast.name
+#    dprintln(3,"GetfieldNode type ",typeof(mod))
   elseif asttyp == QuoteNode
     addStatement(top_level, state, ast)
     local value = ast.value

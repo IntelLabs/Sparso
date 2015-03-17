@@ -315,7 +315,7 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
     ast.typ = typ
     return (typ, distributive) 
   elseif asttyp == SymbolNode
-    ast.typ = symbolInfo[ast.Name]
+    ast.typ = symbolInfo[ast.name]
     dprintln(2, "\tSymbolNode (", ast.typ, ", ", distributive, ")")
     return (ast.typ, distributive)
   elseif asttyp == Symbol
