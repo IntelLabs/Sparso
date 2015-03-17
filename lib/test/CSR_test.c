@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <memory.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <algorithm>
 #include <omp.h>
 
 #include "CSR_Interface.h"
@@ -227,7 +229,32 @@ void load_matrix_market (char *file, T **a, int **aj, int **ai, int *am, int *an
     const char *tag=(symm?"symmetric":"general");
     printf("%s:::%s m=%d n=%d nnz=%d\n", file, tag, m, n, nnz);
 }
+bool isPerm(int *perm, int n)
+{
+  int *temp = new int[n];
+  memcpy(temp, perm, sizeof(int)*n);
+  std::sort(temp, temp + n);
+  int *last = std::unique(temp, temp + n);
+  if (last != temp + n) {
+    memcpy(temp, perm, sizeof(int)*n);
+    std::sort(temp, temp + n);
 
+    for (int i = 0; i < n; ++i) {
+      if (temp[i] == i - 1) {
+        printf("%d duplicated\n", i);
+        assert(false);
+        return false;
+      }
+      else if (temp[i] != i) {
+        printf("%d missed\n", i);
+        assert(false);
+        return false;
+      }
+    }
+  }
+  delete[] temp;
+  return true;
+}
 
 /* Expected output
 
@@ -270,6 +297,8 @@ int main(int argc, char *argv[])
     int *perm = (int *)malloc(sizeof(int)*m);
     int *inversePerm = (int *)malloc(sizeof(int)*m);
     CSR_GetRCMPemutation(A, perm, inversePerm);
+    isPerm(perm, m);
+    isPerm(inversePerm, m);
 
     double *a2 = (double *)malloc(sizeof(double)*nnz);
     int *aj2 = (int *)malloc(sizeof(int)*nnz);
