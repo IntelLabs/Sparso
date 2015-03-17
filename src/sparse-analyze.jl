@@ -71,17 +71,17 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     newA = gensym(string(A))
     stmt = Expr(:(=), newA,
         Expr(:call, :SparseMatrixCSC, 
-                  Expr(:call, TopNode(:getfield), A, :m),
-                  Expr(:call, TopNode(:getfield), A, :n), 
+                  Expr(:call, TopNode(:getfield), A, QuoteNode(:m)),
+                  Expr(:call, TopNode(:getfield), A, QuoteNode(:n)), 
                   Expr(:call, :Array, :Cint, 
                     Expr(:call, TopNode(:arraylen), 
-                        Expr(:call, TopNode(:getfield), A, :colptr))),
+                        Expr(:call, TopNode(:getfield), A, QuoteNode(:colptr)))),
                   Expr(:call, :Array, :Cint, 
                     Expr(:call, TopNode(:arraylen), 
-                        Expr(:call, TopNode(:getfield), A, :rowval))),
+                        Expr(:call, TopNode(:getfield), A, QuoteNode(:rowval)))),
                   Expr(:call, :Array, :Cdouble, 
                     Expr(:call, TopNode(:arraylen), 
-                        Expr(:call, TopNode(:getfield), A, :nzval)))                        
+                        Expr(:call, TopNode(:getfield), A, QuoteNode(:nzval))))                        
         )
     )
     push!(new_stmts, stmt)
