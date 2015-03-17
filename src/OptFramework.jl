@@ -356,7 +356,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
                 gOptFrameworkState.mapNameFuncInfo[fs] = func_to_call
               end
 
-              println("Executing function = ", Base.function_name(func_to_call), " module = ", Base.function_module(func_to_call))
+              println("Executing function = ", Base.function_name(func_to_call), " module = ", Base.function_module(func_to_call, call_sig_arg_tuple))
               #dprintln(3,"Code to call = ", code_typed(func_to_call, call_sig_arg_tuple)[1])
               # Call the function.
               ret = func_to_call($(call_sig_args...))
