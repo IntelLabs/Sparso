@@ -344,7 +344,7 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
   return (asttyp, distributive)
 end
 
-function SparseOptimize(ast, call_sig_arg_tuple, lambda :: LambdaStaticData, call_sig_args)
+function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
   assert(typeof(ast) == Expr)
   assert(ast.head == :lambda)
 
