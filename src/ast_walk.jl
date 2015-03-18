@@ -98,7 +98,7 @@ function from_call(ast::Array{Any,1}, depth, callback, cbdata, top_level_number,
   end
   args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
 
-  return [fun, args]
+  return [fun; args]
 end
 
 function AstWalk(ast::Any, callback, cbdata)
