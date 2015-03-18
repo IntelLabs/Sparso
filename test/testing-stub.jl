@@ -163,11 +163,11 @@ maxiter = 2 * N
 #println("******************* typed AST **************")
 #println(ast)
 
-#x1, k1, rel_err1 = cg_reordered(x, A, b, tol, maxiter)
-#println("***** After cg_reordered:")
-#println("x: ", x1)
-#println("k: ", k1)
-#println("rel_err: ", rel_err1)
+x1, k1, rel_err1 = cg_reordered(x, A, b, tol, maxiter)
+println("***** After cg_reordered:")
+println("x: ", x1)
+println("k: ", k1)
+println("rel_err: ", rel_err1)
 
 x   = zeros(Float64, N)
 x1, k1, rel_err1 = cg(x, A, b, tol, maxiter)
