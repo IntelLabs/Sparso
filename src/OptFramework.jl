@@ -147,6 +147,8 @@ function tfuncPresent(func, tt)
   end 
 end
 
+module_eval = true
+
 function loweredToTyped(func :: Function, loweredAst, call_sig_arg_tuple)
   new_func_name = string(string(func), "_loweredToTyped")
   nfsym = symbol(new_func_name)
@@ -162,7 +164,11 @@ function loweredToTyped(func :: Function, loweredAst, call_sig_arg_tuple)
   copy_body = loweredAst.args[3].args = removeDupLabels(loweredAst.args[3].args)
   #dprintln(3,"after label renumberingl = \n", loweredAst.args[3], " type = ", typeof(loweredAst.args[3]), " copy_body = ", copy_body, " type = ", typeof(copy_body))
   new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, q1.args[2], copy_body...))
-  eval_new_func = eval(new_func)
+  if module_eval
+    eval_new_func = Base.function_module(func, call_sig_arg_tuple).eval(new_func)
+  else
+    eval_new_func = eval(new_func)
+  end
   if DEBUG_LVL >= 3
     lambda = code_lowered(eval_new_func, call_sig_arg_tuple)[1]
     println("lowered copy = \n", lambda)
@@ -187,7 +193,11 @@ function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
   #dprintln(3,"after label renumberingl = \n", lambda.args[3], " type = ", typeof(lambda.args[3]), " copy_body = ", copy_body, " type = ", typeof(copy_body))
  
   new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, copy_body...))
-  eval_new_func = eval(new_func)
+  if module_eval
+    eval_new_func = Base.function_module(old_func, arg_tuple).eval(new_func)
+  else
+    eval_new_func = eval(new_func)
+  end
   #eval_new_func = Base.function_module(old_func).eval(new_func)
   if DEBUG_LVL >= 3
     lambda = code_lowered(eval_new_func, arg_tuple)[1]
@@ -369,7 +379,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
       # Update the call expression to call our trampoline and pass the original function so that we can
       # call it if nothing can be optimized.
       resolved_name = @eval OptFramework.$new_func_sym
-      x.args = [ resolved_name, call_expr, x.args[2:end] ]
+      x.args = [ resolved_name; call_expr; x.args[2:end] ]
 
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
