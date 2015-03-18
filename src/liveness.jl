@@ -1146,6 +1146,8 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     for i in ast.def
       add_access(state.cur_bb, i, false, state.top_level_number)
     end  
+  elseif asttyp == GetfieldNode
+    #skip
   else
     throw(string("from_expr: unknown AST type :", asttyp, " ", ast))
   end

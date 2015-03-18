@@ -240,6 +240,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     ast = eval(new_tt)
   elseif asttyp == Module
     #skip
+  elseif asttyp == GetfieldNode
+    #skip
   else
     throw(string("from_expr: unknown AST: type = ", typeof(ast), ", ast = ", ast))
   end
