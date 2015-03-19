@@ -88,12 +88,12 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     
     # Do the actual reordering in the C library
     getPermuation = (A == M) ? true : false
-    stmt = :(CSR_ReorderMatrix($A, $newA, $P, $Pprime, $getPermuation))
+    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :CSR_ReorderMatrix, Any), A, newA, P, Pprime, getPermuation)
     push!(new_stmts, stmt)
     
     # Update the original matrix with the new data. Note: assignment between
     # two arrays actually make them aliased. So there is no copy cost
-    stmt = :( $A = $newA )
+    stmt = Expr(:(=), A, newA)
     push!(new_stmts, stmt)
 end
 
@@ -104,15 +104,18 @@ function reorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
-    stmt = :( $newV = Array(Cdouble, size($V, 1))) 
+    stmt = Expr(:(=), newV,
+                Expr(:call, :Array, :Cdouble, 
+                    Expr(:call, TopNode(:arraylen), V)))
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = :(reorderVector($V, $newV, $P))
+    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :reorderVector, Any),
+                V, newV, P)
     push!(new_stmts, stmt)
     
     # Update the original vector with the new data
-    stmt = :( $V = $newV )
+    stmt = Expr(:(=), V, newV )
     push!(new_stmts, stmt)
 end
 
@@ -120,15 +123,18 @@ function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the element type. Should make it general in future
     newV = gensym(string(V))
-    stmt = :( $newV = Array(Cdouble, size($V, 1))) 
+    stmt = Expr(:(=), newV,
+                Expr(:call, :Array, :Cdouble, 
+                    Expr(:call, TopNode(:arraylen), V)))
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = :(reverseReorderVector($V, $newV, $P))
+    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :reverseReorderVector, Any),
+                V, newV, P)
     push!(new_stmts, stmt)
     
     # Update the original vector with the new data
-    stmt = :( $V = $newV )
+    stmt = Expr(:(=), V, newV )
     push!(new_stmts, stmt)
 end
 
