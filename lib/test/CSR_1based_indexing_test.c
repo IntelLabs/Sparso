@@ -50,6 +50,16 @@ int main()
 
     CSR_Destroy(A2);
     CSR_Destroy(A);
+
+    int MColIdx[] = {1,2,3,4,5,6,7,8,9,10};
+    int MRowPtr[] = {1,2,3,4,5,6,7,8,9,10,11};
+    double MValues[] = {1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0};
+    int MNnz = MRowPtr[m] - 1;
+    int MColIdx2[MNnz];
+    int MRowPtr2[m + 1];
+    double MValues2[MNnz];
+    CSR_ReorderMatrix(m, m, MRowPtr, MColIdx, MValues, MRowPtr2, MColIdx2, MValues2,
+        perm, inversePerm, false);
   }
 
   {

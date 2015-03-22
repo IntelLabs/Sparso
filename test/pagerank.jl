@@ -57,12 +57,12 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   for i = 1:100
     q = p./d
 
-    tic()
+#    tic()
     Aq = A*q
-    t += toq()
+#    t += toq()
 
     p2 = r + (1-r)*Aq
-    println("$i: $(norm(p - p2)/norm(p))") # print out convergence
+#    println("$i: $(norm(p - p2)/norm(p))") # print out convergence
 
     p = p2
   end
