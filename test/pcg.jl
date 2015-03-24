@@ -1,7 +1,17 @@
+#TODO: remove this include once the package is ready
+include("../src/OptFramework.jl")
+include("../src/SparseAccelerator.jl")
+include("../src/sparse-analyze.jl")
+
+using OptFramework
 using MatrixMarket
 using Base.Test
 
+sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
+OptFramework.setOptPasses([sparse_pass])
+
 function cg(x, A, b, tol, maxiter)
+    tic()
     r = b - A * x
     rel_err = 1
     p = copy(r) #NOTE: do not write "p=r"! That would make p and r aliased (the same variable)
@@ -24,10 +34,12 @@ function cg(x, A, b, tol, maxiter)
         p = r + beta * p
         k += 1
     end
+    toc()
     return x, k, rel_err
 end
 
 function pcg_jacobi(x, A, b, tol, maxiter)
+    tic()
     inv_d = 1./diag(A)
 
     r = b - A * x
@@ -54,6 +66,7 @@ function pcg_jacobi(x, A, b, tol, maxiter)
         p = z + beta * p
         k += 1
     end
+    toc()
     return x, k, rel_err
 end
 
@@ -135,6 +148,7 @@ function bwdTriSolve!(A::SparseMatrixCSC, B::AbstractVecOrMat)
 end
 
 function pcg_symgs(x, A, b, tol, maxiter)
+    tic()
     L = tril(A)
     U = spdiagm(1./diag(A))*triu(A)
     M = L*U
@@ -175,10 +189,12 @@ function pcg_symgs(x, A, b, tol, maxiter)
         p = z + beta * p
         k += 1
     end
+    toc()
     return x, k, rel_err
 end
 
 function pcg(x, A, b, M, tol, maxiter)
+    tic()
     r = b - A * x
     normr0 = norm(r)
     rel_err = 1
@@ -203,6 +219,7 @@ function pcg(x, A, b, M, tol, maxiter)
         p = z + beta * p
         k += 1
     end
+    toc()
     return x, k, rel_err
 end
 
@@ -218,29 +235,87 @@ for matrix in matrices
   println(matrix)
   A = MatrixMarket.mmread("data/$matrix.mtx")
 
+  # unfortunately, colidx and rowptr in A are of Int64[], while our library assumes Cint[] (32 bit)
+  # convert to 32 bit first.
+  A1  = convert(SparseMatrixCSC{Cdouble, Cint}, A) 
+  A   = A1
+
   N   = size(A, 1)
   b   = ones(Float64, N)
 
-  x   = zeros(Float64, N)
-  @time x, k, err = cg(x, A, b, tol, maxiter)
-  # The line below invokes generic PCG.
-  # Ideally, want to get same performance with specialized ver. in above line
-  #@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
-  println("Identity preconditioner: $k iterations $err error")
+  tests = 5
+  
+  println("\n\n**** cg ")
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      x, k, err = cg(x, A, b, tol, maxiter)
+      # The line below invokes generic PCG.
+      # Ideally, want to get same performance with specialized ver. in above line
+      #@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
+      println("Identity preconditioner: $k iterations $err error")
+  end
 
-  x   = zeros(Float64, N)
-  @time x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
-  #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
-  println("Jacobi preconditioner: $k iterations $err error")
+  println("\n\n**** accelerated cg ")
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      @acc result = cg(x, A, b, tol, maxiter)
+      x, k, err = result
+      # The line below invokes generic PCG.
+      # Ideally, want to get same performance with specialized ver. in above line
+      #@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
+      println("Identity preconditioner: $k iterations $err error")
+  end
 
-  x   = zeros(Float64, N)
-  @time x, k, err = pcg_symgs(x, A, b, tol, maxiter)
-  #@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
-  println("SymGS preconditioner: $k iterations $err error")
+  println("\n\n**** pcg_jacobi ")
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
+      #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
+      println("Jacobi preconditioner: $k iterations $err error")
+  end
 
-  M = A # Perfect
-  x   = zeros(Float64, N)
-  @time x, k, err = pcg(x, A, b, M, tol, maxiter)
-  println("Perfect preconditioner: $k iterations $err error")
+  println("\n\n**** accelerated pcg_jacobi ")
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      @acc result = pcg_jacobi(x, A, b, tol, maxiter)
+      x, k, err = result
+      #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
+      println("Jacobi preconditioner: $k iterations $err error")
+  end
+  
+  println("\n\n**** pcg_symgs ")
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      x, k, err = pcg_symgs(x, A, b, tol, maxiter)
+      #@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
+      println("SymGS preconditioner: $k iterations $err error")
+  end
+
+  println("\n\n**** accelerated pcg_symgs ")
+  for i = 1:tests
+#      x   = zeros(Float64, N)
+#      @acc result = pcg_symgs(x, A, b, tol, maxiter)
+#      x, k, err = result
+      #@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
+#      println("SymGS preconditioner: $k iterations $err error")
+  end
+  
+  println("\n\n**** pcg ")
+  for i = 1:tests  
+      M = A # Perfect
+      x   = zeros(Float64, N)
+      x, k, err = pcg(x, A, b, M, tol, maxiter)
+      println("Perfect preconditioner: $k iterations $err error")
+  end
+
+  println("\n\n**** accelerated pcg ")
+  for i = 1:tests  
+      M = A # Perfect
+      x   = zeros(Float64, N)
+      @acc result = pcg(x, A, b, M, tol, maxiter)
+      x, k, err = result
+      println("Perfect preconditioner: $k iterations $err error")
+  end
+  
   println()
 end

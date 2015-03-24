@@ -1111,9 +1111,9 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     add_access(state.cur_bb, ast.name, state.read, state.top_level_number)
   elseif asttyp == TopNode    # name
     #skip
-#  elseif asttyp == GetfieldNode
+#  elseif asttyp == GlobalRef
 #    addStatement(top_level, state, ast)
-#    local mod = ast.value
+#    local mod = ast.mod
 #    local name = ast.name
 #    dprintln(3,"GetfieldNode type ",typeof(mod))
   elseif asttyp == QuoteNode
@@ -1149,7 +1149,7 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     for i in ast.def
       add_access(state.cur_bb, i, false, state.top_level_number)
     end  
-  elseif asttyp == GetfieldNode
+  elseif asttyp == GlobalRef
     #skip
   else
     throw(string("from_expr: unknown AST type :", asttyp, " ", ast))

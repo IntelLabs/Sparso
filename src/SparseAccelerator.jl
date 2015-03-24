@@ -211,9 +211,15 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
     return checkDistributivity(args[1], symbolInfo, distributive)
   end
   if head == :diag
-    return return distributive
+    return distributive
   end
-  
+  # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
+  # write all kinds of functions tediously.
+  # TODO: a general mechanism to handle functions
+   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic
+    return distributive
+  end
+ 
   throw(string("checkDistributivityForCall: unknown AST (", head, ",", args, ")"))
 end
 

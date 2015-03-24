@@ -83,7 +83,7 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     
     # Do the actual reordering in the C library
     getPermuation = (A == M) ? true : false
-    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :CSR_ReorderMatrix, Any), A, newA, P, Pprime, getPermuation)
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_ReorderMatrix), A, newA, P, Pprime, getPermuation)
     push!(new_stmts, stmt)
     
     # Update the original matrix with the new data. Note: assignment between
@@ -105,7 +105,7 @@ function reorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :reorderVector, Any),
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reorderVector),
                 V, newV, P)
     push!(new_stmts, stmt)
     
@@ -124,7 +124,7 @@ function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :reverseReorderVector, Any),
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverseReorderVector),
                 V, newV, P)
     push!(new_stmts, stmt)
     
