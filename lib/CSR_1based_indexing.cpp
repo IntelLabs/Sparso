@@ -82,7 +82,7 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
     if (i < iEnd) {
       int row = inversePerm ? inversePerm[i] : i;
       int begin = rowPtr[row], end = rowPtr[row + 1];
-      rowPtrSum[tid + 1] = out->rowPtr[i] + end - begin;
+      rowPtrSum[tid + 1] = out->rowPtr[i] + end - begin - 1;
     }
     else {
       rowPtrSum[tid + 1] = 0;
@@ -94,7 +94,7 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
       for (int tid = 1; tid < nthreads; ++tid) {
         rowPtrSum[tid + 1] += rowPtrSum[tid];
       }
-      out->rowPtr[m] = rowPtrSum[nthreads];
+      out->rowPtr[m] = rowPtrSum[nthreads] + 1;
     }
 
     for (i = iBegin; i < iEnd; ++i) {
