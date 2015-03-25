@@ -98,7 +98,7 @@ function from_call(ast::Array{Any,1}, depth, callback, cbdata, top_level_number,
   end
   args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
 
-  return [fun, args]
+  return [fun; args]
 end
 
 function AstWalk(ast::Any, callback, cbdata)
@@ -203,11 +203,11 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
   elseif asttyp == TopNode    # name
     dprintln(2,"TopNode type")
     #skip
-  elseif asttyp == GetfieldNode
-    mod = ast.value
-    name = ast.name
-    typ = ast.typ
-    dprintln(2,"GetfieldNode type ",typeof(mod))
+#  elseif asttyp == GlobalRef
+#    mod = ast.mod
+#    name = ast.name
+#    typ = ast.typ
+#    dprintln(2,"GetfieldNode type ",typeof(mod))
   elseif asttyp == QuoteNode
     value = ast.value
     #TODO: fields: value
@@ -239,6 +239,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     new_tt.typ = asttyp
     ast = eval(new_tt)
   elseif asttyp == Module
+    #skip
+  elseif asttyp == GlobalRef
     #skip
   else
     throw(string("from_expr: unknown AST: type = ", typeof(ast), ", ast = ", ast))

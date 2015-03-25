@@ -216,8 +216,8 @@ function normalize_callname(state, env, fun, args)
       else
       end
     end
-  elseif isa(fun, GetfieldNode)
-    if is(fun.value, Base.Broadcast)
+  elseif isa(fun, GlobalRef)
+    if is(fun.mod, Base.Broadcast)
       if is(fun.name, :broadcast_shape)
         fun = :broadcast_shape
       end

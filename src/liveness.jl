@@ -282,9 +282,8 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
       end
     elseif asttype == GotoNode
       assert(x.label == state.old_label)
-      x.label = state.new_label
       state.changed = true
-      return x
+      return GotoNode(state.new_label)
     end
 
     return nothing
@@ -328,7 +327,7 @@ function insertBefore(bl::BlockLiveness, after :: Int, excludeBackEdge :: Bool =
     new_bb.live_in = copy(bb_after.live_in)
     new_bb.live_out = copy(new_bb.live_in)
     bl.basic_blocks[new_bb_id] = new_bb
-    
+
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
     new_goto_stmt = nothing
@@ -816,7 +815,9 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   local fun  = ast[1]
   local args = ast[2:end]
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
-  dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
+  if length(args) > 0
+    dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
+  end
    
   # symbols don't need to be translated
   if typeof(fun) != Symbol
@@ -866,20 +867,22 @@ function removeUselessBlocks(bbs)
       # eliminate basic blocks with only one successor and no statements.
       if length(bb.succs) == 1 && length(bb.statements) == 0
         succ = first(bb.succs)
-        delete!(succ.preds, bb)
+        if succ.label != -2
+          delete!(succ.preds, bb)
 
-        for j in bb.preds
-          replaceSucc(j, bb, succ)
-          push!(succ.preds, j)
+          for j in bb.preds
+            replaceSucc(j, bb, succ)
+            push!(succ.preds, j)
+          end
+
+          dprintln(3,"Removing block with no statements and one successor. ", bb)
+          delete!(bbs, i[1])
+          found_change = true
         end
-
-        dprintln(3,"Removing block with no statements and one successor. ", bb)
-        delete!(bbs, i[1])
-        found_change = true
       elseif length(bb.preds) == 1 && length(bb.succs) == 1
         pred = first(bb.preds)
-        if length(pred.succs) == 1
-            succ = first(bb.succs)
+        succ = first(bb.succs)
+        if length(pred.succs) == 1 && succ.label != -2
             replaceSucc(pred, bb, succ) 
             delete!(succ.preds, bb)
             push!(succ.preds, pred)
@@ -926,6 +929,7 @@ end
 
 function from_expr(ast::Any, callback, cbdata)
   dprintln(2,"from_expr Any")
+  dprintln(3,ast)
   live_res = expr_state()
   from_expr(ast, 1, live_res, false, callback, cbdata)
   connect_finish(live_res)
@@ -1015,7 +1019,6 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
   if handled != nothing
     addStatement(top_level, state, ast)
     if length(handled) > 0
-
       dprintln(3,"Processing expression from callback for ", ast)
       dprintln(3,handled)
       from_exprs(handled, depth+1, state, callback, cbdata)
@@ -1108,11 +1111,11 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     add_access(state.cur_bb, ast.name, state.read, state.top_level_number)
   elseif asttyp == TopNode    # name
     #skip
-  elseif asttyp == GetfieldNode
-    addStatement(top_level, state, ast)
-    local mod = ast.value
-    local name = ast.name
-    dprintln(3,"GetfieldNode type ",typeof(mod))
+#  elseif asttyp == GlobalRef
+#    addStatement(top_level, state, ast)
+#    local mod = ast.mod
+#    local name = ast.name
+#    dprintln(3,"GetfieldNode type ",typeof(mod))
   elseif asttyp == QuoteNode
     addStatement(top_level, state, ast)
     local value = ast.value
@@ -1146,6 +1149,8 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     for i in ast.def
       add_access(state.cur_bb, i, false, state.top_level_number)
     end  
+  elseif asttyp == GlobalRef
+    #skip
   else
     throw(string("from_expr: unknown AST type :", asttyp, " ", ast))
   end

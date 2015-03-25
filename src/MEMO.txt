@@ -66,3 +66,38 @@ Also, print of a matrix cannot be reordered, because that breaks the expectation
 If user requires "bitwise reproducibility", we cannot do reordering either, since floating-point 
 operations are not associable.
     
+Concept: Inter-dependent Arrays(IA): a set of arrays, including matrices and vectors, that if anyone of them 
+is reordered, all the others have to be reordered. In general, for any expression
+    c = Op(a, b) 
+a, b, and c are inter-dependent. Of course, we do not include scalars among them, if any.
+Also, from a, b, and c, we can continue to their subtrees to expand the IA. 
+The IA stops when a child is not an array. Thus the concept of maximal IA. 
+
+// For a statement, find a set of subtrees, each being a maximal IA.
+FindIA(stmt)
+    IAs = {}
+    seeds = {stmt}
+    while seeds != {}
+        seed = get 1 from seeds
+        IA = {}
+        FindIA(seed, IA, seeds)
+        Add IA into IAs
+
+FindIA(currentNode, IA, seeds)
+    for each child c of currentNode
+        if c is a vector
+            if c is a symbol
+                IA U= {c}
+            elseif c is an expression 
+                FindIA(c, IA, seeds)
+        else if c is a number
+            seeds U= {c}
+
+After IAs are found for all statements in a loop, we can decide the following set:
+    reordered = {M} // M is the initially selected matrix to reorder
+              = U(IAs(reordered, S)) forall statement S
+            IAs(reordered, S) is the union of all IAs in statement S that intersects with reordered
+
+Then 
+    reorderedBeforeL = intersect(reordered, headBlock.live_in)
+            

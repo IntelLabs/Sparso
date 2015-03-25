@@ -69,18 +69,150 @@ type memoizeState
   end
 end
 
+type lmstate
+  label_map
+  next_block_num
+  last_was_label
+
+  function lmstate()
+    new (Dict{Int64,Int64}(), 0, false)
+  end
+end
+
+function update_labels(x, state :: lmstate, top_level_number, is_top_level, read)
+  asttyp = typeof(x)
+  if asttyp == LabelNode
+    return LabelNode(state.label_map[x.label])
+  elseif asttyp == GotoNode
+    return GotoNode(state.label_map[x.label])
+  elseif asttyp == Expr
+    head = x.head
+    args = x.args
+    if head == :gotoifnot
+      else_label = args[2]
+      x.args[2] = state.label_map[else_label]
+      return x
+    end
+  end
+  return nothing
+end
+
+function create_label_map(x, state :: lmstate, top_level_number, is_top_level, read)
+  asttyp = typeof(x)
+  if asttyp == LabelNode
+    if state.last_was_label
+      state.label_map[x.label] = state.next_block_num-1
+    else
+      state.label_map[x.label] = state.next_block_num
+      state.next_block_num += 1
+    end
+    state.last_was_label = true
+  else
+    state.last_was_label = false
+  end
+  return nothing
+end
+
+function removeDupLabels(stmts)
+  if length(stmts) == 0
+    return Any[]
+  end
+
+  ret = Any[]
+
+  push!(ret, stmts[1])
+
+  for i = 2:length(stmts)
+    if !(typeof(stmts[i]) == LabelNode && typeof(stmts[i-1]) == LabelNode)
+      push!(ret, stmts[i])
+    end
+  end
+
+  ret
+end
+
+function tfuncPresent(func, tt)
+  m = methods(func, tt)[1]
+  def = m.func.code
+  if def.tfunc == ()
+    dprintln(1, "tfunc NOT present before code_typed")
+    code_typed(func, tt)
+    if def.tfunc == ()
+      dprintln(1, "tfunc NOT present after code_typed")
+    else
+      dprintln(1, "tfunc present after code_typed")
+    end
+  else
+    dprintln(1, "tfunc present on call")
+  end 
+end
+
+module_eval = true
+
 function loweredToTyped(func :: Function, loweredAst, call_sig_arg_tuple)
   new_func_name = string(string(func), "_loweredToTyped")
   nfsym = symbol(new_func_name)
-  new_func = Expr(:function, Expr(:call, nfsym, loweredAst.args[1]...), Expr(:block, loweredAst.args[3].args...))
-  eval_new_func = eval(new_func)
-  code_typed(eval_new_func, call_sig_arg_tuple)[1]
+  #q1 = quote println("Running code created from loweredToTyped") end
+  copy_args = loweredAst.args[1]
+  copy_body = loweredAst.args[3].args
+  dprintln(3,"loweredToTyped body = \n", loweredAst.args[3])
+  state = lmstate()
+  AstWalker.AstWalk(loweredAst.args[3], create_label_map, state)
+  #dprintln(3,"label mapping = ", state.label_map)
+  state.last_was_label = false
+  loweredAst.args[3] = AstWalker.get_one(AstWalker.AstWalk(loweredAst.args[3], update_labels, state))
+  copy_body = loweredAst.args[3].args = removeDupLabels(loweredAst.args[3].args)
+  #dprintln(3,"after label renumberingl = \n", loweredAst.args[3], " type = ", typeof(loweredAst.args[3]), " copy_body = ", copy_body, " type = ", typeof(copy_body))
+  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, copy_body...))
+#  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, q1.args[2], copy_body...))
+  if module_eval
+    eval_new_func = Base.function_module(func, call_sig_arg_tuple).eval(new_func)
+  else
+    eval_new_func = eval(new_func)
+  end
+  if DEBUG_LVL >= 3
+    lambda = code_lowered(eval_new_func, call_sig_arg_tuple)[1]
+    println("lowered copy = \n", lambda)
+  end
+  return code_typed(eval_new_func, call_sig_arg_tuple)[1]
+end
+
+function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
+  lambda = code_lowered(old_func, arg_tuple)[1]
+  nfsym = symbol(new_func_name)
+  dprintln(3, "copying old_func = \n", lambda)
+
+  copy_args = lambda.args[1]
+  copy_body = lambda.args[3].args
+  dprintln(3,"copyFunctionNewName body = \n", lambda.args[3])
+  state = lmstate()
+  AstWalker.AstWalk(lambda.args[3], create_label_map, state)
+  #dprintln(3,"label mapping = ", state.label_map)
+  state.last_was_label = false
+  lambda.args[3] = AstWalker.get_one(AstWalker.AstWalk(lambda.args[3], update_labels, state))
+  copy_body = lambda.args[3].args = removeDupLabels(lambda.args[3].args)
+  #dprintln(3,"after label renumberingl = \n", lambda.args[3], " type = ", typeof(lambda.args[3]), " copy_body = ", copy_body, " type = ", typeof(copy_body))
+ 
+  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, copy_body...))
+  if module_eval
+    eval_new_func = Base.function_module(old_func, arg_tuple).eval(new_func)
+  else
+    eval_new_func = eval(new_func)
+  end
+  #eval_new_func = Base.function_module(old_func).eval(new_func)
+  if DEBUG_LVL >= 3
+    lambda = code_lowered(eval_new_func, arg_tuple)[1]
+    dprintln(3, "new copied func = \n", lambda)
+    tfuncPresent(eval_new_func, arg_tuple)
+  end
+  code_typed(eval_new_func, arg_tuple) # force tfunc to be created in methods[1].func.code
+  return eval_new_func
 end
 
 function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
   fetyp = typeof(func_expr)
 
-  dprintln(3,"processFuncCall ", func_expr, " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args)
+  dprintln(3,"processFuncCall ", func_expr, " module = ", Base.function_module(func_expr, call_sig_arg_tuple), " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args)
   func = eval(func_expr)
   dprintln(3,"func = ", func, " type = ", typeof(func))
 
@@ -98,24 +230,22 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       throw(string("There are no registered optimization passes."))
     end
 
-    new_func = deepcopy(func)
+    new_func_name = string(string(func),"_processFuncCall")
+    new_func = copyFunctionNewName(func, new_func_name, call_sig_arg_tuple)
+    dprintln(2,"temp_func is ", new_func)
+    # Force tfunc to instantiate so that we can over-write it later at the end of optimization.
+    #precompile(new_func, call_sig_arg_tuple)
 
-    method = Base._methods(new_func, call_sig_arg_tuple, -1)
-    assert(length(method) == 1)
-    method = method[1]
-    # typeof(method) now ((DataType,DataType,DataType),(),Method)
+    #new_func = deepcopy(func)
 
     last_lowered = optPasses[1].lowered
 
-    # typeof(method[3].func.code) = LambdaStaticData
+    # Get the AST on which the first optimization pass wants to work.
     if last_lowered == true
-      cur_ast = Base.uncompressed_ast(method[3].func.code)
+      cur_ast = code_typed(new_func, call_sig_arg_tuple, optimize=false)[1]   # false means generate type information but don't otherwise optimize
+      #cur_ast = code_lowered(new_func, call_sig_arg_tuple)[1]
     else
-      (cur_ast, ty) = Base.typeinf(method[3].func.code, method[1], method[2])
-      # typeof(cur_ast) = Array{Uint8,1}
-      if !isa(cur_ast,Expr)
-         cur_ast = ccall(:jl_uncompress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
-      end
+      cur_ast = code_typed(new_func, call_sig_arg_tuple)[1]
     end
     assert(typeof(cur_ast) == Expr)
     assert(cur_ast.head == :lambda)
@@ -124,11 +254,11 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
     for i = 1:length(optPasses)
       if optPasses[i].lowered != last_lowered
-        cur_ast = loweredToTyped(func, cur_ast, call_sig_arg_tuple)
+        cur_ast = loweredToTyped(new_func, cur_ast, call_sig_arg_tuple)
       end
       last_lowered = optPasses[i].lowered
 
-      cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple, method[3].func.code, call_sig_args)
+      cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple, call_sig_args)
 
       if typeof(cur_ast) == Function
         dprintln(3,"Optimization pass returned a function.")
@@ -148,17 +278,23 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
       assert(typeof(cur_ast) == Expr)
       assert(cur_ast.head == :lambda)
       body = cur_ast.args[3]
-      dprintln(3,"Last opt pass worked on lowered. isstaged = ", method[3].isstaged, "\n", body)
+      dprintln(3,"Last opt pass worked on lowered.\n", body)
 
-      cur_ast = loweredToTyped(func, cur_ast, call_sig_arg_tuple)
+      cur_ast = loweredToTyped(new_func, cur_ast, call_sig_arg_tuple)
 
       body = cur_ast.args[3]
       dprintln(3,"Last opt pass after converting to typed AST.\n", body)
     end
 
     # Write the modifed code back to the function.
-    method[3].func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method[3].func.code, cur_ast)
+    dprintln(2,"Before methods at end of processFuncCall.")
+    tfuncPresent(new_func, call_sig_arg_tuple)
+    method = methods(new_func, call_sig_arg_tuple)
+    assert(length(method) == 1)
+    method = method[1]
+    method.func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method.func.code, cur_ast)
 
+    dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
     return new_func
   end
   return nothing
@@ -205,10 +341,11 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
               call_sig = Expr(:tuple)
               call_sig.args = map(typeOfOpr, Any[ $(call_sig_args...) ]) 
               call_sig_arg_tuple = eval(call_sig)
-              println(call_sig_arg_tuple)
+              #println(call_sig_arg_tuple)
 
               # Create a tuple of function and argument types.
               fs = ($new_func_sym, call_sig_arg_tuple)
+              println("running ", $new_func_name, " fs = ", fs)
 
               # If we have previously optimized this function and type combination ...
               if haskey(gOptFrameworkState.mapNameFuncInfo, fs)
@@ -231,16 +368,19 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
                 gOptFrameworkState.mapNameFuncInfo[fs] = func_to_call
               end
 
-              println("running ", $new_func_name, " fs = ", fs)
+              println("Executing function = ", Base.function_name(func_to_call), " module = ", Base.function_module(func_to_call, call_sig_arg_tuple))
+              #dprintln(3,"Code to call = ", code_typed(func_to_call, call_sig_arg_tuple)[1])
               # Call the function.
-              func_to_call($(call_sig_args...))
+              ret = func_to_call($(call_sig_args...))
+              #dprintln(3,"Code to call after = ", code_typed(func_to_call, call_sig_arg_tuple)[1])
+              ret
             end
       end
 
       # Update the call expression to call our trampoline and pass the original function so that we can
       # call it if nothing can be optimized.
       resolved_name = @eval OptFramework.$new_func_sym
-      x.args = [ resolved_name, call_expr, x.args[2:end] ]
+      x.args = [ resolved_name; call_expr; x.args[2:end] ]
 
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
