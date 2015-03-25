@@ -206,41 +206,33 @@ function pcg(x, A, b, M, tol, maxiter)
     return x, k, rel_err
 end
 
-matrices = [
-#"hpcg_4",
-"hpcg_32",
-]
-
 tol = 1e-6
 maxiter = 1000
 
-for matrix in matrices
-  println(matrix)
-  A = MatrixMarket.mmread("data/$matrix.mtx")
+A = MatrixMarket.mmread(ASCIIString(ARGS[1]))
 
-  N   = size(A, 1)
-  b   = ones(Float64, N)
+N   = size(A, 1)
+b   = ones(Float64, N)
 
-  x   = zeros(Float64, N)
-  @time x, k, err = cg(x, A, b, tol, maxiter)
-  # The line below invokes generic PCG.
-  # Ideally, want to get same performance with specialized ver. in above line
-  #@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
-  println("Identity preconditioner: $k iterations $err error")
+x   = zeros(Float64, N)
+@time x, k, err = cg(x, A, b, tol, maxiter)
+# The line below invokes generic PCG.
+# Ideally, want to get same performance with specialized ver. in above line
+#@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
+println("Identity preconditioner: $k iterations $err error")
 
-  x   = zeros(Float64, N)
-  @time x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
-  #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
-  println("Jacobi preconditioner: $k iterations $err error")
+x   = zeros(Float64, N)
+@time x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
+#@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
+println("Jacobi preconditioner: $k iterations $err error")
 
-  x   = zeros(Float64, N)
-  @time x, k, err = pcg_symgs(x, A, b, tol, maxiter)
-  #@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
-  println("SymGS preconditioner: $k iterations $err error")
+x   = zeros(Float64, N)
+@time x, k, err = pcg_symgs(x, A, b, tol, maxiter)
+#@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
+println("SymGS preconditioner: $k iterations $err error")
 
-  M = A # Perfect
-  x   = zeros(Float64, N)
-  @time x, k, err = pcg(x, A, b, M, tol, maxiter)
-  println("Perfect preconditioner: $k iterations $err error")
-  println()
-end
+M = A # Perfect
+x   = zeros(Float64, N)
+@time x, k, err = pcg(x, A, b, M, tol, maxiter)
+println("Perfect preconditioner: $k iterations $err error")
+println()
