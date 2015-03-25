@@ -10,6 +10,8 @@ using Base.Test
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
 
+include("./mmread.jl")
+
 function cg(x, A, b, tol, maxiter)
     tic()
     r = b - A * x
@@ -18,6 +20,7 @@ function cg(x, A, b, tol, maxiter)
     rz = dot(r, r)
     normr0 = sqrt(rz)
     k = 1
+    time1 = time()
     while k <= maxiter
         old_rz = rz
         Ap = A*p # This takes most time. Compiler can reorder A to make faster
@@ -34,6 +37,8 @@ function cg(x, A, b, tol, maxiter)
         p = r + beta * p
         k += 1
     end
+    time2 = time()
+    println("Time of original loop= ", time2 - time1, " seconds")
     toc()
     return x, k, rel_err
 end
@@ -49,6 +54,7 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
+    time1 = time()
     while k <= maxiter
         old_rz = rz
         Ap = A*p
@@ -66,6 +72,8 @@ function pcg_jacobi(x, A, b, tol, maxiter)
         p = z + beta * p
         k += 1
     end
+    time2 = time()
+    println("Time of original loop= ", time2 - time1, " seconds")
     toc()
     return x, k, rel_err
 end
@@ -166,6 +174,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
+    time1 = time()
     while k <= maxiter
         old_rz = rz
         Ap = A*p
@@ -189,6 +198,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
         p = z + beta * p
         k += 1
     end
+    time2 = time()
+    println("Time of original loop= ", time2 - time1, " seconds")
     toc()
     return x, k, rel_err
 end
@@ -202,6 +213,7 @@ function pcg(x, A, b, M, tol, maxiter)
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
+    time1 = time()
     while k <= maxiter
         old_rz = rz
         Ap = A*p
@@ -219,21 +231,26 @@ function pcg(x, A, b, M, tol, maxiter)
         p = z + beta * p
         k += 1
     end
+    time2 = time()
+    println("Time of original loop= ", time2 - time1, " seconds")
     toc()
     return x, k, rel_err
 end
 
-matrices = [
+#matrices = [
 #"hpcg_4",
-"hpcg_32",
-]
+#"hpcg_32",
+#]
 
 tol = 1e-6
 maxiter = 1000
 
-for matrix in matrices
-  println(matrix)
-  A = MatrixMarket.mmread("data/$matrix.mtx")
+#for matrix in matrices
+#  println(matrix)
+#  A = MatrixMarket.mmread("data/$matrix.mtx")
+
+  A = mmread(ASCIIString(ARGS[1]))
+#  A = spones(A)
 
   # unfortunately, colidx and rowptr in A are of Int64[], while our library assumes Cint[] (32 bit)
   # convert to 32 bit first.
@@ -245,7 +262,7 @@ for matrix in matrices
 
   tests = 5
   
-  println("\n\n**** cg ")
+  println("\n\n**** original cg ")
   for i = 1:tests
       x   = zeros(Float64, N)
       x, k, err = cg(x, A, b, tol, maxiter)
@@ -266,7 +283,7 @@ for matrix in matrices
       println("Identity preconditioner: $k iterations $err error")
   end
 
-  println("\n\n**** pcg_jacobi ")
+  println("\n\n**** original pcg_jacobi ")
   for i = 1:tests
       x   = zeros(Float64, N)
       x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
@@ -283,7 +300,7 @@ for matrix in matrices
       println("Jacobi preconditioner: $k iterations $err error")
   end
   
-  println("\n\n**** pcg_symgs ")
+  println("\n\n**** original pcg_symgs ")
   for i = 1:tests
       x   = zeros(Float64, N)
       x, k, err = pcg_symgs(x, A, b, tol, maxiter)
@@ -300,7 +317,7 @@ for matrix in matrices
 #      println("SymGS preconditioner: $k iterations $err error")
   end
   
-  println("\n\n**** pcg ")
+  println("\n\n**** original pcg ")
   for i = 1:tests  
       M = A # Perfect
       x   = zeros(Float64, N)
@@ -318,4 +335,4 @@ for matrix in matrices
   end
   
   println()
-end
+#end

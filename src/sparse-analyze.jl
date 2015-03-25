@@ -161,7 +161,7 @@ function insertTimerAfterLoop(t1, new_stmts)
             )
     push!(new_stmts, stmt)
 
-    stmt = Expr(:call, :println, GlobalRef(Base, :STDOUT), "Time of loop= ", t3, " sec.")
+    stmt = Expr(:call, :println, GlobalRef(Base, :STDOUT), "Time of loop= ", t3, " seconds")
     push!(new_stmts, stmt)
 end
 
@@ -324,17 +324,17 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
         bb = bbs[bbnum]
         for succ in bb.succs
             if !in(succ.label, L.members)
+                # For perf measurement only
+                # TODO: add a switch here
+                new_stmts = (bbnum, succ.label,  Expr[])
+                push!(new_stmts_after_L, new_stmts)
+                insertTimerAfterLoop(t1, new_stmts[3])
+
                 reverseReordered = intersect(reordered, succ.live_in)
                 if isempty(reverseReordered)
                     continue
                 end
-                
-                new_stmts = (bbnum, succ.label,  Expr[])
-                push!(new_stmts_after_L, new_stmts)
-                
                 dprintln(2, "ReverseReorder on edge ", bbnum, " --> ", succ.label)
-
-                insertTimerAfterLoop(t1, new_stmts[3])
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
