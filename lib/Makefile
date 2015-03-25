@@ -4,7 +4,7 @@ CFLAGS = -I. -fopenmp --std=c++11
 ifeq (yes, $(DBG))
   CFLAGS += -g -O0
 else
-  CFLAGS += -O3 -DNDEBUG
+  CFLAGS += -O3 -DNDEBUG -xHost
 endif
 
 test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp reordering/RCM.cpp

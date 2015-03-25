@@ -43,7 +43,7 @@ void getInversePerm(int *inversePerm, const int *perm, int n)
   }
 }
 
-void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
+void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
 {
   Graph *g = constructBoostTaskGraph(*this);
 
