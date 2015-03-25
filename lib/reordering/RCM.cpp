@@ -19,36 +19,56 @@ static void prefixSumOfLevels(
   const CSR *A, const int *levels, int numLevels)
 {
   int *local_count = new int[omp_get_max_threads()*numLevels];
-  memset(local_count, 0, sizeof(int)*omp_get_max_threads()*numLevels);
+  int *local_sum_array = new int[omp_get_max_threads() + 1];
 
-/*#pragma omp parallel
+#pragma omp parallel
   {
     int nthreads = omp_get_num_threads();
-    int tid = omp_get_thread_num();*/
+    int tid = omp_get_thread_num();
 
-//#pragma omp for
+    memset(local_count + tid*numLevels, 0, sizeof(int)*numLevels);
+
+#pragma omp for
     for (int i = 0; i < A->m; ++i) {
-      ++local_count[/*tid*numLevels + */levels[i]];
+      ++local_count[tid*numLevels + levels[i]];
     }
 
-/*#pragma omp for
-    for (int i = 0; i < levels; ++i) {
-      for (int j = 1; j < nthreads; ++j) {
-        local_count[i] += local_count[tid*numLevels + i];
-      }
-    }*/
+    int lPerThread = (numLevels + nthreads - 1)/nthreads;
+    int lBegin = min(lPerThread*tid, numLevels);
+    int lEnd = min(lBegin + lPerThread, numLevels);
 
-//#pragma omp master
+    int local_sum = 0;
+
+    for (int l = lBegin; l < lEnd; ++l) {
+      prefixSum[l] = local_sum;
+      for (int t = 0; t < nthreads; ++t) {
+        local_sum += local_count[t*numLevels + l];
+      }
+    }
+
+    local_sum_array[tid + 1] = local_sum;
+
+#pragma omp barrier
+    if (0 == tid)
     {
-      prefixSum[0] = 0;
-      for (int i = 1; i <= numLevels; ++i) {
-        prefixSum[i] = prefixSum[i - 1] + local_count[i - 1];
+      for (int t = 1; t <= nthreads; ++t) {
+        local_sum_array[t + 1] += local_sum_array[t];
+      }
+      assert(local_sum_array[nthreads] == A->m);
+      prefixSum[numLevels] = A->m;
+    }
+#pragma omp barrier
+
+    if (tid > 0) {
+      local_sum = local_sum_array[tid];
+      for (int l = lBegin; l < lEnd; ++l) {
+        prefixSum[l] += local_sum;
       }
     }
-  //}
+  } // omp parallel
 
   delete[] local_count;
-  assert(prefixSum[numLevels] == A->m);
+  delete[] local_sum_array;
 }
 
 int bfs(const CSR *A, int source, int *levels) {
@@ -56,27 +76,35 @@ int bfs(const CSR *A, int source, int *levels) {
   levels[source] = numLevels;
   numLevels++;
 
-  vector<int> q, nextQ;
-  q.push_back(source);
+  int *q = new int[A->m];
+  int *nextQ = new int[A->m];
+  q[0] = source;
+  int qTail = 1;
+  int nextQTail;
 
-  while (!q.empty()) {
-    for (int u : q) {
-      int index = nextQ.size();
+  while (qTail) {
+    nextQTail = 0;
+    for (int i = 0; i < qTail; ++i) {
+      int u = q[i];
       assert(levels[u] == numLevels - 1);
 
       for (int j = A->rowPtr[u]; j < A->rowPtr[u + 1]; ++j) {
         int v = A->colIdx[j];
-        if (levels[v] > levels[u] + 1) {
+        if (levels[v] == INT_MAX) {
           levels[v] = levels[u] + 1;
-          nextQ.push_back(v);
+          nextQ[nextQTail] = v;
+          ++nextQTail;
         }
       }
     } // for each u in current level
 
-    q.clear();
-    q.swap(nextQ);
+    swap(q, nextQ);
+    qTail = nextQTail;
     ++numLevels;
-  } // while !q.empty()
+  } // while q not empty
+
+  delete[] q;
+  delete[] nextQ;
 
   return numLevels;
 }
@@ -89,6 +117,7 @@ void CSR::getRCMPermutationNew(int *perm, int *inversePerm, int source /*=-1*/) 
 
   // 2. BFS
   int *levels = new int[m];
+#pragma omp parallel for
   for (int i = 0; i < m; ++i) {
     levels[i] = INT_MAX;
   }
