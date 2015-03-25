@@ -262,7 +262,7 @@ maxiter = 1000
 
   tests = 5
   
-  println("\n\n**** original cg ")
+  println("\n\n**** original cg perf")
   for i = 1:tests
       x   = zeros(Float64, N)
       x, k, err = cg(x, A, b, tol, maxiter)
@@ -272,7 +272,7 @@ maxiter = 1000
       println("Identity preconditioner: $k iterations $err error")
   end
 
-  println("\n\n**** accelerated cg ")
+  println("\n\n**** accelerated cg perf")
   for i = 1:tests
       x   = zeros(Float64, N)
       @acc result = cg(x, A, b, tol, maxiter)
@@ -283,7 +283,7 @@ maxiter = 1000
       println("Identity preconditioner: $k iterations $err error")
   end
 
-  println("\n\n**** original pcg_jacobi ")
+  println("\n\n**** original pcg_jacobi perf")
   for i = 1:tests
       x   = zeros(Float64, N)
       x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
@@ -291,7 +291,7 @@ maxiter = 1000
       println("Jacobi preconditioner: $k iterations $err error")
   end
 
-  println("\n\n**** accelerated pcg_jacobi ")
+  println("\n\n**** accelerated pcg_jacobi perf")
   for i = 1:tests
       x   = zeros(Float64, N)
       @acc result = pcg_jacobi(x, A, b, tol, maxiter)
@@ -300,7 +300,7 @@ maxiter = 1000
       println("Jacobi preconditioner: $k iterations $err error")
   end
   
-  println("\n\n**** original pcg_symgs ")
+  println("\n\n**** original pcg_symgs perf")
   for i = 1:tests
       x   = zeros(Float64, N)
       x, k, err = pcg_symgs(x, A, b, tol, maxiter)
@@ -308,7 +308,7 @@ maxiter = 1000
       println("SymGS preconditioner: $k iterations $err error")
   end
 
-  println("\n\n**** accelerated pcg_symgs ")
+  println("\n\n**** accelerated pcg_symgs perf")
   for i = 1:tests
 #      x   = zeros(Float64, N)
 #      @acc result = pcg_symgs(x, A, b, tol, maxiter)
@@ -317,7 +317,7 @@ maxiter = 1000
 #      println("SymGS preconditioner: $k iterations $err error")
   end
   
-  println("\n\n**** original pcg ")
+  println("\n\n**** original pcg perf")
   for i = 1:tests  
       M = A # Perfect
       x   = zeros(Float64, N)
@@ -325,7 +325,7 @@ maxiter = 1000
       println("Perfect preconditioner: $k iterations $err error")
   end
 
-  println("\n\n**** accelerated pcg ")
+  println("\n\n**** accelerated pcg perf")
   for i = 1:tests  
       M = A # Perfect
       x   = zeros(Float64, N)

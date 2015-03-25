@@ -47,13 +47,13 @@ r = 0.15
 
 tests = 5
 
-println("**** original pagerank:")
+println("**** original pagerank perf")
 for i = 1 : tests
     p = repmat([1/m], m)
     pagerank(A, p, r)
 end
 
-println("**** accelerated pagerank:")
+println("**** accelerated pagerank perf")
 for i = 1 : tests
     p = repmat([1/m], m)
     @acc pagerank(A, p, r)

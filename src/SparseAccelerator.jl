@@ -216,7 +216,7 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
   # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
   # write all kinds of functions tediously.
   # TODO: a general mechanism to handle functions
-   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now
+   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println
     return distributive
   end
  
