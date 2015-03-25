@@ -270,6 +270,11 @@ RCM permuted bandwidth: 2
  */
 int main(int argc, char *argv[])
 {
+  if (argc < 2) {
+    fprintf(stderr, "Usage: CSR_test matrix_market_file\n");
+    return -1;
+  }
+
   {
     int m, n, nnz;
     double *a;
@@ -296,7 +301,8 @@ int main(int argc, char *argv[])
     printf("RCM permutation\n");
     int *perm = (int *)malloc(sizeof(int)*m);
     int *inversePerm = (int *)malloc(sizeof(int)*m);
-    CSR_GetRCMPemutation(A, perm, inversePerm);
+    int source = 1;
+    CSR_GetRCMPemutationWithSource(A, perm, inversePerm, source);
     isPerm(perm, m);
     isPerm(inversePerm, m);
 
@@ -306,7 +312,21 @@ int main(int argc, char *argv[])
     CSR_Handle *A2 = CSR_Create(m, n, ai2, aj2, a2);
 
     CSR_Permute(A, A2, perm, inversePerm);
+    printf("RCM permuted bandwidth with source %d: %d\n\n", source, CSR_GetBandwidth(A2));
+
+    CSR_GetRCMPemutation(A, perm, inversePerm);
+    isPerm(perm, m);
+    isPerm(inversePerm, m);
+    
+    CSR_Permute(A, A2, perm, inversePerm);
     printf("RCM permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
+
+    CSR_GetRCMPemutationNew(A, perm, inversePerm, source);
+    isPerm(perm, m);
+    isPerm(inversePerm, m);
+    
+    CSR_Permute(A, A2, perm, inversePerm);
+    printf("My RCM permuted bandwidth with source %d: %d\n\n", source, CSR_GetBandwidth(A2));
 
     t = -omp_get_wtime();
     for (int i = 0; i < REPEAT; ++i) {

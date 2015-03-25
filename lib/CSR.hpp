@@ -32,8 +32,11 @@ public :
 
   /**
    * get reverse Cuthill Mckee permutation that tends to reduce the bandwidth
+   *
+   * @param source starting vertex (-1 to use pseudo diameter heuristic)
    */
-  void getRCMPermutation(int *perm, int *inversePerm) const;
+  void getRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
+  void getRCMPermutationNew(int *perm, int *inversePerm, int source = -1) const;
 
   void permute(CSR *out, const int *columnPerm, const int *rowInversePerm) const;
 

@@ -1,13 +1,13 @@
 CXX=icpc
 
-CFLAGS = -I. -fopenmp
+CFLAGS = -I. -fopenmp --std=c++11
 ifeq (yes, $(DBG))
   CFLAGS += -g -O0
 else
   CFLAGS += -O3 -DNDEBUG
 endif
 
-test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp
+test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp reordering/RCM.cpp
 	$(CXX) $(CFLAGS) -o $@ $^
 
 test/CSR_small_test: test/CSR_small_test.c CSR.cpp CSR_Interface.cpp Vector.cpp
