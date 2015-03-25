@@ -133,6 +133,38 @@ function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
 end
 
+function insertTimerBeforeLoop(new_stmts)
+    t1 = gensym("t1")
+    stmt = Expr(:(=), t1,
+                Expr(:call, TopNode(:ccall), QuoteNode(:clock_now), :Float64, 
+                    Expr(:call1, TopNode(:tuple))
+                )
+            )
+    push!(new_stmts, stmt)
+    t1
+end
+
+function insertTimerAfterLoop(t1, new_stmts)
+    t2 = gensym("t2")
+    stmt = Expr(:(=), t2,
+                Expr(:call, TopNode(:ccall), QuoteNode(:clock_now), :Float64, 
+                    Expr(:call1, TopNode(:tuple))
+                )
+            )
+    push!(new_stmts, stmt)
+
+    t3 = gensym("t3")
+    stmt = Expr(:(=), t3,
+                Expr(:call, TopNode(:box), :Float64, 
+                    Expr(:call, TopNode(:sub_float), t2, t1)
+                )
+            )
+    push!(new_stmts, stmt)
+
+    stmt = Expr(:call, :println, GlobalRef(Base, :STDOUT), "Time of loop= ", t3, " sec.")
+    push!(new_stmts, stmt)
+end
+
 function addToIA(currentNode, IA, symbolInfo)
     if typeOfNode(currentNode, symbolInfo) <: AbstractArray
         if typeof(currentNode) == Symbol
@@ -278,7 +310,11 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
             end
         end
     end
-        
+    
+    # For perf measurement only. 
+    # TODO: add a switch here
+    t1 = insertTimerBeforeLoop(new_stmts_before_L)
+             
     # At the exit of the loop, we need to reverse reorder those that live out of the loop,
     # to recover their original order before they are getting used outside of the loop
     # We remember those in an array. Each element is a tuple 
@@ -297,6 +333,8 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
                 push!(new_stmts_after_L, new_stmts)
                 
                 dprintln(2, "ReverseReorder on edge ", bbnum, " --> ", succ.label)
+
+                insertTimerAfterLoop(t1, new_stmts[3])
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
