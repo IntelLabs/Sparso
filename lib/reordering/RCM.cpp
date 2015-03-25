@@ -309,7 +309,7 @@ int selectSourceWithPseudoDiameter(const CSR *A, int *levels)
 
     // select first 5 that are not adjacent to any previously chosen vertex
     int outIdx = 1;
-    for (int i = 1; i < nCandidates; ++i) {
+    for (int i = 1; i < nCandidates && outIdx < 5; ++i) {
       int u = candidates[i];
       bool adjacent = false;
       for (int j = A->rowPtr[u]; j < A->rowPtr[u + 1]; ++j) {
