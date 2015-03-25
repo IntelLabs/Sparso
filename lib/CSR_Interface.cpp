@@ -8,6 +8,21 @@ CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v)
   return (CSR_Handle *)(new CSR(numRows, numCols, i, j, v));
 }
 
+int CSR_GetNumRows(CSR_Handle *A)
+{
+  return ((CSR *)A)->m;
+}
+
+int CSR_GetNumCols(CSR_Handle *A)
+{
+  return ((CSR *)A)->n;
+}
+
+int CSR_GetNumNonZeros(CSR_Handle *A)
+{
+  return ((CSR *)A)->rowPtr[((CSR *)A)->m];
+}
+
 void CSR_MultiplyWithVector(const CSR_Handle *A, double *y, const double *x)
 {
   ((CSR *)A)->multiplyWithVector(y, x);
