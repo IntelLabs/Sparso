@@ -24,13 +24,14 @@ function mmread(filename::ASCIIString, infoonly::Bool)
     dd     = int(split(ll))         # Read dimensions
     rows   = dd[1]
     cols   = dd[2]
-    entries = rep == "coordinate" ? dd[3] : rows * cols
+    entries = rep == "coordinate" ? (symm == "symmetric" ? 2*dd[3] - rows : dd[3]) : rows * cols
     if infoonly return rows, cols, entries, rep, field, symm end
     if rep == "coordinate"
         rr = Array(Int, entries)
         cc = Array(Int, entries)
         xx = Array(Float64, entries)
-        for i in 1:entries
+        i = 1
+        while i <= entries
             flds = split(readline(mmfile))
             rr[i] = int32(flds[1])
             cc[i] = int32(flds[2])
@@ -38,6 +39,14 @@ function mmread(filename::ASCIIString, infoonly::Bool)
               xx[i] = float64(flds[3])
             else
               xx[i] = 1
+            end
+            i += 1
+
+            if rr[i - 1] != cc[i - 1] && symm == "symmetric"
+              rr[i] = cc[i - 1]
+              cc[i] = rr[i - 1]
+              xx[i] = xx[i - 1]
+              i += 1
             end
         end
         return sparse(rr, cc, xx, rows, cols)
