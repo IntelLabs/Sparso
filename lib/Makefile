@@ -1,6 +1,7 @@
 CXX=icpc
 
-CFLAGS = -I. -fopenmp --std=c++11
+CFLAGS = -I. -fopenmp --std=c++11 -I/opt/apps/intel13/boost/1.51.0/include
+CFLAGS += -I/opt/apps/intel13/boost/1.51.0/include # for stampede
 ifeq (yes, $(DBG))
   CFLAGS += -g -O0
 else

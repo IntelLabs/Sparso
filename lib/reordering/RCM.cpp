@@ -1,6 +1,7 @@
 #include <cassert>
 #include <climits>
 #include <cstring>
+#include <cstdio>
 
 #include <vector>
 #include <algorithm>
@@ -30,7 +31,7 @@ static void prefixSumOfLevels(
 
 #pragma omp for
     for (int i = 0; i < A->m; ++i) {
-      assert(level[i] != INT_MAX);
+      assert(levels[i] != INT_MAX);
       ++local_count[tid*numLevels + levels[i]];
     }
 
