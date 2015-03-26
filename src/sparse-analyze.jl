@@ -22,14 +22,16 @@ function dprintln(level,msgs...)
 end
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
-function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
-  ccall((:CSR_Reorder1BasedMatrix, "../lib/libcsr.so"), Void,
+# Reorder sparse matrix A to newA. Note that this function alters A as well. So
+# A cannot be used afterwards. 
+function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
+  ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Bool),
+               Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
-               pointer(P), pointer(Pprime), getPermuation)
+               pointer(P), pointer(Pprime), getPermuation, oneBasedInput, oneBasedOutput)
 end
 
 function reorderVector(V::Vector, newV::Vector, P::Vector)
@@ -59,7 +61,7 @@ end
 # analysis. If A and M are the same, we also compute permutation and inverse permutation
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
 # function must be called to reorder matrix M first, and then for other matrices
-function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts)
+function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts, oneBasedInput, oneBasedOutput)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the sparse matrix format and element type. Should make it
     # general in future
@@ -83,7 +85,7 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     
     # Do the actual reordering in the C library
     getPermuation = (A == M) ? true : false
-    stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_ReorderMatrix), A, newA, P, Pprime, getPermuation)
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_ReorderMatrix), A, newA, P, Pprime, getPermuation, oneBasedInput, oneBasedOutput)
     push!(new_stmts, stmt)
     
     # Update the original matrix with the new data. Note: assignment between
@@ -92,8 +94,8 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     push!(new_stmts, stmt)
 end
 
-reverseReorderMatrix(sym, M, P, Pprime, landingPad) = 
-       reorderMatrix(sym, M, Pprime, P, landingPad)
+reverseReorderMatrix(sym, M, P, Pprime, landingPad, oneBasedInput, oneBasedOutput) = 
+       reorderMatrix(sym, M, Pprime, P, landingPad, oneBasedInput, oneBasedOutput)
 
 function reorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
@@ -298,13 +300,13 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
 
     # Compute P and Pprime, and reorder M
-    reorderMatrix(M, M, P, Pprime, new_stmts_before_L)
+    reorderMatrix(M, M, P, Pprime, new_stmts_before_L, true, false)
     
     # Now reorder other arrays
     for sym in reorderedBeforeL
         if sym != M
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L)
+                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L, true, false)
             else
                 reorderVector(sym, P, new_stmts_before_L)
             end
@@ -338,7 +340,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts)
+                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts, false, true)
                     else
                         reverseReorderVector(sym, P, new_stmts[3])
                     end
