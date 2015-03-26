@@ -34,7 +34,7 @@ static Graph *constructBoostTaskGraph(const CSR& A)
   return new Graph(edges_are_unsorted_t(), edges.begin(), edges.end(), A.m);
 }
 
-static void getInversePerm(int *inversePerm, const int *perm, int n)
+void getInversePerm(int *inversePerm, const int *perm, int n)
 {
 #pragma omp parallel for
 #pragma simd
@@ -43,12 +43,20 @@ static void getInversePerm(int *inversePerm, const int *perm, int n)
   }
 }
 
-void CSR::getRCMPermutation(int *perm, int *inversePerm) const
+void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
 {
   Graph *g = constructBoostTaskGraph(*this);
 
   vector<int> v;
-  cuthill_mckee_ordering(*g, back_inserter(v));
+  if (-1 == source) {
+    cuthill_mckee_ordering(*g, back_inserter(v));
+  }
+  else {
+    typedef out_degree_property_map<Graph> DegreeMap;
+    std::vector<default_color_type> colors(num_vertices(*g));
+
+    cuthill_mckee_ordering(*g, source, back_inserter(v), make_iterator_property_map(&colors[0], get(vertex_index, *g), colors[0]), make_out_degree_map(*g));
+  }
   delete g;
 
   reverse_copy(v.begin(), v.end(), inversePerm);

@@ -152,7 +152,7 @@ module_eval = true
 function loweredToTyped(func :: Function, loweredAst, call_sig_arg_tuple)
   new_func_name = string(string(func), "_loweredToTyped")
   nfsym = symbol(new_func_name)
-  q1 = quote println("Running code created from loweredToTyped") end
+  #q1 = quote println("Running code created from loweredToTyped") end
   copy_args = loweredAst.args[1]
   copy_body = loweredAst.args[3].args
   dprintln(3,"loweredToTyped body = \n", loweredAst.args[3])
@@ -163,7 +163,8 @@ function loweredToTyped(func :: Function, loweredAst, call_sig_arg_tuple)
   loweredAst.args[3] = AstWalker.get_one(AstWalker.AstWalk(loweredAst.args[3], update_labels, state))
   copy_body = loweredAst.args[3].args = removeDupLabels(loweredAst.args[3].args)
   #dprintln(3,"after label renumberingl = \n", loweredAst.args[3], " type = ", typeof(loweredAst.args[3]), " copy_body = ", copy_body, " type = ", typeof(copy_body))
-  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, q1.args[2], copy_body...))
+  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, copy_body...))
+#  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, q1.args[2], copy_body...))
   if module_eval
     eval_new_func = Base.function_module(func, call_sig_arg_tuple).eval(new_func)
   else

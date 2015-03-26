@@ -203,8 +203,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
   elseif asttyp == TopNode    # name
     dprintln(2,"TopNode type")
     #skip
-#  elseif asttyp == GetfieldNode
-#    mod = ast.value
+#  elseif asttyp == GlobalRef
+#    mod = ast.mod
 #    name = ast.name
 #    typ = ast.typ
 #    dprintln(2,"GetfieldNode type ",typeof(mod))
@@ -240,7 +240,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     ast = eval(new_tt)
   elseif asttyp == Module
     #skip
-  elseif asttyp == GetfieldNode
+  elseif asttyp == GlobalRef
     #skip
   else
     throw(string("from_expr: unknown AST: type = ", typeof(ast), ", ast = ", ast))

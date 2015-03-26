@@ -31,15 +31,7 @@ testing_mode = false
 function enable_testing_mode()
   dprintln(1,"enabling testing mode")
   global testing_mode = true
-end
-
-function typeOfOpr(x)
-#  dprintln(3,"typeOfOpr ", x, " type = ", typeof(x))
-  if isa(x, Expr) x.typ
-  elseif isa(x, SymbolNode) x.typ
-  else typeof(x) 
-  end
-end   
+end  
 
 function findInvariants(members::Set, uniqSet::Set{Symbol}, bbs)
     invariants = Set{Symbol}()
@@ -76,14 +68,14 @@ function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
   return invariants
 end
 
-function initSymbol2TypeDict(expr, call_sig_arg_tuple)
+function initSymbol2TypeDict(expr)
     assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
-    
-    local param = expr.args[1]
+
+    local types = expr.args[2][2]
     symbolInfo = Dict{Symbol, Any}()
-    for i = 1:length(param)
-        symbolInfo[param[i]] = call_sig_arg_tuple[i]
-        dprintln(4,"Add symbolInfo: ", param[i], "==>", symbolInfo[param[i]])
+    for i = 1:length(types)
+        symbolInfo[types[i][1]] = types[i][2]
+        dprintln(4,"Add symbolInfo: ", types[i][1], "==>", symbolInfo[types[i][1]])
     end
     symbolInfo
 end
@@ -99,195 +91,194 @@ function typeOfNode(ast, symbolInfo)
   elseif asttyp == SymbolNode
     return ast.typ
   elseif asttyp == Symbol
-    return symbolInfo[ast]
+    # use get() instead [] in case the key (like Symbol "*") does not exist
+    return get(symbolInfo, ast, Nothing)
   else
     return asttyp
   end
 end
 
-function assignType(lhs, rhs, symbolInfo)
-    # Usually, the left hand side should be a symbol(node) or a tuple of symbol(node)s
-    if isa(lhs, Tuple)
-        for i = 1:length(lhs)
-                assignType(lhs[i], typeOfNode(rhs[i], symbolInfo), symbolInfo)
-        end
-    elseif typeof(lhs) == SymbolNode
-        ast.typ = typeOfNode(rhs, symbolInfo)
-    elseif typeof(lhs) == Symbol
-        symbolInfo[lhs] = typeOfNode(rhs, symbolInfo)
-    else
-        throw("Unhandled LHS in assignment ", lhs, " type is ", typeof(lhs))
-    end
-    nothing
-end
-
 # Our type inference annotates Expr or SymbolNode with the following types:
 #   AbstractSparseMatrix, Matrix, Vector, Array, Bool, Number, Nothing
 
-function inferTypesForCall(head, args, symbolInfo, distributive)
+function checkDistributivityForCall(head, args, symbolInfo, distributive)
+  println("\t**** checkDistributivityForCall", head, " ", args)
   if head == :(*)
     # "*" can have 2 or 3 operands. Example: [:*,:α,:A,:p]
     if length(args) == 3
-        (typ, distributive) = inferTypes(args[1], symbolInfo, distributive)
-        assert(typ <: Number)
-        return inferTypesForCall(head, args[2:end], symbolInfo, distributive)
+        distributive = checkDistributivity(args[1], symbolInfo, distributive)
+        return checkDistributivityForCall(head, args[2:end], symbolInfo, distributive)
     end 
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    if ltyp <: AbstractSparseMatrix
-        if (rtyp <: AbstractSparseMatrix) || (rtyp <: Number)
-            return (AbstractSparseMatrix, distributive)
-        elseif (rtyp <: Vector)
-            return (Vector, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
+        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix) || (typeOfNode(args[2], symbolInfo) <: Number)
+            return distributive
+        elseif (typeOfNode(args[2], symbolInfo) <: Vector)
+            return distributive
         else
-            return (Nothing, false)
+            return false
         end
     end
-    if ltyp <: Number
-        if (rtyp <: AbstractSparseMatrix)
-            return (AbstractSparseMatrix, distributive)
-        elseif (rtyp <: Vector)
-            return (Vector, distributive)
+    if typeOfNode(args[1], symbolInfo) <: Number
+        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix)
+            return distributive
+        elseif (typeOfNode(args[2], symbolInfo) <: Vector)
+            return distributive
         else
-            return (Nothing, false)
+            return false
         end
     end
   end
   if head == :(+) || head == :(-) # Arithmetic operators
     if (length(args) == 1) 
-        return inferTypes(args[1], symbolInfo, distributive)
+        return checkDistributivity(args[1], symbolInfo, distributive)
     end
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    if ltyp <: AbstractSparseMatrix
-        if (rtyp <: AbstractSparseMatrix) 
-            return (AbstractSparseMatrix, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
+        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix) 
+            return distributive
         else
-            return (Nothing, false)
+            return false
         end
     end
-    if ltyp <: Vector
-        if (rtyp <: Vector)
-            return (Vector, distributive)
+    if typeOfNode(args[1], symbolInfo) <: Vector
+        if (typeOfNode(args[2], symbolInfo) <: Vector)
+            return distributive
         else 
-            return (Nothing, false)
+            return false
         end
     end
   end
   if head == :(\)
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    if ltyp <: AbstractSparseMatrix
-        if (rtyp <: Vector)
-            return (Vector, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
+        if (typeOfNode(args[2], symbolInfo) <: Vector)
+            return distributive
         else 
-            return (Nothing, false)
+            return false
         end
     end
   end
   if head == :dot
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    if (ltyp <: Vector) && (rtyp <: Vector) 
-        return (Number, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    if (typeOfNode(args[1], symbolInfo) <: Vector) && (typeOfNode(args[2], symbolInfo) <: Vector) 
+        return distributive
     else
-        return (Nothing, false)
+        return false
     end        
   end
   if head == :(==) || head == :(!=) || head == :(<) || head == :(<=) || 
      head == :(>) || head == :(>=) # Numeric comparison 
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    return (Bool, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    return distributive
   end
   if head == :(~) # Bitwise operator
-    return inferTypes(args[1], symbolInfo, distributive)
+    return checkDistributivity(args[1], symbolInfo, distributive)
   end
   if head == :(&) || head == :(|) || head == :($)
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    return (ltyp, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    return distributive
   end
   if head == :(>>>) || head == :(>>) || head == :(<<) # Bitwise operators
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    return (ltyp, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    return distributive
   end
   if head == :(+) || head == :(-) || head == :(*) || head == :(/) || head == :(\) ||
      head == :(^) || head == :(%) # Arithmetic operators
     # "+" and "-" have been tested before as unary operations. Here handle binary op case
-    (ltyp, rtyp, distributive) = inferTypesForBinaryOP(args, symbolInfo, distributive)
-    return (ltyp, distributive)
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    return distributive
+  end
+  if head == :(.+) || head == :(.-) || head == :(.*) || head == :(./) || head == :(.\) ||
+     head == :(.^) || head == :(.==) || head == :(.!=) || head == :(.<) ||
+     head == :(.<=) || head == :(.>) || head == :(.>=) # Bitwise operators
+    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
+    return distributive
   end
   if head == :(!) # Negation on bool
-    return inferTypes(args[1], symbolInfo, distributive)
+    return checkDistributivity(args[1], symbolInfo, distributive)
   end
   if head == :norm 
-    return inferTypesForCall(:dot, [args[1], args[1]], symbolInfo, distributive)
+    return checkDistributivityForCall(:dot, [args[1], args[1]], symbolInfo, distributive)
   end
   if head == :sqrt
-    return inferTypes(args[1], symbolInfo, distributive)   
+    return checkDistributivity(args[1], symbolInfo, distributive)   
   end
   if isa(head, TopNode)
-    return inferTypesForCall(head.name, args, symbolInfo, distributive)
+    return checkDistributivityForCall(head.name, args, symbolInfo, distributive)
   end
   if head == :copy
-    return inferTypes(args[1], symbolInfo, distributive)
+    return checkDistributivity(args[1], symbolInfo, distributive)
   end
-  
-  throw(string("inferTypesForCall: unknown AST (", head, ",", args, ")"))
+  if head == :diag
+    return distributive
+  end
+  # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
+  # write all kinds of functions tediously.
+  # TODO: a general mechanism to handle functions
+   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println
+    return distributive
+  end
+ 
+  throw(string("checkDistributivityForCall: unknown AST (", head, ",", args, ")"))
 end
 
-function inferTypesForBinaryOP(ast, symbolInfo, distributive)
+function checkDistributivityForBinaryOP(ast, symbolInfo, distributive)
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
-  (rtyp, distributive) = inferTypes(rhs, symbolInfo, distributive)
-  (ltyp, distributive) = inferTypes(lhs, symbolInfo, distributive)
-  (ltyp, rtyp, distributive)
+  distributive = checkDistributivity(rhs, symbolInfo, distributive)
+  distributive = checkDistributivity(lhs, symbolInfo, distributive)
+  distributive
 end
 
-function inferTypesForExprs(ast, symbolInfo, distributive)
+function checkDistributivityForExprs(ast, symbolInfo, distributive)
   local len = length(ast)
   local typ = Nothing
   for i = 1:len
-    (typ, distributive) = inferTypes(ast[i], symbolInfo, distributive)
+    distributive = checkDistributivity(ast[i], symbolInfo, distributive)
   end
-  (typ, distributive)
+  distributive
 end
 
-function inferTypesForIf(args, symbolInfo, distributive)
+function checkDistributivityForIf(args, symbolInfo, distributive)
     # The structure of the if node is an array of length 2.
     # The first index is the conditional.
     # The second index is the label of the else section.
     assert(length(args) == 2)
     if_clause  = args[1]
-    return inferTypes(if_clause, symbolInfo, distributive)
+    return checkDistributivity(if_clause, symbolInfo, distributive)
 end
 
 # :lambda expression
 # ast = [ parameters, meta (local, types, etc), body ]
-function inferTypesForLambda(ast, symbolInfo, distributive)
+function checkDistributivityForLambda(ast, symbolInfo, distributive)
   assert(length(ast) == 3)
   local body  = ast[3]
-  return inferTypes(body, symbolInfo, distributive)
+  return checkDistributivity(body, symbolInfo, distributive)
 end
 
 # Recursively infer types of the nodes in the AST. Meanwhile, test for
 # reordering distributivity      
 # TODO: if only for reordering purpose, once we know distributive is false, we
 # can stop inferring types, since we cannot do reordering optimization anyway.
-function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
+function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
   local asttyp = typeof(ast)
-  dprintln(2,"inferTypes ", asttyp, " ", ast)
+  dprintln(2,"checkDistributivity typeof=", asttyp, " typeOfNode=", typeOfNode(ast, symbolInfo), " ", ast)
 
   if isa(ast, Tuple)
     for i = 1:length(ast)
-        distributive |= inferTypes(ast[i], symbolInfo, distributive)
+        distributive |= checkDistributivity(ast[i], symbolInfo, distributive)
     end
   elseif asttyp == Expr
     local head = ast.head
     local args = ast.args
-    local typ = Nothing
     if head == :lambda
-        (typ, distributive) = inferTypesForLambda(args, symbolInfo, distributive)
-        dprintln(2, "\tLambda (", typ, ", ", distributive, ")")
+        distributive = checkDistributivityForLambda(args, symbolInfo, distributive)
+        dprintln(2, "\tLambda ", distributive)
     elseif head == :body
-        (typ, distributive) = inferTypesForExprs(args, symbolInfo, distributive)
-        dprintln(2, "\tBody (", typ, ", ", distributive, ")")
+        distributive = checkDistributivityForExprs(args, symbolInfo, distributive)
+        dprintln(2, "\tBody ", distributive)
     elseif head == :(=) || head == :(+=) || head == :(-=) || head == :(*=) || 
            head == :(/=) || head == :(\=) || head == :(%=) || head == :(^=) ||
            head == :(&=) || head == :(|=) || head == :($=) || head == :(>>>=) ||
@@ -295,39 +286,34 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
         assert(length(args) == 2)
         local lhs = args[1]
         local rhs = args[2]
-        (rtyp, distributive) = inferTypes(rhs, symbolInfo, distributive)
-        assignType(lhs, rhs, symbolInfo)
-        typ = rtyp
-        dprintln(2, "\tAssignment (", typ, ", ", distributive, ")")
+        distributive = checkDistributivity(rhs, symbolInfo, distributive)
+        dprintln(2, "\tAssignment ", distributive)
     elseif head == :return
-        (typ, distributive) = inferTypes(args, symbolInfo, distributive)
-        dprintln(2, "\tReturn (", typ, ", ", distributive, ")")
+        distributive = checkDistributivity(args, symbolInfo, distributive)
+        dprintln(2, "\tReturn ", distributive)
     elseif head == :call || head == :call1
-        (typ, distributive) = inferTypesForCall(args[1], args[2:end], symbolInfo, distributive)
-        dprintln(2, "\tCall (", typ, ", ", distributive, ")")
+        distributive = checkDistributivityForCall(args[1], args[2:end], symbolInfo, distributive)
+        dprintln(2, "\tCall ", distributive)
     elseif head == :gotoifnot
-        (typ, distributive) = inferTypesForIf(args, symbolInfo, distributive)
-        dprintln(2, "\tGotoifnot (", typ, ", ", distributive, ")")
+        distributive = checkDistributivityForIf(args, symbolInfo, distributive)
+        dprintln(2, "\tGotoifnot ", distributive)
     elseif head == :line
     else
-        throw(string("inferTypes: unknown Expr head :", head))
+        throw(string("checkDistributivity: unknown Expr head :", head))
     end
-    ast.typ = typ
-    return (typ, distributive) 
+    return distributive 
   elseif asttyp == SymbolNode
-    ast.typ = symbolInfo[ast.name]
-    dprintln(2, "\tSymbolNode (", ast.typ, ", ", distributive, ")")
-    return (ast.typ, distributive)
+    dprintln(2, "\tSymbolNode ", distributive)
+    return distributive
   elseif asttyp == Symbol
-    typ = symbolInfo[ast]
-    dprintln(2, "\tSymbol (", typ, ", ", distributive, ")")
-    return (typ, distributive)
+    dprintln(2, "\tSymbol ", distributive)
+    return distributive
   elseif asttyp == LabelNode ||
          asttyp == GotoNode || asttyp == LineNumberNode ||
          asttyp == ASCIIString || asttyp == LambdaStaticData
   elseif asttyp <: Number
-      dprintln(2, "\tNumber (Number, ", distributive, ")")
-      return (Number, distributive)
+      dprintln(2, "\tNumber ", distributive)
+      return distributive
   elseif asttyp.name == Array.name # Example: Array{Any,1}
       typ = asttyp.parameters[1]
       if (asttyp.parameters[2] == 1) #1-dimensonal array is vector
@@ -335,30 +321,30 @@ function inferTypes(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
       elseif (asttyp.parameters[2] == 2) #2-dimensonal array is matrix
           typ = Matrix
       end
-      dprintln(2, "\tArray (", typ, ", ", distributive, ")")
-      return (typ, distributive)
+      dprintln(2, "\tArray ", distributive)
+      return distributive
   else
-      throw(string("inferTypes: unknown AST type :", asttyp, " ", ast))
+      throw(string("checkDistributivity: unknown AST type :", asttyp, " ", ast))
   end
-  dprintln(2, "\tOther (", asttyp, ", ", distributive, ")")
-  return (asttyp, distributive)
+  dprintln(2, "\tOther ", distributive)
+  return distributive
 end
 
 function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
-  assert(typeof(ast) == Expr)
+  assert(typeof(ast)== Expr)
   assert(ast.head == :lambda)
 
   dprintln(3,"SparseOptimize args = ", call_sig_arg_tuple, "\n", ast, "\n")
 
   # Populate the lambda's meta info for symbols with what we know from the typed AST
-  symbolInfo = initSymbol2TypeDict(ast, call_sig_arg_tuple)
+  # This is necessary, since the AST may contain symbols, which does not contain
+  # type info itself. Example: x= ... That x is a Symbol, not a SymbolNode, and
+  # thus does not have type info stored. We have to look up from the lambda. To be
+  # faster, we build this dictionary, and look up from it instead.
+  symbolInfo = initSymbol2TypeDict(ast)
 
-  # Unfortunately, the nodes of typed AST and lowered AST may not be 1:1 correspondence.
-  # Although we know the types of the symbols from typed AST, we do not know the types 
-  # of the (intermediate) nodes of lowered AST. So do a simple type inference on the 
-  # lowered AST
-  (typ, distributive) = inferTypes(ast, symbolInfo, true)
-  dprintln(3,"After our type inference, typ = ", typ, " distributive = ", distributive)
+  distributive = checkDistributivity(ast, symbolInfo, true)
+  dprintln(3,"After our type inference, distributive = ", distributive)
       
   if !distributive
     return ast

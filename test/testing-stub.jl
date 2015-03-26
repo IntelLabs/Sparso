@@ -84,10 +84,40 @@ function cg(x, A, b, tol, maxiter)
     return x, k, rel_err
 end
 
+function pcg_jacobi(x, A, b, tol, maxiter)
+    inv_d = 1./diag(A)
+
+    r = b - A * x
+    normr0 = norm(r)
+    rel_err = 1
+    z = inv_d .* r
+    p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
+    rz = dot(r, z)
+    k = 1
+    while k <= maxiter
+        old_rz = rz
+        Ap = A*p
+        alpha = old_rz / dot(p, Ap)
+        x += alpha * p
+        r -= alpha * Ap
+        rel_err = norm(r)/normr0
+        #println(rel_err)
+        if rel_err < tol 
+            break
+        end
+        z = inv_d .* r  
+        rz = dot(r, z)
+        beta = rz/old_rz
+        p = z + beta * p
+        k += 1
+    end
+    return x, k, rel_err
+end
 
 function pcg(x, A, b, M, tol, maxiter)
     r = b - A * x
     z = M \ r
+    rel_err = 1
     p = copy(z) # NOTE: do not write "p=z", which make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1
@@ -96,7 +126,8 @@ function pcg(x, A, b, M, tol, maxiter)
         α = old_rz / dot(p, A * p)
         x += α * p
         r -= α * A * p 
-        if norm(r) < tol 
+        rel_err = norm(r)
+        if rel_err < tol 
             break
         end
         z = M \ r  
@@ -105,7 +136,53 @@ function pcg(x, A, b, M, tol, maxiter)
         p = z + β * p
         k += 1
     end
-    return x #, k
+    return x, k, rel_err
+end
+
+function pcg_reordered(x, A, b, M, tol, maxiter)
+    r = b - A * x
+    z = M \ r
+    p = copy(z) # NOTE: do not write "p=z", which make p and z aliased (the same variable)
+    rz = dot(r, z)
+    k = 1
+    rel_err = 1.0
+    
+    PermA = Array(Cint,size(A,2))
+    PprimeA = Array(Cint,size(A,2))
+    A1 = SparseMatrixCSC(A.m,A.n,Array(Cint,size(A.colptr,1)),Array(Cint,size(A.rowval,1)),Array(Cdouble,size(A.nzval,1)))
+    CSR_ReorderMatrix(A, A1, PermA,PprimeA,true)
+    A = A1
+    r1 = Array(Cdouble,size(r,1))
+    reorderVector(r,r1,PermA)
+    r = r1
+    x1 = Array(Cdouble,size(x,1))
+    reorderVector(x,x1,PermA)
+    x = x1
+    p1 = Array(Cdouble,size(p,1))
+    reorderVector(p,p1,PermA)
+    p = p1
+    M1 = SparseMatrixCSC(M.m,M.n,Array(Cint,size(M.colptr,1)),Array(Cint,size(M.rowval,1)),Array(Cdouble,size(M.nzval,1)))
+    CSR_ReorderMatrix(M, M1, PermA,PprimeA,false)
+    M= M1
+    while k <= maxiter
+        old_rz = rz
+        α = old_rz / dot(p, A * p)
+        x += α * p
+        r -= α * A * p 
+        rel_err = norm(r)
+        if rel_err < tol 
+            break
+        end
+        z = M \ r  
+        rz = dot(r, z)
+        β = rz/old_rz
+        p = z + β * p
+        k += 1
+    end
+    x2 = Array(Cdouble,size(x,1))
+    reverseReorderVector(x,x2,PermA)
+    x = x2
+    return x, k, rel_err
 end
 
 #A   = MatrixMarket.mmread("./data/MatrixMarket/BCSSTRUC2/bcsstk14.mtx")
@@ -143,6 +220,10 @@ M   = speye(N) # Identity
 #M   = spdiagm(diag(A)) # Jacobi
 #M   = tril(A)*spdiagm(1./diag(A))*triu(A) # Symmetric GS
 #M   = A # Perfect
+# unfortunately, colidx and rowptr in M are of Int64[], while our library assumes Cint[] (32 bit)
+# convert to 32 bit first.
+M1  = convert(SparseMatrixCSC{Cdouble, Cint}, M) 
+M   = M1
 
 b   = randn(N)
 x   = zeros(Float64, N)
@@ -162,13 +243,6 @@ maxiter = 2 * N
 #ast = code_typed(pcg, (Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Array{Float64,1}, Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}, Float64, Int64), optimize=false)
 #println("******************* typed AST **************")
 #println(ast)
-
-x1, k1, rel_err1 = cg_reordered(x, A, b, tol, maxiter)
-println("***** After cg_reordered:")
-println("x: ", x1)
-println("k: ", k1)
-println("rel_err: ", rel_err1)
-
 x   = zeros(Float64, N)
 x1, k1, rel_err1 = cg(x, A, b, tol, maxiter)
 println("***** After cg:")
@@ -176,19 +250,65 @@ println("x: ", x1)
 println("k: ", k1)
 println("rel_err: ", rel_err1)
 
+x   = zeros(Float64, N)
+result2 = pcg(x, A, b, M, tol, maxiter)
+x2, k2, rel_err2 = result2
+println("***** After pcg:")
+println("x: ", x2)
+println("k: ", k2)
+println("rel_err: ", rel_err2)
+
+x   = zeros(Float64, N)
+result3 = pcg_jacobi(x, A, b, tol, maxiter)
+x3, k3, rel_err3 = result3
+println("***** After pcg_jacobi:")
+println("x: ", x3)
+println("k: ", k3)
+println("rel_err: ", rel_err3)
+
 #Base.tmerge(Int64, Float64)
 #acc_stub(ast[1])
 #insert_knobs(ast[1])
 
 x   = zeros(Float64, N)
-@acc x2 = cg(x, A, b, tol, maxiter)
-x2, k2, rel_err2 = x2
-println("***** After accelerated cg:")
-println("x: ", x2)
-println("k: ", k2)
-println("rel_err: ", rel_err2)
+x4, k4, rel_err4 = cg_reordered(x, A, b, tol, maxiter)
+println("***** After cg_reordered:")
+println("x: ", x4)
+println("k: ", k4)
+println("rel_err: ", rel_err4)
 
-#@acc x = pcg(x, A, b, M, tol, maxiter)
+x   = zeros(Float64, N)
+result41 = pcg_reordered(x, A, b, M, tol, maxiter)
+x41, k41, rel_err41 = result41
+println("***** After pcg_reordered:")
+println("x: ", x41)
+println("k: ", k41)
+println("rel_err: ", rel_err41)
+
+
+x   = zeros(Float64, N)
+@acc result5 = cg(x, A, b, tol, maxiter)
+x5, k5, rel_err5= result5
+println("***** After accelerated cg:")
+println("x: ", x5)
+println("k: ", k5)
+println("rel_err: ", rel_err5)
+
+x   = zeros(Float64, N)
+@acc result6 = pcg(x, A, b, M, tol, maxiter)
+x6, k6, rel_err6 = result6
+println("***** After accelerated pcg:")
+println("x: ", x6)
+println("k: ", k6)
+println("rel_err: ", rel_err6)
+
+x   = zeros(Float64, N)
+@acc result7 = pcg_jacobi(x, A, b, tol, maxiter)
+x7, k7, rel_err7 = result7
+println("***** After accelerated pcg_jacobi:")
+println("x: ", x7)
+println("k: ", k7)
+println("rel_err: ", rel_err7)
 
 #println("#Iterations: ", k)
 e_v = A*x .- b
@@ -201,10 +321,11 @@ else
 	println("Failed in verification. Error=", rel_err)
 end
 
-println("Verifying in Cholfact")
-y   = cholfact(A) \ b
-e_v = x .- y
-abs_err = sqrt(dot(e_v, e_v))
-rel_err = abs_err/sqrt(dot(b,b))
+
+#println("Verifying in Cholfact")
+#y   = cholfact(A) \ b
+#e_v = x .- y
+#abs_err = sqrt(dot(e_v, e_v))
+#rel_err = abs_err/sqrt(dot(b,b))
 #err = sum(abs(x .- y))
-println("x .-y = ", rel_err) 
+#println("x .-y = ", rel_err) 

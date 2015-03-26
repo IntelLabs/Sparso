@@ -22,29 +22,26 @@ function dprintln(level,msgs...)
 end
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
-function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
-  println("******* Reordering matrix!")
-  ccall((:CSR_ReorderMatrix, "../lib/libcsr1.so"), Void,
+# Reorder sparse matrix A to newA. Note that this function alters A as well. So
+# A cannot be used afterwards. 
+function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
+  ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Bool),
+               Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
-               pointer(P), pointer(Pprime), getPermuation)
+               pointer(P), pointer(Pprime), getPermuation, oneBasedInput, oneBasedOutput)
 end
 
 function reorderVector(V::Vector, newV::Vector, P::Vector)
-    println("******* Reordering vector!")
-
-   ccall((:reorderVector, "../lib/libcsr1.so"), Void,
+   ccall((:reorderVector, "../lib/libcsr.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end
 
 function reverseReorderVector(V::Vector, newV::Vector, P::Vector)
-   println("******* Reverse reordering vector!")
-
-   ccall((:reorderVectorWithInversePerm, "../lib/libcsr1.so"), Void,
+   ccall((:reorderVectorWithInversePerm, "../lib/libcsr.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end
@@ -64,7 +61,7 @@ end
 # analysis. If A and M are the same, we also compute permutation and inverse permutation
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
 # function must be called to reorder matrix M first, and then for other matrices
-function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts)
+function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts, oneBasedInput, oneBasedOutput)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the sparse matrix format and element type. Should make it
     # general in future
@@ -88,7 +85,7 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     
     # Do the actual reordering in the C library
     getPermuation = (A == M) ? true : false
-    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :CSR_ReorderMatrix, Any), A, newA, P, Pprime, getPermuation)
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_ReorderMatrix), A, newA, P, Pprime, getPermuation, oneBasedInput, oneBasedOutput)
     push!(new_stmts, stmt)
     
     # Update the original matrix with the new data. Note: assignment between
@@ -97,8 +94,8 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     push!(new_stmts, stmt)
 end
 
-reverseReorderMatrix(sym, M, P, Pprime, landingPad) = 
-       reorderMatrix(sym, M, Pprime, P, landingPad)
+reverseReorderMatrix(sym, M, P, Pprime, landingPad, oneBasedInput, oneBasedOutput) = 
+       reorderMatrix(sym, M, Pprime, P, landingPad, oneBasedInput, oneBasedOutput)
 
 function reorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
@@ -110,7 +107,7 @@ function reorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :reorderVector, Any),
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reorderVector),
                 V, newV, P)
     push!(new_stmts, stmt)
     
@@ -129,7 +126,7 @@ function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    stmt = Expr(:call, GetfieldNode(SparseAccelerator, :reverseReorderVector, Any),
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverseReorderVector),
                 V, newV, P)
     push!(new_stmts, stmt)
     
@@ -138,16 +135,70 @@ function reverseReorderVector(V::Symbol, P::Symbol, new_stmts)
     push!(new_stmts, stmt)
 end
 
-function effectedByReordering(S, symbolInfo)
-    s1 = Set{Symbol}()
-    for sym in S
-        typ = symbolInfo[sym]
-        if typ <: AbstractArray
-            push!(s1, sym)
+function insertTimerBeforeLoop(new_stmts)
+    t1 = gensym("t1")
+    stmt = Expr(:(=), t1,
+                Expr(:call, TopNode(:ccall), QuoteNode(:clock_now), :Float64, 
+                    Expr(:call1, TopNode(:tuple))
+                )
+            )
+    push!(new_stmts, stmt)
+    t1
+end
+
+function insertTimerAfterLoop(t1, new_stmts)
+    t2 = gensym("t2")
+    stmt = Expr(:(=), t2,
+                Expr(:call, TopNode(:ccall), QuoteNode(:clock_now), :Float64, 
+                    Expr(:call1, TopNode(:tuple))
+                )
+            )
+    push!(new_stmts, stmt)
+
+    t3 = gensym("t3")
+    stmt = Expr(:(=), t3,
+                Expr(:call, TopNode(:box), :Float64, 
+                    Expr(:call, TopNode(:sub_float), t2, t1)
+                )
+            )
+    push!(new_stmts, stmt)
+
+    stmt = Expr(:call, :println, GlobalRef(Base, :STDOUT), "Time of loop= ", t3, " seconds")
+    push!(new_stmts, stmt)
+end
+
+function addToIA(currentNode, IA, symbolInfo)
+    if typeOfNode(currentNode, symbolInfo) <: AbstractArray
+        if typeof(currentNode) == Symbol
+            push!(IA, currentNode) 
+        elseif typeof(currentNode) == SymbolNode
+            push!(IA, currentNode.name)
+        end
+    end 
+end
+
+function printSpaces(i)
+    for j = 1:i
+        print("\t")
+    end
+end
+
+function findIA(currentNode, IA, seeds, symbolInfo, i)
+#   printSpaces(i)
+#   println("findIA: ", currentNode)
+    addToIA(currentNode, IA, symbolInfo)
+    if typeof(currentNode) <: Expr
+        for c in currentNode.args
+#            printSpaces(i+1)
+#            println("c=", c, " type=", typeOfNode(c, symbolInfo))
+            if typeOfNode(c, symbolInfo) <: Number
+                push!(seeds, c)
+            else
+                findIA(c, IA, seeds, symbolInfo, i+1)
+            end
         end
     end
-    s1
-end 
+end
 
 # Try to reorder sparse matrices and related (dense vectors) in the given loop
 # L is a loop region. M is a sparse matrix live into L. 
@@ -166,7 +217,7 @@ end
 #            if (!aliased) M=P'*M*P
 # TODO:  consider matrix sizes and types. We need to make sure that all matrices
 #        have the same size and type(?)
-function reorder(funcAST, L, M, lives, symbolInfo)
+function reorderLoop(funcAST, L, M, lives, symbolInfo)
     dprintln(2, "Reorder: loop=", L, " Matrix=", M)
 
     if(DEBUG_LVL >= 2)
@@ -182,68 +233,61 @@ function reorder(funcAST, L, M, lives, symbolInfo)
     # M * v, N got reordered as well. Consequently, the matrix due to speye()
     # has to be reordered, and K as well. This is a propagation.
     # Assumption: we know the semantics of all the operators/functions.
-    # Let "uses/defs(S)" be the set of matrices/vectors used/defined in 
-    # statement S in loop L.  
-    # Let us say "reorderedUses/Defs" are the matrices/vectors 
-    # used/defined in L that got reordered. Then
-    #    reorderedUses = union of uses(S) forall statement S 
-    #       if uses(S) contains M or any element in reorderedDefs
-    #    reorderedDefs = union of defs(S) forall statement S
-    #       if uses(S) contains any element in reorderedUses
 
     bbs = lives.basic_blocks
     
-    # In liveness info, we need only matrices and vectors. Build this info
-    uses = Dict{Any, Set}()
-    defs = Dict{Any, Set}()
+    # Build inter-dependent arrays
+    IAs = Dict{Any, Set}()    
     for bbnum in L.members
         for stmt in bbs[bbnum].statements
-            uses[stmt] = effectedByReordering(stmt.use, symbolInfo)
-            defs[stmt] = effectedByReordering(stmt.def, symbolInfo)
+            IAs[stmt] = Set{Any}()
+            seeds = Set{Any} ()
+            push!(seeds, stmt.expr)
+            while !isempty(seeds)
+                seed = pop!(seeds)
+                IA = Set{Any}()
+                findIA(seed, IA, seeds, symbolInfo, 1)
+                if !isempty(IA)
+                    push!(IAs[stmt], IA)
+                end
+            end
+#            println("###Stmt: ", stmt.expr)
+#            println("  IAs:", IAs[stmt])        
         end
-    end
-    
-    reorderedUses = Set{Symbol}()
-    reorderedDefs = Set{Symbol}()
+    end    
+
+    reordered = Set{Symbol}()
+    push!(reordered, M)
 
     changed = true
     while changed
         changed = false
         for bbnum in L.members
             for stmt in bbs[bbnum].statements
-                if ⊈(uses[stmt], reorderedUses)
-                    if in(M, uses[stmt]) || !isempty(intersect(uses[stmt], reorderedDefs))
-                        union!(reorderedUses, uses[stmt])
-                        changed = true
-                    end
-                end
-                if ⊈(defs[stmt], reorderedDefs)
-                    if !isempty(intersect(uses[stmt], reorderedUses))
-                        union!(reorderedDefs, defs[stmt])
-                        changed = true
+                for IA in IAs[stmt]
+                    if ⊈(IA, reordered)
+                        if !isempty(intersect(IA, reordered))
+                            union!(reordered, IA)
+                            changed = true
+                        end
                     end
                 end
             end
         end
     end
     
+    dprintln(2, "Reordered:", reordered)
+ 
     # The symbols that should be reordered before L are the reorderedUses live into L
     headBlock = bbs[L.head]
-    reorderedBeforeL = intersect(reorderedUses, headBlock.live_in)
+    reorderedBeforeL = intersect(reordered, headBlock.live_in)
     
     dprintln(2, "To be reordered before L: ", reorderedBeforeL)
-    dprintln(2, "To be reordered inside L: ", reorderedDefs)
 
     if isempty(reorderedBeforeL)
         return
     end
     
-    # The symbols that are reordered inside L, due to the symbols reordered before L,
-    # are simply the reorderedDefs
-    
-    # Now we know all the symbols that need/will be reordered
-    reordered = union(reorderedBeforeL, reorderedDefs)
-           
     #TODO: benefit-cost analysis
       
     # New a vector to hold the new reordering statements R(LiveIn) before the loop. 
@@ -256,19 +300,23 @@ function reorder(funcAST, L, M, lives, symbolInfo)
     (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
 
     # Compute P and Pprime, and reorder M
-    reorderMatrix(M, M, P, Pprime, new_stmts_before_L)
+    reorderMatrix(M, M, P, Pprime, new_stmts_before_L, true, false)
     
     # Now reorder other arrays
     for sym in reorderedBeforeL
         if sym != M
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L)
+                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L, true, false)
             else
                 reorderVector(sym, P, new_stmts_before_L)
             end
         end
     end
-        
+    
+    # For perf measurement only. 
+    # TODO: add a switch here
+    t1 = insertTimerBeforeLoop(new_stmts_before_L)
+             
     # At the exit of the loop, we need to reverse reorder those that live out of the loop,
     # to recover their original order before they are getting used outside of the loop
     # We remember those in an array. Each element is a tuple 
@@ -278,19 +326,21 @@ function reorder(funcAST, L, M, lives, symbolInfo)
         bb = bbs[bbnum]
         for succ in bb.succs
             if !in(succ.label, L.members)
+                # For perf measurement only
+                # TODO: add a switch here
+                new_stmts = (bbnum, succ.label,  Expr[])
+                push!(new_stmts_after_L, new_stmts)
+                insertTimerAfterLoop(t1, new_stmts[3])
+
                 reverseReordered = intersect(reordered, succ.live_in)
                 if isempty(reverseReordered)
                     continue
                 end
-                
-                new_stmts = (bbnum, succ.label,  Expr[])
-                push!(new_stmts_after_L, new_stmts)
-                
                 dprintln(2, "ReverseReorder on edge ", bbnum, " --> ", succ.label)
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts)
+                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts, false, true)
                     else
                         reverseReorderVector(sym, P, new_stmts[3])
                     end
@@ -344,7 +394,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     end    
     if found 
         for L in loop_info.loops
-            reorder(funcAST, L, M, lives, symbolInfo)
+            reorderLoop(funcAST, L, M, lives, symbolInfo)
         end
     end
     
