@@ -215,6 +215,7 @@ type expr_state
     next_if :: Int
     read
     top_level_number :: Int
+    input_param_arrays :: Array{Symbol, 1}
 
     function expr_state() 
         start  = BasicBlock(-1)
@@ -223,7 +224,7 @@ type expr_state
         bbs = Dict{Int,BasicBlock}()
         bbs[-1] = start
         bbs[-2] = finish
-        new(bbs, start, -3, true, 0)
+        new(bbs, start, -3, true, 0, Symbol[])
     end
 end
 
@@ -691,11 +692,19 @@ function compute_live_ranges(state, dfn)
         found_change = false        
 
         for i = length(dfn):-1:1
-            bb = bbs[dfn[i]]
+            bb_index = dfn[i]
+            bb = bbs[bb_index]
 
             accum = Set()
-            for j in bb.succs
-                accum = union(accum, j.live_in)
+            if bb_index == -2
+              # Special case for final block.
+              # Treat input arrays as live at end of function.
+              accum = Set{Symbol}(state.input_param_arrays)
+              dprintln(3,"Final block live_out = ", accum)
+            else
+              for j in bb.succs
+                  accum = union(accum, j.live_in)
+              end
             end
 
             bb.live_out = accum
@@ -766,6 +775,36 @@ end
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
+function get_input_arrays(input_vars, var_types)
+  ret = Symbol[]
+        
+  dprintln(3,"input_vars = ", input_vars)
+  dprintln(3,"var_types = ", var_types)
+    
+  for i = 1:length(input_vars)
+    iv = input_vars[i]
+    dprintln(3,"iv = ", iv, " type = ", typeof(iv))
+    found = false
+    for j = 1:length(var_types)
+      dprintln(3,"vt = ", var_types[j][1], " type = ", typeof(var_types[j][1]))
+      if iv == var_types[j][1]
+        dprintln(3,"Found matching name.")
+        if var_types[j][2].name == Array.name
+          dprintln(3,"Parameter is an Array.")
+          push!(ret, iv)
+        end
+        found = true
+        break
+      end
+    end
+    if !found
+      throw(string("Didn't find parameter variable in type list."))
+    end
+  end
+
+  ret
+end
+
 # :lambda expression
 # ast = [ parameters, meta (local, types, etc), body ]
 function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
@@ -773,6 +812,8 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   local param = ast[1]
   local meta  = ast[2]
   local body  = ast[3]
+  state.input_param_arrays = get_input_arrays(param, meta[2])
+  dprintln(3,"from_lambda: input_param_arrays = ", state.input_param_arrays)
   from_expr(body, depth, state, false, callback, cbdata)
 end
 
