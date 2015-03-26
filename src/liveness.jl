@@ -215,7 +215,7 @@ type expr_state
     next_if :: Int
     read
     top_level_number :: Int
-    input_param_arrays :: Array{Symbol, 1}
+    ref_params :: Array{Symbol, 1}
 
     function expr_state() 
         start  = BasicBlock(-1)
@@ -699,7 +699,7 @@ function compute_live_ranges(state, dfn)
             if bb_index == -2
               # Special case for final block.
               # Treat input arrays as live at end of function.
-              accum = Set{Symbol}(state.input_param_arrays)
+              accum = Set{Symbol}(state.ref_params)
               dprintln(3,"Final block live_out = ", accum)
             else
               for j in bb.succs
@@ -753,7 +753,9 @@ function dump_bb(bl :: BlockLiveness)
     end
 
     body_order = getBbBodyOrder(bl)
-    println("body_order = ", body_order)
+    if DEBUG_LVL >= 3
+      println("body_order = ", body_order)
+    end
 
     for i = 1:length(body_order)
         bb = bl.basic_blocks[body_order[i]]
@@ -775,7 +777,7 @@ end
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
-function get_input_arrays(input_vars, var_types)
+function get_ref_params(input_vars, var_types)
   ret = Symbol[]
         
   dprintln(3,"input_vars = ", input_vars)
@@ -789,8 +791,10 @@ function get_input_arrays(input_vars, var_types)
       dprintln(3,"vt = ", var_types[j][1], " type = ", typeof(var_types[j][1]))
       if iv == var_types[j][1]
         dprintln(3,"Found matching name.")
-        if var_types[j][2].name == Array.name
-          dprintln(3,"Parameter is an Array.")
+        #if var_types[j][2].name == Array.name
+        #  dprintln(3,"Parameter is an Array.")
+        if !isbits(var_types[j][2])
+          dprintln(3,"Parameter is not a bits type.")
           push!(ret, iv)
         end
         found = true
@@ -812,8 +816,8 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   local param = ast[1]
   local meta  = ast[2]
   local body  = ast[3]
-  state.input_param_arrays = get_input_arrays(param, meta[2])
-  dprintln(3,"from_lambda: input_param_arrays = ", state.input_param_arrays)
+  state.ref_params = get_ref_params(param, meta[2])
+  dprintln(3,"from_lambda: ref_params = ", state.ref_params)
   from_expr(body, depth, state, false, callback, cbdata)
 end
 
