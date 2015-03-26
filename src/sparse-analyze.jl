@@ -23,7 +23,7 @@ end
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool)
-  ccall((:CSR_ReorderMatrix, "../lib/libcsr1.so"), Void,
+  ccall((:CSR_Reorder1BasedMatrix, "../lib/libcsr.so"), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Bool),
@@ -33,13 +33,13 @@ function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector,
 end
 
 function reorderVector(V::Vector, newV::Vector, P::Vector)
-   ccall((:reorderVector, "../lib/libcsr1.so"), Void,
+   ccall((:reorderVector, "../lib/libcsr.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end
 
 function reverseReorderVector(V::Vector, newV::Vector, P::Vector)
-   ccall((:reorderVectorWithInversePerm, "../lib/libcsr1.so"), Void,
+   ccall((:reorderVectorWithInversePerm, "../lib/libcsr.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end

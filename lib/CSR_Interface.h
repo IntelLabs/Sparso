@@ -27,7 +27,10 @@ void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, co
 
 int CSR_GetBandwidth(CSR_Handle *A);
 void CSR_PrintInDense(CSR_Handle *A);
-void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
+
+// This is Julia-C interface for reodering JUlia 1-based sparse matrix
+// The result is 0-based. That is, only i and j are 1-based. i1, j1, perm, inversePerm are 0-based.
+void CSR_Reorder1BasedMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation);
 
 void reorderVector(double *v, double *tmp, const int *perm, int len);

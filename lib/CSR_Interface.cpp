@@ -73,10 +73,11 @@ void CSR_Destroy(CSR_Handle *A)
 // Perm and inversePerm are the spaces that have been allocated for permutation and inverse permutation
 // info; when getPermutation is true, this function computes and stores the info into them; otherwise,
 // they already contain the info, and this function just uses it.
-void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
+void CSR_Reorder1BasedMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation)
 {
     CSR_Handle *A = CSR_Create(numRows, numCols, i, j, v);
+    ((CSR *)A)->make0BasedIndexing();
     if (getPermutation) {
         CSR_GetRCMPemutation(A, perm, inversePerm);
     }
