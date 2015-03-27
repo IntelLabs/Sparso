@@ -3,18 +3,32 @@
 // on the fly so that the underlying library keeps as 0-based.
 
 #include <cstdio>
+#include <cassert>
+#include <cstring>
+#include <climits>
 #include <vector>
-
-#define BOOST_GRAPH_USE_NEW_CSR_INTERFACE
-#include <boost/graph/compressed_sparse_row_graph.hpp>
-#include <boost/graph/cuthill_mckee_ordering.hpp>
-#include <boost/graph/bandwidth.hpp>
 
 #include <omp.h>
 
 #include "CSR.hpp"
 
 using namespace std;
+
+void getInversePerm(int *inversePerm, const int *perm, int n)
+{
+#pragma omp parallel for
+#pragma simd
+  for (int i = 0; i < n; ++i) {
+    inversePerm[perm[i]] = i;
+  }
+}
+
+#ifdef USE_BOOST
+#define BOOST_GRAPH_USE_NEW_CSR_INTERFACE
+#include <boost/graph/compressed_sparse_row_graph.hpp>
+#include <boost/graph/cuthill_mckee_ordering.hpp>
+#include <boost/graph/bandwidth.hpp>
+
 using namespace boost;
 
 typedef compressed_sparse_row_graph<directedS> Graph;
@@ -33,15 +47,6 @@ static Graph *constructBoostTaskGraph(const CSR& A)
   } // for each row i
 
   return new Graph(edges_are_unsorted_t(), edges.begin(), edges.end(), A.m);
-}
-
-void getInversePerm(int *inversePerm, const int *perm, int n)
-{
-#pragma omp parallel for
-#pragma simd
-  for (int i = 0; i < n; ++i) {
-    inversePerm[perm[i]] = i;
-  }
 }
 
 void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
@@ -64,6 +69,7 @@ void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/
 
   getInversePerm(perm, inversePerm, m);
 }
+#endif // USE_BOOST
 
 void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
 {
@@ -159,9 +165,15 @@ void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm) co
 
 int CSR::getBandwidth() const
 {
-  Graph *g = constructBoostTaskGraph(*this);
-  int bw = bandwidth(*g);
-  delete g;
+  int bw = INT_MIN;
+  for (int i = 0; i < m; ++i) {
+    for (int j = rowPtr[i] - 1; j < rowPtr[i + 1] - 1; ++j) {
+      int c = colIdx[j] - 1;
+      int temp = c - i;
+      if (temp < 0) temp = -temp;
+      bw = max(temp, bw);
+    }
+  }
   return bw;
 }
 

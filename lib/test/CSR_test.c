@@ -281,6 +281,7 @@ int main(int argc, char *argv[])
     int *aj, *ai;
     load_matrix_market(argv[1], &a, &aj, &ai, &m, &n, &nnz);
     printf("m = %d, n = %d, nnz = %d\n", m, n, nnz);
+    double bytes = nnz*12;
 
     CSR_Handle *A = CSR_Create(m, n, ai, aj, a);
     printf("original bandwidth: %d\n", CSR_GetBandwidth(A));
@@ -298,26 +299,31 @@ int main(int argc, char *argv[])
 
     printf("SpMV BW = %g GB/s\n", ((double)nnz*12 + (m + n)*8)/(t/REPEAT)/1e9);
 
-    printf("RCM permutation\n");
     int *perm = (int *)malloc(sizeof(int)*m);
     int *inversePerm = (int *)malloc(sizeof(int)*m);
     int source = 1;
+
+    double *a2 = (double *)malloc(sizeof(double)*nnz);
+    int *aj2 = (int *)malloc(sizeof(int)*nnz);
+    int *ai2 = (int *)malloc(sizeof(int)*(m + 1));
+    CSR_Handle *A2 = NULL;
+
+    printf("RCM permutation\n");
+
+#ifdef USE_BOOST
     t = -omp_get_wtime();
     CSR_BoostGetRCMPemutation(A, perm, inversePerm);
     t += omp_get_wtime();
     isPerm(perm, m);
     isPerm(inversePerm, m);
 
-    double bytes = nnz*12;
     printf("Boost RCM takes %f (%f GB/s)\n", t, bytes/t/1e9);
 
-    double *a2 = (double *)malloc(sizeof(double)*nnz);
-    int *aj2 = (int *)malloc(sizeof(int)*nnz);
-    int *ai2 = (int *)malloc(sizeof(int)*(m + 1));
-    CSR_Handle *A2 = CSR_Create(m, n, ai2, aj2, a2);
+    A2 = CSR_Create(m, n, ai2, aj2, a2);
 
     CSR_Permute(A, A2, perm, inversePerm);
     printf("Boost RCM permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
+#endif
 
     /*t = -omp_get_wtime();
     CSR_GetRCMPemutationWithSource(A, perm, inversePerm, source);
@@ -348,6 +354,8 @@ int main(int argc, char *argv[])
     isPerm(inversePerm, m);
     
     printf("My RCM takes %f (%f GB/s)\n", t, bytes/t/1e9);
+
+    A2 = CSR_Create(m, n, ai2, aj2, a2);
 
     CSR_Permute(A, A2, perm, inversePerm);
     printf("My permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));

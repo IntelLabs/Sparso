@@ -35,8 +35,11 @@ public :
    *
    * @param source starting vertex (-1 to use pseudo diameter heuristic)
    */
-  void boostGetRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
   void getRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
+
+#ifdef USE_BOOST
+  void boostGetRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
+#endif
 
   void permute(CSR *out, const int *columnPerm, const int *rowInversePerm) const;
 
