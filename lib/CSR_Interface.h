@@ -20,8 +20,10 @@ void CSR_MultiplyWithVector(const CSR_Handle *A, double *y, const double *x);
 
 void CSR_GetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
+#ifdef USE_BOOST
 void CSR_BoostGetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_BoostGetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
+#endif
 
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm);
 

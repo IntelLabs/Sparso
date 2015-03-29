@@ -28,6 +28,7 @@ void CSR_MultiplyWithVector(const CSR_Handle *A, double *y, const double *x)
   ((CSR *)A)->multiplyWithVector(y, x);
 }
 
+#ifdef USE_BOOST
 void CSR_BoostGetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm)
 {
   ((CSR *)A)->boostGetRCMPermutation(perm, inversePerm);
@@ -37,6 +38,7 @@ void CSR_BoostGetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *in
 {
   ((CSR *)A)->boostGetRCMPermutation(perm, inversePerm, source);
 }
+#endif
 
 void CSR_GetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm)
 {
