@@ -18,7 +18,7 @@ test/CSR1_test: test/CSR_1based_indexing_test.c CSR_1based_indexing.cpp CSR_Inte
 	$(CXX) $(CFLAGS) -o $@ $^
 	
 # 0 based CSR library
-lib: CSR.cpp CSR_Interface.cpp Vector.cpp reordering/RCM.cpp
+lib: CSR.cpp CSR_Interface.cpp Vector.cpp reordering/RCM.cpp mm_io.cpp 
 	$(CXX) -shared -Wl,-soname,libcsr.so  -o libcsr.so -fopenmp -g -I. -fPIC $^
 	
 # 1 based CSR library

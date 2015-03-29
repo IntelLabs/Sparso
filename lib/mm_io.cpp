@@ -3,6 +3,7 @@
 # include <stdlib.h>
 # include <ctype.h>
 # include <time.h>
+# include <assert.h>
 
 # include "mm_io.h"
 
@@ -786,6 +787,282 @@ int mm_write_mtx_crd_size ( FILE *f, int M, int N, int nz )
     return 0;
   }
 }
+
+static void sort(int *col_idx, T *a, int start, int end)
+{
+  int i, j, it;
+  double dt;
+
+  for (i=end-1; i>start; i--)
+    for(j=start; j<i; j++)
+      if (col_idx[j] > col_idx[j+1]){
+
+  if (a){
+    dt=a[j]; 
+    a[j]=a[j+1]; 
+    a[j+1]=dt;
+        }
+  it=col_idx[j]; 
+  col_idx[j]=col_idx[j+1]; 
+  col_idx[j+1]=it;
+    
+      }
+}
+
+/* converts COO format (1-based index) to CSR format (0-based index), not in-place,*/
+static void coo2csr(int n, int nz, T *a, int *i_idx, int *j_idx,
+       T *csr_a, int *col_idx, int *row_start)
+{
+  int i, l;
+
+  for (i=0; i<=n; i++) row_start[i] = 0;
+
+  /* determine row lengths */
+  for (i=0; i<nz; i++) row_start[i_idx[i]]++;
+
+
+  for (i=0; i<n; i++) row_start[i+1] += row_start[i];
+
+
+  /* go through the structure  once more. Fill in output matrix. */
+  for (l=0; l<nz; l++){
+    i = row_start[i_idx[l] - 1];
+    csr_a[i] = a[l];
+    col_idx[i] = j_idx[l] - 1;
+    row_start[i_idx[l] - 1]++;
+  }
+
+  /* shift back row_start */
+  for (i=n; i>0; i--) row_start[i] = row_start[i-1];
+
+  row_start[0] = 0;
+
+  for (i=0; i<n; i++){
+    sort (col_idx, csr_a, row_start[i], row_start[i+1]);
+  }
+
+}
+
+void set_1based_ind(int *rowptr, int *colidx, int n, int nnz)
+{
+  int i;
+  for(i=0; i <= n; i++)
+     rowptr[i]++;
+  for(i=0; i < nnz; i++)
+     colidx[i]++;
+}
+
+void set_0based_ind(int *rowptr, int *colidx, int n, int nnz)
+{
+  int i;
+  for(i=0; i <= n; i++)
+     rowptr[i]--;
+  for(i=0; i < nnz; i++)
+     colidx[i]--;
+}
+
+
+static double randfp(double low, double high){
+    double t = (double)rand() / (double)RAND_MAX;
+    return (1.0 - t) * low + t * high;
+}
+
+#define ZERO_BASED_INDEX
+#define RAND01() randfp(0.0, 1.0)
+
+void print_some_COO_values(int nnz, double *values, int *rowidx, int *colidx)
+{
+  int distance = nnz/100; // print about 100 elements
+  printf("COO values: \n");
+  for (int i = 0; i < nnz; i++) {
+    if ((i % distance) == 0 || i < 10 || nnz - i < 10) {
+      printf("%d %d %.11f\n", rowidx[i], colidx[i], values[i]);
+    }
+  }
+}
+
+// COO: true: build a COO array, stored statically inside. 
+//      false: convert the COO array to the CSR array (a, aj, ai). Then free the COO array space
+// This function should be called twice, first with COO as true, next as false.
+// Between the two calls, the CSR array space must be allocated.
+void load_matrix_market_step (char *file, T *a, int *j, int *i, int *sizes, bool COO)
+{
+    // The COO array
+    static int *colidx;
+    static int *rowidx;
+    static T *values;
+        
+    if (COO) {
+        FILE *fp=fopen(file, "r");
+        assert(fp);
+        MM_typecode matcode;
+        int m;
+        int n;
+        int nnz;
+        int x;
+        int y;
+        double value;
+        int count;
+        int pattern;
+        bool symm = false;
+        int lines;
+    
+        if (mm_read_banner (fp, &matcode) != 0)
+        {
+            printf ("Error: could not process Matrix Market banner.\n");
+            exit(1);
+        }
+    
+        if ( !mm_is_valid (matcode) &&
+             (mm_is_array (matcode) ||
+              mm_is_dense (matcode)) )
+        {
+            printf ("Error: only support sparse and real matrices.\n");
+            exit(1);
+        }
+        
+        if (mm_read_mtx_crd_size(fp, &m, &n, &nnz) !=0)
+        {
+            printf ("Error: could not read matrix size.\n");
+            exit(1);
+        
+        }
+    
+        if (mm_is_symmetric (matcode) == 1)
+        {
+            symm = true;
+            count = 2*nnz;
+        }
+        else
+        {
+            count = nnz;
+        }
+    
+        values = (T *)malloc (count * sizeof(T));
+        colidx = (int *)malloc (count * sizeof(int));
+        rowidx = (int *)malloc (count * sizeof(int));
+        assert (values != NULL);
+        assert (colidx != NULL);
+        assert (rowidx != NULL);
+        
+        count = 0;
+        lines = 0;
+        int trc=0;
+        pattern = mm_is_pattern (matcode);   
+        int x_o=1, y_o;
+        bool zero_based_ind = false;
+        while (mm_read_mtx_crd_entry (fp, &x, &y, &value, NULL, matcode) == 0)
+        {
+            if (0 == x || 0 == y) zero_based_ind = true;
+    
+    #ifdef IGNORE_ZERO_WHEN_READ
+            if (0 == value) continue; // not sure if this is the right thing to do
+    #endif
+            rowidx[count] = x;
+            colidx[count] = y;
+    
+            if (x > m || y > n)
+            {
+                printf ("Error: (%d %d) coordinate is out of range.\n", x, y);
+                exit(1);
+            }
+            if (pattern == 1)
+            {
+                values[count] = RAND01();
+            }
+            else
+            {
+                values[count] = value;
+            }
+    
+            #if defined(DIAG_DOMINANT)
+            if(x==y) values[count]*=1.14;
+            #endif
+    
+            count++;
+            lines++;
+    
+            if (symm && x != y)
+            {
+                rowidx[count] = y;
+                colidx[count] = x;
+                if (pattern == 1)
+                {
+                    values[count] = RAND01();
+                }
+                else
+                {
+                    values[count] = value;
+                }
+                count++;
+                trc++;
+            }
+    
+        }
+        assert (lines <= nnz);
+        nnz = count;
+
+        print_some_COO_values(nnz, values, rowidx, colidx);
+    
+        sizes[0] = (int)symm;
+        sizes[1] = m;
+        sizes[2] = n;
+        sizes[3] = nnz;
+        
+        assert(!zero_based_ind);
+        const char *tag=(symm?"symmetric":"general");
+        printf("%s:::%s m=%d n=%d nnz=%d\n", file, tag, m, n, nnz);
+        fclose(fp);
+    } else {
+        // Convert COO to CSR, then free COO
+        int m = sizes[1];
+        int nnz = sizes[3];
+
+        printf("************* step 2, some COO values: m =%d, nnz=%d\n", m, nnz);        
+        print_some_COO_values(nnz, values, rowidx, colidx);
+        
+        
+        coo2csr(m, nnz, values, rowidx, colidx, a, j, i);
+    #ifndef ZERO_BASED_INDEX
+        set_1based_ind(i, j, m, nnz);
+    #endif
+        free (colidx);
+        free (rowidx);
+        free (values);
+    }
+}
+
+// The following two functions are for Julia
+void load_matrix_market_step1 (char *file, int *sizes)
+{
+    load_matrix_market_step(file, NULL, NULL, NULL, sizes, true);
+}
+
+void load_matrix_market_step2 (char *file, T *a, int *j, int *i, int *sizes)
+{
+    load_matrix_market_step(file, a, j, i, sizes, false);
+}
+
+void load_matrix_market (char *file, T **a, int **aj, int **ai, int *is_symmetric, int *am, int *an, int *annz)
+{
+    // Read into a COO array (stored statically insded mm_read)
+    int sizes[] = {0, 0, 0, 0};
+    load_matrix_market_step1(file, sizes);
+    
+    *is_symmetric = sizes[0];
+    *am = sizes[1];
+    *an = sizes[2];
+    *annz = sizes[3];
+    
+    // Allocate space for the CSR array
+    *a = (T *)_mm_malloc(sizeof(T)*(*annz), 64);
+    *aj = (int *)_mm_malloc(sizeof(int)*(*annz), 64);
+    *ai = (int *)_mm_malloc(sizeof(int)*(*am+1), 64);
+
+    // Convert COO to CSR
+    load_matrix_market_step2(file, *a, *aj, *ai, sizes);
+}
+
 /******************************************************************************/
 
 void timestamp ( void )

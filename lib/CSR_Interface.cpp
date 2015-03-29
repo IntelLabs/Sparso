@@ -63,6 +63,12 @@ void CSR_PrintInDense(CSR_Handle *A)
   ((CSR *)A)->printInDense();
 }
 
+void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance)
+{
+  CSR_Handle *A = CSR_Create(numRows, numCols, i, j, v);
+  ((CSR*)A)->printSomeValues(distance);
+}
+
 void CSR_Destroy(CSR_Handle *A)
 {
   delete (CSR *)A;

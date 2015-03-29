@@ -9,8 +9,6 @@ using MatrixMarket
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
 
-include("./mmread.jl")
-
 function pagerank(A, p, r) # p: initial rank, r: damping factor
   tic()
   d = max(vec(sum(A, 2)), 1) # num of neighbors

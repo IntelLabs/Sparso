@@ -10,8 +10,6 @@ using Base.Test
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
 
-include("./mmread.jl")
-
 function cg(x, A, b, tol, maxiter)
     tic()
     r = b - A * x

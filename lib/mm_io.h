@@ -40,6 +40,14 @@ int mm_write_mtx_crd ( char fname[], int M, int N, int nz, int I[], int J[],
 int mm_write_mtx_crd_size ( FILE *f, int M, int N, int nz );
 void timestamp ( void );
 
+#define T double
+// Julia should call the following two function in order.
+// Between the two calls, the CSR array space must be allocated.
+void load_matrix_market_step1 (char *file, int *sizes);
+void load_matrix_market_step2 (char *file, T *a, int *j, int *i, int *sizes);
+
+// C can directly call this once
+void load_matrix_market (char *file, T **a, int **aj, int **ai, int *is_symmetric, int *am, int *an, int *annz);
 #ifdef __cplusplus
 }
 #endif
