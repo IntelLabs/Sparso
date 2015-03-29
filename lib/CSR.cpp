@@ -209,20 +209,19 @@ void CSR::printInDense() const
 
 // print the CSR matrix every distance elements, as well as the first and 
 // the last 10 elements
-void CSR::printSomeValues(int distance) const
+void CSR::printSomeValues(int distance, bool is_1_based) const
 {
   printf("CSR values:\n");
   int count = 0;
-  int nnz = rowPtr[m];
+  int decrement = is_1_based ? 1 : 0;
+  int nnz = rowPtr[m] - decrement;
   for (int i = 0; i < m; ++i) {
-    int jj = 0;
-    for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
-      int c = colIdx[j];
+    for (int j = rowPtr[i] - decrement; j < rowPtr[i + 1] - decrement; ++j) {
+      int c = colIdx[j] - decrement;
       if ((count % distance) == 0 || count < 10 || nnz - count < 10) {
-          printf("%d %d %.11f\n", i, c, values[j]);
+          printf("%d %d %.11f\n", i + decrement, c + decrement, values[j]);
       }
       count++;
-      ++jj;
     }
   }
 }

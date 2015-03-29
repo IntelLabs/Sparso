@@ -29,7 +29,7 @@ void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, co
 
 int CSR_GetBandwidth(CSR_Handle *A);
 void CSR_PrintInDense(CSR_Handle *A);
-void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance);
+void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance, bool is_1_based);
 
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput);

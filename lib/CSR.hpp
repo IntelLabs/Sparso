@@ -49,7 +49,7 @@ public :
   void make1BasedIndexing() const; // assume it's originally in 0-based indexing.
 
   void printInDense() const;
-  void printSomeValues(int distance) const;
+  void printSomeValues(int distance, bool is_1_based) const;
 
   int m, n;
   int *rowPtr; // rowptr. i[0] = 0, i[m] = nnz

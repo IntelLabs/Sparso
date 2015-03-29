@@ -45,8 +45,9 @@ function mmread(filename, infoonly::Bool)
     
     m::Cint = sizes[2]
     n::Cint = sizes[3]
+    assert(m ==n)
     nnz::Cint = sizes[4]  #Note: if symmetric, nnz includes elements in both upper and lower triangle 
-
+    
     v::Vector{Cdouble} = Vector{Cdouble}(nnz)
     i::Vector{Cint} = Vector{Cint}(nnz)
     j::Vector{Cint} = Vector{Cint}(n + 1)
@@ -55,13 +56,13 @@ function mmread(filename, infoonly::Bool)
 
     # Convert the COO array to CSR array.
     ccall((:load_matrix_market_step2, "../lib/libcsr.so"), Void, 
-        (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}),
-        filename, pointer(v), pointer(i), pointer(j), pointer(sizes))
-
+        (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
+        filename, pointer(v), pointer(i), pointer(j), pointer(sizes), true)
+        
     distance = div(nnz, 100); # print about 100 elements to check manually
     ccall((:CSR_PrintSomeValues, "../lib/libcsr.so"), Void, 
-        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-        m, n, pointer(j), pointer(i), pointer(v), convert(Cint, distance))
+        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Bool),
+        m, n, pointer(j), pointer(i), pointer(v), convert(Cint, distance), true)
 
     A
 end
