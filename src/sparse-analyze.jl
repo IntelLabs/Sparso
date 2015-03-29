@@ -300,13 +300,13 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
 
     # Compute P and Pprime, and reorder M
-    reorderMatrix(M, M, P, Pprime, new_stmts_before_L, true, false)
+    reorderMatrix(M, M, P, Pprime, new_stmts_before_L, true, true)
     
     # Now reorder other arrays
     for sym in reorderedBeforeL
         if sym != M
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L, true, false)
+                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L, true, true)
             else
                 reorderVector(sym, P, new_stmts_before_L)
             end
@@ -340,7 +340,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts, false, true)
+                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts[3], true, true)
                     else
                         reverseReorderVector(sym, P, new_stmts[3])
                     end
