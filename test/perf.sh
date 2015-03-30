@@ -7,13 +7,6 @@ MATRICES=" \
 "
 
 rm -rf a stat
-for i in $MATRICES
-do
-    echo working on pcg.jl $PLACE$i
-    julia pcg.jl $PLACE$i >& a 
-    echo  !!!! pcg.jl $PLACE$i >> stat 
-    grep "seconds$\|perf$" a >> stat
-done
 
 for i in $MATRICES
 do
@@ -23,3 +16,10 @@ do
     grep "seconds$\|perf$" a >> stat
 done
 
+for i in $MATRICES
+do
+    echo working on pcg.jl $PLACE$i
+    julia pcg.jl $PLACE$i >& a 
+    echo  !!!! pcg.jl $PLACE$i >> stat 
+    grep "seconds$\|perf$" a >> stat
+done

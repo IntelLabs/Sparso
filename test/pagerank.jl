@@ -30,13 +30,8 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   toc()
 end
 
-A = mmread(ASCIIString(ARGS[1]))
+A = MatrixMarket.mmread(ARGS[1])
 A = spones(A)
-
-# unfortunately, colidx and rowptr in A are of Int64[], while our library assumes Cint[] (32 bit)
-# convert to 32 bit first.
-A1  = convert(SparseMatrixCSC{Cdouble, Cint}, A) 
-A   = A1
 
 m = size(A, 1)
 p = repmat([1/m], m)
