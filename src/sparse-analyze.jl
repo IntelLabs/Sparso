@@ -22,8 +22,7 @@ function dprintln(level,msgs...)
 end
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
-# Reorder sparse matrix A to newA. Note that this function alters A as well. So
-# A cannot be used afterwards. 
+# Reorder sparse matrix A and store the result in newA. A itself is not changed.
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
   ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
@@ -57,11 +56,11 @@ function allocateForPermutation(M::Symbol, new_stmts)
     (P, Pprime)
 end
 
-# A is the matrix to be reordered. M is the seed matrix we have chosen for doing reorderig 
-# analysis. If A and M are the same, we also compute permutation and inverse permutation
+# A is the matrix to be reordered. If getPermutation is true, we also compute 
+# permutation and inverse permutation
 # info (P and Pprime). Otherwise, the info has already been computed. That means, this
 # function must be called to reorder matrix M first, and then for other matrices
-function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmts, oneBasedInput, oneBasedOutput)
+function reorderMatrix(A::Symbol, P::Symbol, Pprime::Symbol, new_stmts, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
     # Allocate space that stores the reordering result in Julia
     # TODO: Here we hard code the sparse matrix format and element type. Should make it
     # general in future
@@ -84,7 +83,6 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     push!(new_stmts, stmt)
     
     # Do the actual reordering in the C library
-    getPermuation = (A == M) ? true : false
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_ReorderMatrix), A, newA, P, Pprime, getPermuation, oneBasedInput, oneBasedOutput)
     push!(new_stmts, stmt)
     
@@ -94,8 +92,8 @@ function reorderMatrix(A::Symbol, M::Symbol, P::Symbol, Pprime::Symbol, new_stmt
     push!(new_stmts, stmt)
 end
 
-reverseReorderMatrix(sym, M, P, Pprime, landingPad, oneBasedInput, oneBasedOutput) = 
-       reorderMatrix(sym, M, Pprime, P, landingPad, oneBasedInput, oneBasedOutput)
+reverseReorderMatrix(sym, P, Pprime, landingPad, getPermuation, oneBasedInput, oneBasedOutput) = 
+       reorderMatrix(sym, Pprime, P, landingPad, getPermuation, oneBasedInput, oneBasedOutput)
 
 function reorderVector(V::Symbol, P::Symbol, new_stmts)
     # Allocate space that stores the reordering result in Julia
@@ -300,13 +298,13 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
 
     # Compute P and Pprime, and reorder M
-    reorderMatrix(M, M, P, Pprime, new_stmts_before_L, true, true)
+    reorderMatrix(M, P, Pprime, new_stmts_before_L, true, true, true)
     
     # Now reorder other arrays
     for sym in reorderedBeforeL
         if sym != M
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                reorderMatrix(sym, M, P, Pprime, new_stmts_before_L, true, true)
+                reorderMatrix(sym, P, Pprime, new_stmts_before_L, false, true, true)
             else
                 reorderVector(sym, P, new_stmts_before_L)
             end
@@ -340,7 +338,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
                 
                 for sym in reverseReordered
                     if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                        reverseReorderMatrix(sym, M, P, Pprime, new_stmts[3], true, true)
+                        reverseReorderMatrix(sym, P, Pprime, new_stmts[3], false, true, true)
                     else
                         reverseReorderVector(sym, P, new_stmts[3])
                     end

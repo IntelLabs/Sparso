@@ -1,5 +1,6 @@
 #include "CSR.hpp"
 #include "CSR_Interface.h"
+#include <assert.h>
 
 extern "C" {
 
@@ -86,6 +87,11 @@ void CSR_Destroy(CSR_Handle *A)
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput)
 {
+    // The original and the result array space must be different
+    assert(i != i1);
+    assert(j != j1);    
+    assert(v != v1);
+    
     CSR_Handle *A = CSR_Create(numRows, numCols, i, j, v);
     if (oneBasedInput) {
         // The library assumes arrays are all 0-based indexing
@@ -98,6 +104,10 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     CSR_Permute(A, newA, perm, inversePerm);
     if (oneBasedOutput) {
         ((CSR *)newA)->make1BasedIndexing();
+    }
+    if (oneBasedInput) {
+        // Recover the inpt from 0-based to 1-based indexing
+        ((CSR *)A)->make1BasedIndexing();
     }
     CSR_Destroy(newA);
     CSR_Destroy(A);
