@@ -985,14 +985,7 @@ void load_matrix_market_step (char *file, T *a, int *j, int *i, int *sizes, bool
             {
                 rowidx[count] = y;
                 colidx[count] = x;
-                if (pattern == 1)
-                {
-                    values[count] = RAND01();
-                }
-                else
-                {
-                    values[count] = value;
-                }
+                values[count] = values[count -1]; // it must be symmetric no matter it is pattern or not
                 count++;
                 trc++;
             }
