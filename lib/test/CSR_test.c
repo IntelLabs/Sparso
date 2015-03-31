@@ -60,14 +60,15 @@ int main(int argc, char *argv[])
     double *a;
     int *aj, *ai;
     int is_symmetric;
-    load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz);
+    bool one_based_CSR = false;
+    load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz, one_based_CSR);
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
     double bytes = nnz*12;
 
     CSR_Handle *A = CSR_Create(m, n, ai, aj, a);
     printf("CSR matrix content:\n");
     unsigned int distance = nnz / 100; // print out about 100 elements for manual verification
-    CSR_PrintSomeValues(m, n, ai, aj, a, distance);
+    CSR_PrintSomeValues(m, n, ai, aj, a, distance, one_based_CSR);
     printf("original bandwidth: %d\n", CSR_GetBandwidth(A));
 
     double *x = (double *)malloc(sizeof(double)*n);
