@@ -21,7 +21,8 @@ function cg(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-        Ap = A*p # This takes most time. Compiler can reorder A to make faster
+#        Ap = A*p # This takes most time. Compiler can reorder A to make faster
+        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -55,7 +56,8 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-        Ap = A*p
+#        Ap = A*p
+        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -175,7 +177,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-        Ap = A*p
+#        Ap = A*p
+        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -214,7 +217,8 @@ function pcg(x, A, b, M, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-        Ap = A*p
+#        Ap = A*p
+        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap

@@ -17,7 +17,8 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
     q = p./d
 
 #    tic()
-    Aq = A*q
+#    Aq = A*q
+     Aq = SpMV(A, q)
 #    t += toq()
 
     p2 = r + (1-r)*Aq
