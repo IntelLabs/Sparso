@@ -103,7 +103,7 @@ end
 
 function checkDistributivityForCall(head, args, symbolInfo, distributive)
   println("\t**** checkDistributivityForCall", head, " ", args)
-  if head == :(*)
+  if head == :(*) || head == :SpMV
     # "*" can have 2 or 3 operands. Example: [:*,:α,:A,:p]
     if length(args) == 3
         distributive = checkDistributivity(args[1], symbolInfo, distributive)

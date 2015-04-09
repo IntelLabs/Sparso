@@ -21,6 +21,16 @@ function dprintln(level,msgs...)
     end 
 end
 
+# A temporary workaround for SpMV: A*x
+function SpMV(A::SparseMatrixCSC, x::Vector)
+    y = Array(Cdouble, size(x, 1))
+    ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
+              (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+               A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(x), pointer(y))
+    y
+end
+
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)

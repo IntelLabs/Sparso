@@ -871,6 +871,7 @@ static double randfp(double low, double high){
 
 void print_some_COO_values(int nnz, double *values, int *rowidx, int *colidx)
 {
+  fflush(stdout);
   int distance = nnz/100; // print about 100 elements
   printf("COO values: \n");
   for (int i = 0; i < nnz; i++) {
@@ -878,6 +879,7 @@ void print_some_COO_values(int nnz, double *values, int *rowidx, int *colidx)
       printf("%d %d %.11f\n", rowidx[i], colidx[i], values[i]);
     }
   }
+  fflush(stdout);
 }
 
 // COO: true: build a COO array, stored statically inside. 

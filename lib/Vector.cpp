@@ -27,3 +27,21 @@ extern "C" void reorderVectorWithInversePerm(double *v, double *tmp, const int *
     v[i] = tmp[i];
   }
 }
+
+  /**
+   * Compute y = A*x
+   */
+// TODO: remove this once MKL libray call is fine, or when reusing 
+// works so that we can convert 0 to 1 based only once in the loop
+// This is a temporary workaround. To remove in future.
+extern "C" void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y)
+{
+#pragma omp parallel for
+    for (int i = 0; i < num_rows; ++i) {
+      double sum = 0;
+      for (int j = rowPtr[i] - 1; j < rowPtr[i + 1] - 1; ++j) {
+        sum += values[j]*x[colIdx[j] - 1];
+      }
+      y[i] = sum;
+    }
+  }
