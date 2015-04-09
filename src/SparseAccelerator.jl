@@ -373,3 +373,38 @@ end
 LivenessAnalysis.set_debug_level(4)
 
 end   # end of module
+
+function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
+#  println("Calling SparseAccelerator version of SpMV")
+  if eltype(x) == Float64
+#    println("length x = ", length(x))
+#    println("length y = ", length(y))
+#    println("alpha = ", alpha, " beta = ", beta)
+
+    assert(eltype(A) == Float64)
+    assert(eltype(y) == Float64)
+
+    alpha_f64 = Ref{Cdouble}(convert(Cdouble, alpha))
+    beta_f64  = Ref{Cdouble}(convert(Cdouble, beta))
+
+    if eltype(A.colptr) == Int32
+      assert(eltype(A.rowval) == Int32)
+
+      ref_m = Ref{Cint}(A.m)
+      ref_n = Ref{Cint}(A.n)
+      colptr2 = pointer(A.colptr) + sizeof(Cint)
+  
+      ccall((:mkl_dcscmv, "libmkl_rt"), Void,
+           (Ptr{UInt8}, Ref{Cint}, Ref{Cint}, Ref{Cdouble}, Ptr{UInt8}, Ptr{Cdouble},     Ptr{Cint},         Ptr{Cint},         Ptr{Cint}, Ptr{Cdouble}, Ref{Cdouble}, Ptr{Cdouble}),
+            "N",        ref_m,     ref_n,     alpha_f64,    "G  F  ",   pointer(A.nzval), pointer(A.rowval), pointer(A.colptr), colptr2,   pointer(x),   beta_f64,     pointer(y))
+      return y
+    else
+      println("SparseMatrixCSC element type of rowval is not Int32")
+      assert(0)
+    end
+  else
+    println("SparseMatrixCSC element type of x is not Float64")
+    assert(0)
+  end
+end
+
