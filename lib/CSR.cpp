@@ -165,6 +165,7 @@ void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm) co
 int CSR::getBandwidth() const
 {
   int bw = INT_MIN;
+#pragma omp parallel for reduction(max:bw)
   for (int i = 0; i < m; ++i) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
       int c = colIdx[j];
