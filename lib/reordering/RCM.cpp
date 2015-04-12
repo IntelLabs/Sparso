@@ -17,7 +17,8 @@ void getInversePerm(int *inversePerm, const int *perm, int n);
 // compute prefix sum of levels
 static void prefixSumOfLevels(
   int *prefixSum,
-  const CSR *A, const int *levels, int numLevels)
+  const CSR *A, const int *levels, int numLevels,
+  const int *components, int numOfComponents)
 {
   int *local_count = new int[omp_get_max_threads()*numLevels];
   int *local_sum_array = new int[omp_get_max_threads() + 1];
@@ -29,10 +30,20 @@ static void prefixSumOfLevels(
 
     memset(local_count + tid*numLevels, 0, sizeof(int)*numLevels);
 
+    if (NULL == components) {
 #pragma omp for
-    for (int i = 0; i < A->m; ++i) {
-      assert(levels[i] != INT_MAX);
-      ++local_count[tid*numLevels + levels[i]];
+      for (int i = 0; i < A->m; ++i) {
+        assert(levels[i] != INT_MAX);
+        ++local_count[tid*numLevels + levels[i]];
+      }
+    }
+    else {
+#pragma omp for
+      for (int i = 0; i < numOfComponents; ++i) {
+        assert(components[i] >= 0 && components[i] < A->m);
+        assert(levels[components[i]] != INT_MAX);
+        ++local_count[tid*numLevels + levels[components[i]]];
+      }
     }
 
     int lPerThread = (numLevels + nthreads - 1)/nthreads;
@@ -56,8 +67,8 @@ static void prefixSumOfLevels(
       for (int t = 1; t <= nthreads; ++t) {
         local_sum_array[t + 1] += local_sum_array[t];
       }
-      assert(local_sum_array[nthreads] == A->m);
-      prefixSum[numLevels] = A->m;
+      assert(local_sum_array[nthreads] == numOfComponents);
+      prefixSum[numLevels] = numOfComponents;
     }
 #pragma omp barrier
 
@@ -73,36 +84,77 @@ static void prefixSumOfLevels(
   delete[] local_sum_array;
 }
 
+struct bfsAuxData
+{
+  int *q[2];
+  int *qTail;
+  int *qTailPrefixSum;
+  int *rowPtrs;
+  int *nnzPrefixSum;
+  int *candidates;
+
+  bfsAuxData(int m);
+  ~bfsAuxData();
+};
+
+bfsAuxData::bfsAuxData(int m)
+{
+  q[0] = new int[m*omp_get_max_threads()];
+  q[1] = new int[m*omp_get_max_threads()];
+
+  qTail = new int[omp_get_max_threads()];
+  qTailPrefixSum = new int[omp_get_max_threads() + 1];
+
+  rowPtrs = new int[omp_get_max_threads()*m];
+  nnzPrefixSum = new int[omp_get_max_threads() + 1];
+
+  candidates = new int[m];
+}
+
+bfsAuxData::~bfsAuxData()
+{
+  delete[] q[0];
+  delete[] q[1];
+  delete[] qTail;
+  delete[] qTailPrefixSum;
+  delete[] rowPtrs;
+  delete[] nnzPrefixSum;
+  delete[] candidates;
+}
+
 /**
- * @return -1 if shortcircuited
+ * @return -1 if shortcircuited num of levels otherwise
+ *
+ * pre-condition: levels should be initialized to -1
  */
-int bfs(const CSR *A, int source, int *levels, int *width = NULL, int *shortCircuitWidth = NULL) {
-#pragma omp parallel for
-  for (int i = 0; i < A->m; ++i) {
-    levels[i] = INT_MAX;
-  }
+template<bool OUTPUT_VISITED = false>
+int bfs(
+  const CSR *A, int source, int *levels,
+  bfsAuxData *aux,
+  int *visited = NULL, int *numOfVisited = NULL,
+  int *width = NULL, int *shortCircuitWidth = NULL) {
 
   int numLevels = 0;
   levels[source] = numLevels;
 
-  int *q[2];
-  q[0] = new int[A->m*omp_get_max_threads()];
-  q[1] = new int[A->m*omp_get_max_threads()];
+  int **q = aux->q;
   q[0][0] = source;
 
-  int *qTail = new int[omp_get_max_threads()];
+  int *qTail = aux->qTail;
   qTail[0] = 1;
 
-  int *qTailPrefixSum = new int[omp_get_max_threads() + 1];
+  int *qTailPrefixSum = aux->qTailPrefixSum;
   qTailPrefixSum[0] = 0;
 
-  int *rowPtrs = new int[omp_get_max_threads()*A->m];
+  int *rowPtrs = aux->rowPtrs;
   rowPtrs[0] = 0;
   rowPtrs[1] = A->rowPtr[source + 1] - A->rowPtr[source];
 
-  int *nnzPrefixSum = new int[omp_get_max_threads() + 1];
+  int *nnzPrefixSum = aux->nnzPrefixSum;
   nnzPrefixSum[0] = 0;
   nnzPrefixSum[1] = rowPtrs[1];
+
+  if (OUTPUT_VISITED) *numOfVisited = 0;
 
 #pragma omp parallel
   {
@@ -131,6 +183,7 @@ int bfs(const CSR *A, int source, int *levels, int *width = NULL, int *shortCirc
           numLevels = -1;
         }
       }
+      if (OUTPUT_VISITED) *numOfVisited += qTailPrefixSum[nthreads];
     }
 #pragma omp barrier
 
@@ -142,6 +195,9 @@ int bfs(const CSR *A, int source, int *levels, int *width = NULL, int *shortCirc
         nnzPrefixSum, nnzPrefixSum + nthreads + 1,
         nnzPerThread*tid) -
       nnzPrefixSum - 1;
+    if (0 == tid) {
+      tBegin = 0;
+    }
     int tEnd = upper_bound(
         nnzPrefixSum, nnzPrefixSum + nthreads + 1,
         nnzPerThread*(tid + 1)) -
@@ -174,6 +230,12 @@ int bfs(const CSR *A, int source, int *levels, int *width = NULL, int *shortCirc
         (rowPtrs + tEnd*A->m) - 1;
     }
 
+    if (OUTPUT_VISITED) {
+      memcpy(
+        visited + *numOfVisited - qTailPrefixSum[nthreads] + qTailPrefixSum[tid], 
+        q[1 - numLevels%2] + tid*A->m,
+        sizeof(int)*(qTailPrefixSum[tid + 1] - qTailPrefixSum[tid]));
+    }
 #pragma omp barrier
 
     int *tailPtr = q[numLevels%2] + tid*A->m;
@@ -189,16 +251,27 @@ int bfs(const CSR *A, int source, int *levels, int *width = NULL, int *shortCirc
 
         for (int j = A->rowPtr[u]; j < A->rowPtr[u + 1]; ++j) {
           int v = A->colIdx[j];
-          if (__sync_bool_compare_and_swap(levels + v, INT_MAX, numLevels)) {
-            *tailPtr = v;
-            *(rowPtr + 1) =
-              *rowPtr + A->rowPtr[v + 1] - A->rowPtr[v];
+          if (OUTPUT_VISITED) {
+            if (__sync_bool_compare_and_swap(levels + v, INT_MAX, numLevels)) {
+              *tailPtr = v;
+              *(rowPtr + 1) = *rowPtr + A->rowPtr[v + 1] - A->rowPtr[v];
 
-            ++tailPtr;
-            ++rowPtr;
-            /*if (187905 == source && numLevels >= 1033) {
-              printf("%d: %d->%d\n", numLevels, source, v);
-            }*/
+              ++tailPtr;
+              ++rowPtr;
+              /*if (187905 == source && numLevels >= 1033) {
+                printf("%d: %d->%d\n", numLevels, source, v);
+              }*/
+            }
+          }
+          else {
+            if (INT_MAX == levels[v]) {
+              levels[v] = numLevels;
+              *tailPtr = v;
+              *(rowPtr + 1) = *rowPtr + A->rowPtr[v + 1] - A->rowPtr[v];
+
+              ++tailPtr;
+              ++rowPtr;
+            }
           }
         }
       } // for each current node u
@@ -211,17 +284,31 @@ int bfs(const CSR *A, int source, int *levels, int *width = NULL, int *shortCirc
   } // while true
   } // omp parallel
 
-  delete[] q[0];
-  delete[] q[1];
-  delete[] rowPtrs;
-  delete[] qTail;
-  delete[] qTailPrefixSum;
-  delete[] nnzPrefixSum;
+#ifndef NDEBUG
+  if (OUTPUT_VISITED) {
+    int *temp = new int[*numOfVisited];
+    copy(visited, visited + *numOfVisited, temp);
+    sort(temp, temp + *numOfVisited);
+    for (int i = 0; i < *numOfVisited; ++i) {
+      assert(temp[i] >= 0 && temp[i] < A->m);
+      if (i > 0 && temp[i] == temp[i - 1]) {
+        printf("%d duplicated\n", temp[i]);
+        assert(false);
+      }
+    }
+
+    delete[] temp;
+  }
+#endif
 
   return numLevels;
 }
 
-int getMinDegreeNode(const CSR *A)
+/**
+ * Find minimum degree node among unvisited nodes.
+ * Unvisited nodes are specified by color array
+ */
+static int getMinDegreeNode(const CSR *A, const int *nodes, int numOfNodes)
 {
   int local_min[omp_get_max_threads()];
   int local_min_idx[omp_get_max_threads()];
@@ -236,11 +323,12 @@ int getMinDegreeNode(const CSR *A)
   int temp_min_idx = -1;
 
 #pragma omp for
-  for (int i = 0; i < A->m; ++i) {
-    int degree = A->rowPtr[i + 1] - A->rowPtr[i];
+  for (int i = 0; i < numOfNodes; ++i) {
+    int u = nodes[i];
+    int degree = A->rowPtr[u + 1] - A->rowPtr[u];
     if (degree < temp_min) {
       temp_min = degree;
-      temp_min_idx = i;
+      temp_min_idx = u;
     }
   }
 
@@ -265,14 +353,17 @@ int getMinDegreeNode(const CSR *A)
   return global_min_idx;
 }
 
-int getVerticesAtLevel(int *vertices, const int *levels, int level, int m)
+int getVerticesAtLevel(
+  int *vertices,
+  const int *levels, int level, const int *components, int numOfComponents)
 {
   int idx = 0;
 #pragma omp parallel for
-  for (int i = 0; i < m; ++i) {
-    if (levels[i] == level) {
+  for (int i = 0; i < numOfComponents; ++i) {
+    int u = components[i];
+    if (levels[u] == level) {
       int idx_save = __sync_fetch_and_add(&idx, 1);
-      vertices[idx_save] = i;
+      vertices[idx_save] = u;
     }
   }
 
@@ -281,18 +372,37 @@ int getVerticesAtLevel(int *vertices, const int *levels, int level, int m)
   return idx;
 }
 
-int selectSourceWithPseudoDiameter(const CSR *A, int *levels)
+static void initializeLevels(
+  int *levels, int m, const int *nodes, int numOfNodes)
 {
-  int s = getMinDegreeNode(A);
-  printf("%d is the min degree node\n", s);
+#pragma omp parallel for
+  for (int i = 0; i < numOfNodes; ++i) {
+    assert(nodes[i] >= 0 && nodes[i] < m);
+    levels[nodes[i]] = INT_MAX;
+  }
+}
+
+int selectSourcesWithPseudoDiameter(
+  const CSR *A, int *levels, const int *components, int numOfComponents, bfsAuxData *aux)
+{
+  // find the min degree node of this connected component
+  int s = getMinDegreeNode(A, components, numOfComponents);
+#ifdef PRINT_DBG
+  printf("%d is the min degree node of this component\n", s);
+#endif
   int e = -1;
 
-  int *candidates = new int[A->m];
+  int *candidates = aux->candidates;
 
   while (e == -1) {
-    int diameter = bfs(A, s, levels);
+    initializeLevels(levels, A->m, components, numOfComponents);
+    int diameter = bfs(A, s, levels, aux);
+
+#ifdef PRINT_DBG
     printf("diameter from %d is %d\n", s, diameter);
-    int nCandidates = getVerticesAtLevel(candidates, levels, diameter - 2, A->m);
+#endif
+    int nCandidates = getVerticesAtLevel(
+      candidates, levels, diameter - 2, components, numOfComponents);
 
     // sort by vertex by ascending degree
     for (int i = 1; i < nCandidates; ++i) {
@@ -328,21 +438,30 @@ int selectSourceWithPseudoDiameter(const CSR *A, int *levels)
       }
     }
 
+#ifdef PRINT_DBG
     printf("has %d candidates, brought down to %d\n", nCandidates, outIdx);
+#endif
 
     nCandidates = outIdx;
 
     int minWidth = INT_MAX;
     for (int i = 0; i < nCandidates; ++i) {
+      initializeLevels(levels, A->m, components, numOfComponents);
+
       int width = INT_MIN;
-      int newDiameter = bfs(A, candidates[i], levels, &width, &minWidth);
+      int newDiameter = bfs(
+        A, candidates[i], levels, aux, NULL, NULL, &width, &minWidth);
+#ifdef PRINT_DBG
       printf("(diameter, width) from %d is (%d, %d)\n", candidates[i], newDiameter, width);
+#endif
       if (-1 == newDiameter) { // short circuited
         continue;
       }
       else if (newDiameter > diameter && width < minWidth) {
         s = candidates[i];
+#ifdef PRINT_DBG
         printf("select %d as the new starting point\n", s);
+#endif
         e = -1;
         break;
       }
@@ -351,9 +470,7 @@ int selectSourceWithPseudoDiameter(const CSR *A, int *levels)
         e = candidates[i];
       }
     }
-  }
-
-  delete[] candidates;
+  } // iterate to find maximal diameter
 
   return s;
 }
@@ -361,108 +478,172 @@ int selectSourceWithPseudoDiameter(const CSR *A, int *levels)
 void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
 {
   // 1. Start vertex
-  // TODO: pseudo diameter heuristic
   double t;
+  double sourceSelectionTime = 0, bfsTime = 0, prefixTime = 0, placeTime = 0;
+
   int *levels = new int[m];
-
-  if (-1 == source) {
-    t = omp_get_wtime();
-    source = selectSourceWithPseudoDiameter(this, levels);
-    printf("source selection takes %f\n", omp_get_wtime() - t);
-    printf("source = %d\n", source);
-  }
-  assert(source >= 0 && source < m);
-
-  // 2. BFS
-  t = omp_get_wtime();
   int maxDegree = INT_MIN;
 #pragma omp parallel for reduction(max:maxDegree)
   for (int i = 0; i < m; ++i) {
+    levels[i] = INT_MAX;
     maxDegree = max(maxDegree, rowPtr[i + 1] - rowPtr[i]);
   }
-
-  int numLevels = bfs(this, source, levels);
-  printf("numLevels = %d\n", numLevels);
-
-  printf("bfs takes %f\n", omp_get_wtime() - t);
-  t = omp_get_wtime();
-
-  // 3. Reorder
-  int *prefixSum = new int[numLevels + 1];
-  prefixSumOfLevels(prefixSum, this, levels, numLevels);
-
-  printf("prefix sum takes %f\n", omp_get_wtime() - t);
-  t = omp_get_wtime();
-
-  inversePerm[0] = source;
-
-  volatile int *read_offset = new int[numLevels + 1];
-  volatile int *write_offset = new int[numLevels + 1];
-  read_offset[0] = 0;
-  write_offset[0] = 1;
-
   int *children_array = new int[omp_get_max_threads()*maxDegree];
 
-#pragma omp parallel
-  {
-    int nthreads = omp_get_num_threads();
-    int tid = omp_get_thread_num();
+  bool sourcePreselected = source != -1;
+  int *components = NULL;
+  if (!sourcePreselected) components = new int[m];
+  int offset = 0;
+  int cnt = 0;
 
-    int *children = children_array + tid*maxDegree;
+  bfsAuxData aux(m);
+  volatile int *read_offset = new int[m + 1];
+  volatile int *write_offset = new int[m + 1];
+  int *prefixSum = new int[m + 1];
 
-#pragma omp for
-    for (int l = 1; l <= numLevels; ++l) {
-      read_offset[l] = prefixSum[l];
-      write_offset[l] = prefixSum[l];
+  // for each connected component
+  int iEnd = sourcePreselected ? 1 : m;
+  for (int i = 0; i < m; ++i) {
+    // 1. Automatic selection of source
+    int numOfComponents;
+    if (!sourcePreselected) {
+      if (levels[i] != INT_MAX) continue;
+      ++cnt;
+
+      t = omp_get_wtime();
+
+      // collect nodes of this connected component
+      bfs<true>(this, i, levels, &aux, components, &numOfComponents);
+#ifdef PRINT_DBG
+      printf("numOfComponents = %d\n", numOfComponents);
+#endif
+
+      // select source
+      source = selectSourcesWithPseudoDiameter(
+        this, levels, components, numOfComponents, &aux);
+#ifdef PRINT_DBG
+      printf("source selection takes %f\n", omp_get_wtime() - t);
+      printf("source = %d\n", source);
+#endif
+      assert(source >= 0 && source < m);
+
+      sourceSelectionTime += omp_get_wtime() - t;
+    }
+    else {
+      numOfComponents = m;
     }
 
-    for (int l = tid; l < numLevels; l += nthreads) {
-      while (read_offset[l] != prefixSum[l + 1]) {
-        while (read_offset[l] == write_offset[l]); // spin
-        int u = inversePerm[read_offset[l]];
-        ++read_offset[l];
-        int childrenIdx = 0;
-        for (int j = rowPtr[u]; j < rowPtr[u + 1]; ++j) {
-          int v = colIdx[j];
-          if (levels[v] == l + 1) {
-            children[childrenIdx] = v;
-            ++childrenIdx;
-            levels[v] = -1;
-          }
-        }
-        // sort increasing order of degree
-        for (int i = 1; i < childrenIdx; ++i) {
-          int c = children[i];
-          int degree = rowPtr[c + 1] - rowPtr[c];
+    // 2. BFS
+    t = omp_get_wtime();
+    if (!sourcePreselected) {
+      initializeLevels(levels, m, components, numOfComponents);
+    }
+    int numLevels = bfs(this, source, levels, &aux);
+#ifdef PRINT_DBG
+    printf("numLevels = %d\n", numLevels);
+    printf("bfs takes %f\n", omp_get_wtime() - t);
+#endif
+    bfsTime += omp_get_wtime() - t;
 
-          int j = i - 1;
-          while (j >= 0 && rowPtr[children[j] + 1] - rowPtr[children[j]] > degree) {
-            children[j + 1] = children[j];
-            --j;
-          }
+    // 3. Reorder
+    t = omp_get_wtime();
+    if (sourcePreselected) {
+      prefixSumOfLevels(prefixSum, this, levels, numLevels, NULL, m);
+    }
+    else {
+      prefixSumOfLevels(
+        prefixSum, this, levels, numLevels, components, numOfComponents);
+    }
+#ifdef PRINT_DBG
+    printf("prefix sum takes %f\n", omp_get_wtime() - t);
+#endif
+    prefixTime += omp_get_wtime() - t;
 
-          children[j + 1] = c;
-        }
+    t = omp_get_wtime();
+    inversePerm[offset] = source;
 
-        for (int i = 0; i < childrenIdx; ++i) {
-          int c = children[i];
-          inversePerm[write_offset[l + 1]] = c;
-          ++write_offset[l + 1];
-        }
+    read_offset[0] = offset;
+    write_offset[0] = offset + 1;
+
+#pragma omp parallel
+    {
+      int nthreads = omp_get_num_threads();
+      int tid = omp_get_thread_num();
+
+      int *children = children_array + tid*maxDegree;
+
+#pragma omp for
+      for (int l = 1; l <= numLevels; ++l) {
+        read_offset[l] = prefixSum[l] + offset;
+        write_offset[l] = prefixSum[l] + offset;
       }
-    } // for each level
-  } // omp parallel
+
+      for (int l = tid; l < numLevels; l += nthreads) {
+        while (read_offset[l] != prefixSum[l + 1] + offset) {
+          while (read_offset[l] == write_offset[l]); // spin
+          int u = inversePerm[read_offset[l]];
+          ++read_offset[l];
+          int childrenIdx = 0;
+          for (int j = rowPtr[u]; j < rowPtr[u + 1]; ++j) {
+            int v = colIdx[j];
+            if (levels[v] == l + 1) {
+              children[childrenIdx] = v;
+              ++childrenIdx;
+              levels[v] = -1;
+            }
+          }
+          // sort increasing order of degree
+          for (int i = 1; i < childrenIdx; ++i) {
+            int c = children[i];
+            int degree = rowPtr[c + 1] - rowPtr[c];
+
+            int j = i - 1;
+            while (j >= 0 && rowPtr[children[j] + 1] - rowPtr[children[j]] > degree) {
+              children[j + 1] = children[j];
+              --j;
+            }
+
+            children[j + 1] = c;
+          }
+
+          for (int i = 0; i < childrenIdx; ++i) {
+            int c = children[i];
+            inversePerm[write_offset[l + 1]] = c;
+            ++write_offset[l + 1];
+          }
+        }
+      } // for each level
+    } // omp parallel
+
+#ifdef PRINT_DBG
+    printf("place takes %f\n", omp_get_wtime() - t);
+#endif
+    placeTime += omp_get_wtime() - t;
+
+    offset += numOfComponents;
+  }
+
+  delete[] levels;
+  delete[] children_array;
   delete[] read_offset;
   delete[] write_offset;
-  delete[] children_array;
-  printf("place takes %f\n", omp_get_wtime() - t);
-  delete[] levels;
   delete[] prefixSum;
 
   int *temp = new int[m];
-  reverse_copy(inversePerm, inversePerm + m, temp);
-  copy(temp, temp + m, inversePerm);
+#pragma omp parallel for
+  for (int i = 0; i < m; ++i) {
+    temp[m - i - 1] = inversePerm[i];
+  }
+#pragma omp parallel for
+  for (int i = 0; i < m; ++i) {
+    inversePerm[i] = temp[i];
+    perm[inversePerm[i]] = i;
+  }
   delete[] temp;
 
-  getInversePerm(perm, inversePerm, n);
+  printf("num of connected components = %d\n", cnt);
+  printf("sourceSelectionTime = %f\n", sourceSelectionTime);
+  printf("bfsTime = %f\n", bfsTime);
+  printf("prefixTime = %f\n", prefixTime);
+  printf("placeTime = %f\n", placeTime);
 }
