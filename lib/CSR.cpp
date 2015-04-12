@@ -212,6 +212,7 @@ void CSR::printInDense() const
 // the last 10 elements
 void CSR::printSomeValues(int distance, bool is_1_based) const
 {
+  fflush(stdout);
   printf("CSR values:\n");
   int count = 0;
   int decrement = is_1_based ? 1 : 0;
@@ -225,6 +226,7 @@ void CSR::printSomeValues(int distance, bool is_1_based) const
       count++;
     }
   }
+  fflush(stdout);
 }
 
 /**

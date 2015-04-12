@@ -17,7 +17,6 @@ int CSR_GetNumCols(CSR_Handle *A);
 int CSR_GetNumNonZeros(CSR_Handle *A);
 
 void CSR_MultiplyWithVector(const CSR_Handle *A, double *y, const double *x);
-
 void CSR_GetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
 #ifdef USE_BOOST
@@ -36,6 +35,9 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
                  
 void reorderVector(double *v, double *tmp, const int *perm, int len);
 void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len);
+
+// A temporary workaround.
+void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y);
 
 #ifdef __cplusplus
 }
