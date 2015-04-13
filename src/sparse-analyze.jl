@@ -297,6 +297,13 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     end
     
     #TODO: benefit-cost analysis
+
+    # Only those arrays that are updated in the loop need to be reverse reodered afterwards
+    updatedInLoop = Set{Symbol}()
+    for bbnum in L.members
+        union!(updatedInLoop, bbs[bbnum].def)
+    end
+    dprintln(2, "updatedInLoop: ", updatedInLoop)
       
     # New a vector to hold the new reordering statements R(LiveIn) before the loop. 
     # We do not insert them into the CFG at this moment, since that will change the
@@ -330,6 +337,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     # We remember those in an array. Each element is a tuple 
     # (bb label, succ label, the new statements to be inserted on the edge from bb to succ)
     new_stmts_after_L =  Any[]
+    reorderedAndUpdated = intersect(reordered, updatedInLoop)
     for bbnum in L.members
         bb = bbs[bbnum]
         for succ in bb.succs
@@ -340,7 +348,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
                 push!(new_stmts_after_L, new_stmts)
                 insertTimerAfterLoop(t1, new_stmts[3])
 
-                reverseReordered = intersect(reordered, succ.live_in)
+                reverseReordered = intersect(reorderedAndUpdated, succ.live_in)
                 if isempty(reverseReordered)
                     continue
                 end
