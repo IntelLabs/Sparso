@@ -11,7 +11,10 @@ OptFramework.setOptPasses([sparse_pass])
 
 function pagerank(A, p, r) # p: initial rank, r: damping factor
   tic()
-  d = max(vec(sum(A, 2)), 1) # num of neighbors
+  # The following convert is needed so Julia doesn't give the result of "vec" to be of type Array{T,N}.
+  # We are smarter here and convert to exactly the right type.  Without this convert, d and q will be
+  # of a union type and SpMV using q won't be recognized as distributive.
+  d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
   time1 = time()
   for i = 1:100
     q = p./d
