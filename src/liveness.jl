@@ -161,6 +161,7 @@ function add_access(bb, sym, read, top_level_index)
 
     tls = bb.statements[end]
     dprintln(3, "tls = ", tls)
+    write = !read
 
     # If this synbol is already in a statement then it is already in the basic block as a whole.
     if in(sym, tls.def) 
@@ -168,6 +169,42 @@ function add_access(bb, sym, read, top_level_index)
         return nothing
     end
 
+    # If the first use is a read then it goes in tls.use.
+    # If there is a write after a read then it will be in tls.use and tls.def.
+    # If there is a read after a write (which can happen for basic blocks) then we
+    # ignore the read from the basic block perspective.
+    if in(sym, tls.use)
+        if write
+            dprintln(3, "sym already in tls.use so adding to def")
+            push!(tls.def, sym)
+        end
+    elseif read
+        if in(sym, tls.def)
+            throw(string("Found a read after a write at the statement level in liveness analysis."))
+        end
+        dprintln(3, "adding sym to tls.use")
+        push!(tls.use, sym)
+    else # must be a write
+        dprintln(3, "adding sym to tls.def")
+        push!(tls.def, sym)
+    end
+
+    if in(sym, bb.use)
+        if write
+            dprintln(3, "sym already in bb.use so adding to def")
+            push!(bb.def, sym)
+        end
+    elseif read
+        if !in(sym, bb.def)
+            dprintln(3, "adding sym to bb.use")
+            push!(bb.use, sym)
+        end
+    else # must be a write
+        dprintln(3, "adding sym to bb.def")
+        push!(bb.def, sym)
+    end
+
+if false
     if in(sym, tls.use)
         if !read
             dprintln(3, "sym already in tls.use so adding to def")
@@ -195,6 +232,7 @@ function add_access(bb, sym, read, top_level_index)
     else
         push!(bb.def, sym)
     end
+end
 
     nothing
 end
@@ -845,14 +883,42 @@ function from_assignment(ast::Array{Any,1}, depth, state, callback, cbdata)
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
+  dprintln(3,"liveness from_assignment lhs = ", lhs, " rhs = ", rhs)
   if isa(rhs, Expr) && rhs.head == :lambda
     # skip handling rhs lambdas
   else
     from_expr(rhs, depth, state, false, callback, cbdata)
   end
+  dprintln(3,"liveness from_assignment handling lhs")
   state.read = false
   from_expr(lhs, depth, state, false, callback, cbdata)
   state.read = true
+  dprintln(3,"liveness from_assignment done handling lhs")
+end
+
+params_not_modified = Dict{Any, Array{Int32,1}}()
+function addUnmodifiedParams(func, signature, unmodifieds)
+  params_not_modified[(func, signature)] = unmodifieds
+end
+
+function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
+  fs = (func, arg_type_tuple)
+  if haskey(params_not_modified, fs)
+    res = params_not_modified[fs]
+    assert(length(res) == length(args))
+    return res
+  end 
+
+  if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
+     func == :(/)  || func == :(*)  || func == :(+)  || func == :(-)
+    addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
+  elseif func == :SpMV
+    addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
+  else
+    addUnmodifiedParams(func, arg_type_tuple, zeros(Int32, length(args))) 
+  end
+
+  return params_not_modified[fs]
 end
 
 function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
@@ -864,6 +930,15 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
     dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
    
+  texpr = Expr(:tuple)
+  for i = 1:length(args)
+    argtyp = typeof(args[i])
+    push!(texpr.args, argtyp) 
+  end
+  arg_type_tuple = eval(texpr)
+  unmodified_args = getUnmodifiedArgs(fun, args, arg_type_tuple, params_not_modified)
+  assert(length(unmodified_args) == length(args))
+  
   # symbols don't need to be translated
   if typeof(fun) != Symbol
       from_expr(fun, depth, state, false, callback, cbdata)
@@ -880,9 +955,13 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
         from_expr(args[i], depth+1, state, false, callback, cbdata)
       else
         from_expr(args[i], depth+1, state, false, callback, cbdata)
-        state.read = false
-        from_expr(args[i], depth+1, state, false, callback, cbdata)
-        state.read = true
+        if unmodified_args[i] == 1
+          from_expr(args[i], depth+1, state, false, callback, cbdata)
+        else
+          state.read = false
+          from_expr(args[i], depth+1, state, false, callback, cbdata)
+          state.read = true
+        end
       end
     else
       from_expr(args[i], depth+1, state, false, callback, cbdata)
@@ -978,9 +1057,9 @@ function from_expr(ast::Any, callback, cbdata)
   live_res = expr_state()
   from_expr(ast, 1, live_res, false, callback, cbdata)
   connect_finish(live_res)
-  dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
-  removeUselessBlocks(live_res.basic_blocks)
-  dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+#  dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), "\n", live_res.basic_blocks)
+#  removeUselessBlocks(live_res.basic_blocks)
+#  dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), "\n", live_res.basic_blocks)
   dfn = compute_dfn(live_res.basic_blocks)
   dprintln(3,"dfn = ", dfn)
   compute_live_ranges(live_res, dfn)
