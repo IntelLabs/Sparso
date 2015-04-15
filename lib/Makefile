@@ -7,7 +7,7 @@ ifeq (yes, $(DBG))
 else
   CFLAGS += -O3 -DNDEBUG -xHost
 endif
-ifneq (no, $(BOOST))
+ifeq (yes, $(BOOST))
   CFLAGS += -DUSE_BOOST
 endif
 
