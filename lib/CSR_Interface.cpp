@@ -2,6 +2,14 @@
 #include "CSR_Interface.h"
 #include <assert.h>
 
+#define PERF_TUNE
+
+#ifdef PERF_TUNE
+#include <sys/time.h>
+#include <stdio.h>
+#include <omp.h>
+#endif
+
 extern "C" {
 
 CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v)
@@ -87,6 +95,10 @@ void CSR_Destroy(CSR_Handle *A)
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput)
 {
+#ifdef PERF_TUNE
+    double t1 = omp_get_wtime();
+#endif
+
     // The original and the result array space must be different
     assert(i != i1);
     assert(j != j1);    
@@ -97,11 +109,26 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
         // The library assumes arrays are all 0-based indexing
         ((CSR *)A)->make0BasedIndexing();
     }
+
+#ifdef PERF_TUNE
+    double t2 = omp_get_wtime();
+#endif
+
     if (getPermutation) {
         CSR_GetRCMPemutation(A, perm, inversePerm);
     }
+
+#ifdef PERF_TUNE
+    double t3 = omp_get_wtime();
+#endif
+
     CSR_Handle *newA = CSR_Create(numRows, numCols, i1, j1, v1);
     CSR_Permute(A, newA, perm, inversePerm);
+    
+#ifdef PERF_TUNE
+    double t4 = omp_get_wtime();
+#endif
+
     if (oneBasedOutput) {
         ((CSR *)newA)->make1BasedIndexing();
     }
@@ -111,6 +138,17 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     }
     CSR_Destroy(newA);
     CSR_Destroy(A);
+
+#ifdef PERF_TUNE
+    double t5 = omp_get_wtime();
+
+    printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
+    printf("\tmake 0 based: %f sec\n", t2 - t1);
+    printf("\tCSR_GetRCMPemutation: %f sec\n", t3 - t2);
+    printf("\tCSR_Permute: %f sec\n", t4 - t3);
+    printf("\tmake 1 based: %f sec\n", t5 - t4);
+    fflush(stdout);
+#endif
 }
 
 }
