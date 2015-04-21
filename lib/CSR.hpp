@@ -41,7 +41,10 @@ public :
   void boostGetRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
 #endif
 
-  void permute(CSR *out, const int *columnPerm, const int *rowInversePerm) const;
+  /**
+   * @param sort true if we want to sort nnzs of each row based on colidx
+   */
+  void permute(CSR *out, const int *columnPerm, const int *rowInversePerm, bool sort = false) const;
 
   int getBandwidth() const;
 
