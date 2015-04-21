@@ -372,9 +372,9 @@ end
 
 LivenessAnalysis.set_debug_level(4)
 
-end   # end of module
+SpMV!(y::AbstractVector, A::SparseMatrixCSC, x::AbstractVector) = SpMV!(one(eltype(x)), A, x, zero(eltype(y)), y)
 
-function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
+function SpMV!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
 #  println("Calling SparseAccelerator version of SpMV")
   if eltype(x) == Float64
 #    println("length x = ", length(x))
@@ -407,4 +407,10 @@ function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, bet
     assert(0)
   end
 end
+
+end   # end of module
+
+#function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
+#  SparseAccelerator.SpMV(alpha, A, x, beta, y)
+#end
 
