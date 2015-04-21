@@ -330,7 +330,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     
     # For perf measurement only. 
     # TODO: add a switch here
-    t1 = insertTimerBeforeLoop(new_stmts_before_L)
+#    t1 = insertTimerBeforeLoop(new_stmts_before_L)
              
     # At the exit of the loop, we need to reverse reorder those that live out of the loop,
     # to recover their original order before they are getting used outside of the loop
@@ -346,7 +346,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
                 # TODO: add a switch here
                 new_stmts = (bbnum, succ.label,  Expr[])
                 push!(new_stmts_after_L, new_stmts)
-                insertTimerAfterLoop(t1, new_stmts[3])
+#                insertTimerAfterLoop(t1, new_stmts[3])
 
                 reverseReordered = intersect(reorderedAndUpdated, succ.live_in)
                 if isempty(reverseReordered)
