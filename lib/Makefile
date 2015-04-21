@@ -2,6 +2,7 @@ CXX=icpc
 
 CFLAGS = -I. -fopenmp --std=c++11
 CFLAGS += -I/opt/apps/intel13/boost/1.51.0/include # for stampede
+
 ifeq (yes, $(DBG))
   CFLAGS += -g -O0
 else
@@ -28,6 +29,9 @@ lib: CSR.cpp CSR_Interface.cpp Vector.cpp reordering/RCM.cpp mm_io.cpp
 lib1: CSR_1based_indexing.cpp CSR_Interface.cpp Vector.cpp reordering/RCM.cpp
 	$(CXX) $(CFLAGS) -shared -Wl,-soname,libcsr1.so  -o libcsr1.so -fopenmp -g -I. -fPIC $^
 	
+all:	test/CSR_test test/CSR_small_test test/CSR1_test lib lib1
+libs:	lib lib1
+
 clean:
 	rm -f test/CSR_test test/CSR_small_test test/CSR1_test libcsr.so libcsr1.so
 
