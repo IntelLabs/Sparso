@@ -382,9 +382,14 @@ int mm_read_mtx_crd_entry(FILE *f, int *I, int *J,
     {
             if (fscanf(f, "%d %d %lg\n", I, J, real)
                 != 3) return MM_PREMATURE_EOF;
-
     }
-
+    else if (mm_is_integer(matcode))
+    {
+            long long integer;
+            if (fscanf(f, "%d %d %lld\n", I, J, &integer)
+                != 3) return MM_PREMATURE_EOF;
+            *real = integer;
+    }
     else if (mm_is_pattern(matcode))
     {
             if (fscanf(f, "%d %d", I, J) != 2) return MM_PREMATURE_EOF;
@@ -996,7 +1001,7 @@ void load_matrix_market_step (char *file, T *a, int *j, int *i, int *sizes, bool
         assert (lines <= nnz);
         nnz = count;
 
-        print_some_COO_values(nnz, values, rowidx, colidx);
+        //print_some_COO_values(nnz, values, rowidx, colidx);
     
         sizes[0] = (int)symm;
         sizes[1] = m;
@@ -1013,7 +1018,7 @@ void load_matrix_market_step (char *file, T *a, int *j, int *i, int *sizes, bool
         int nnz = sizes[3];
 
         printf("************* step 2, some COO values: m =%d, nnz=%d\n", m, nnz);        
-        print_some_COO_values(nnz, values, rowidx, colidx);
+        //print_some_COO_values(nnz, values, rowidx, colidx);
         
         coo2csr(m, nnz, values, rowidx, colidx, a, j, i);
         if (one_based_CSR) {
