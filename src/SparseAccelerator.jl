@@ -393,14 +393,22 @@ end
 
 LivenessAnalysis.set_debug_level(4)
 
+USE_MKL = false
+function use_mkl(value) 
+  global USE_MKL = value
+end
+
 # A temporary workaround for SpMV: A*x
 function SpMV(A::SparseMatrixCSC, x::Vector)
     y = Array(Cdouble, size(x, 1))
-    SpMV!(y, A, x)
-#    ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
-#              (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
-#               A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-#               pointer(x), pointer(y))
+    if USE_MKL
+      SpMV!(y, A, x)
+    else
+      ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
+              (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+               A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(x), pointer(y))
+    end
     y
 end
 
