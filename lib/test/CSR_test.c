@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
     CSR_Handle *A = CSR_Create(m, n, ai, aj, a);
     printf("CSR matrix content:\n");
     unsigned int distance = nnz / 100; // print out about 100 elements for manual verification
-    CSR_PrintSomeValues(m, n, ai, aj, a, distance, one_based_CSR);
+    //CSR_PrintSomeValues(m, n, ai, aj, a, distance, one_based_CSR);
     printf("original bandwidth: %d\n", CSR_GetBandwidth(A));
 
     double *x = (double *)malloc(sizeof(double)*n);

@@ -60,9 +60,9 @@ function mmread(filename, infoonly::Bool)
         filename, pointer(v), pointer(i), pointer(j), pointer(sizes), true)
         
     distance = div(nnz, 100); # print about 100 elements to check manually
-    ccall((:CSR_PrintSomeValues, "../lib/libcsr.so"), Void, 
-        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Bool),
-        m, n, pointer(j), pointer(i), pointer(v), convert(Cint, distance), true)
+    #ccall((:CSR_PrintSomeValues, "../lib/libcsr.so"), Void, 
+        #(Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Bool),
+        #m, n, pointer(j), pointer(i), pointer(v), convert(Cint, distance), true)
 
     A
 end
