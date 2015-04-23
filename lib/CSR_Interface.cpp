@@ -2,7 +2,7 @@
 #include "CSR_Interface.h"
 #include <assert.h>
 
-#define PERF_TUNE
+//#define PERF_TUNE
 
 #ifdef PERF_TUNE
 #include <sys/time.h>

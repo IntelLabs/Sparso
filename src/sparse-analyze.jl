@@ -21,16 +21,6 @@ function dprintln(level,msgs...)
     end 
 end
 
-# A temporary workaround for SpMV: A*x
-function SpMV(A::SparseMatrixCSC, x::Vector)
-    y = Array(Cdouble, size(x, 1))
-    ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
-              (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
-               A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-               pointer(x), pointer(y))
-    y
-end
-
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
@@ -208,6 +198,45 @@ function findIA(currentNode, IA, seeds, symbolInfo, i)
     end
 end
 
+function optimize_calls(ast, state, top_level_number, is_top_level, read)
+  asttyp = typeof(ast)
+  if asttyp == Expr && ast.head == :call
+    dprintln(3,"optimize_calls found call expr ", ast)
+    if ast.args[1] == :A_mul_B!
+      dprintln(3,"optimize_calls found A_mul_B!")
+      if length(ast.args) == 4
+        y = ast.args[2]
+        A = ast.args[3]
+        x = ast.args[4]
+        if A.typ <: SparseMatrixCSC && x.typ <: Vector
+          ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
+          return ast
+        end
+      elseif length(ast.args) == 6
+        alpha = ast.args[2]
+        A = ast.args[3]
+        x = ast.args[4]
+        beta = ast.args[5]
+        y = ast.args[6]
+        if A.typ <: SparseMatrixCSC && x.typ <: Vector
+          ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
+          return ast
+        end
+      end
+    elseif ast.args[1] == :(*)
+      dprintln(3,"optimize_calls found *")
+      A = ast.args[2]
+      x = ast.args[3]
+      if A.typ <: SparseMatrixCSC && x.typ <: Vector
+        dprintln(3,"optimize_calls converting to SpMV")
+        ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV))
+        return ast
+      end
+    end
+  end
+  return nothing
+end
+
 # Try to reorder sparse matrices and related (dense vectors) in the given loop
 # L is a loop region. M is a sparse matrix live into L. 
 # Lives is the set of matrices or vectors live into/out of L
@@ -225,7 +254,7 @@ end
 #            if (!aliased) M=P'*M*P
 # TODO:  consider matrix sizes and types. We need to make sure that all matrices
 #        have the same size and type(?)
-function reorderLoop(funcAST, L, M, lives, symbolInfo)
+function reorderLoop(L, M, lives, symbolInfo)
     dprintln(2, "Reorder: loop=", L, " Matrix=", M)
 
     if(DEBUG_LVL >= 2)
@@ -247,7 +276,10 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     # Build inter-dependent arrays
     IAs = Dict{Any, Set}()    
     for bbnum in L.members
-        for stmt in bbs[bbnum].statements
+        for stmt_index = 1:length(bbs[bbnum].statements)
+            # Replace calls to A_mul_B! with calls to SpMV!
+            bbs[bbnum].statements[stmt_index].expr = AstWalker.get_one(AstWalker.AstWalk(bbs[bbnum].statements[stmt_index].expr, optimize_calls, nothing))
+            stmt = bbs[bbnum].statements[stmt_index]
             IAs[stmt] = Set{Any}()
             seeds = Set{Any} ()
             push!(seeds, stmt.expr)
@@ -298,7 +330,7 @@ function reorderLoop(funcAST, L, M, lives, symbolInfo)
     
     #TODO: benefit-cost analysis
 
-    # Only those arrays that are updated in the loop need to be reverse reodered afterwards
+    # Only those arrays that are updated in the loop need to be reverse reordered afterwards
     updatedInLoop = Set{Symbol}()
     for bbnum in L.members
         union!(updatedInLoop, bbs[bbnum].def)
@@ -410,7 +442,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     end    
     if found 
         for L in loop_info.loops
-            reorderLoop(funcAST, L, M, lives, symbolInfo)
+            reorderLoop(L, M, lives, symbolInfo)
         end
     end
     
