@@ -118,6 +118,31 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
   } // omp parallel
 }
 
+void CSR::multiplyWithVector(double *y, const double *x) const
+{
+#pragma omp parallel
+  {
+    int tid = omp_get_thread_num();
+    int nthreads = omp_get_num_threads();
+
+    int nnz = rowPtr[m];
+    int nnzPerThread = (nnz + nthreads - 1)/nthreads;
+    int iBegin = lower_bound(rowPtr, rowPtr + m, nnzPerThread*tid) - rowPtr;
+    int iEnd = lower_bound(rowPtr, rowPtr + m, nnzPerThread*(tid + 1)) - rowPtr;
+    assert(iBegin <= iEnd);
+    assert(iBegin >= 0 && iBegin <= m);
+    assert(iEnd >= 0 && iEnd <= m);
+
+    for (int i = iBegin; i < iEnd; ++i) {
+      double sum = 0;
+      for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
+        sum += values[j]*x[colIdx[j]];
+      }
+      y[i] = sum;
+    }
+  } // omp parallel
+}
+
 void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm, bool sort/*=false*/) const
 {
   permuteRowPtr_(out, rowInversePerm);

@@ -16,17 +16,7 @@ public :
   /**
    * Compute y = A*x
    */
-  void multiplyWithVector(double *y, const double *x) const
-  {
-#pragma omp parallel for
-    for (int i = 0; i < m; ++i) {
-      double sum = 0;
-      for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
-        sum += values[j]*x[colIdx[j]];
-      }
-      y[i] = sum;
-    }
-  }
+  void multiplyWithVector(double *y, const double *x) const;
 
   //void transpose(CSR *out) const;
 
@@ -55,7 +45,7 @@ public :
   void printSomeValues(int distance, bool is_1_based) const;
 
   int m, n;
-  int *rowPtr; // rowptr. i[0] = 0, i[m] = nnz
+  int *rowPtr; // rowptr. rowPtr[0] = 0, rowPtr[m] = nnz
   int *colIdx; // colidx
   double *values;
 
