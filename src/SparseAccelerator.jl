@@ -102,7 +102,7 @@ end
 #   AbstractSparseMatrix, Matrix, Vector, Array, Bool, Number, Nothing
 
 function checkDistributivityForCall(head, args, symbolInfo, distributive)
-  println("\t**** checkDistributivityForCall", head, " ", args)
+  println("\t**** checkDistributivityForCall ", head, " ", args)
   if head == :(*) || head == :SpMV
     # "*" can have 2 or 3 operands. Example: [:*,:α,:A,:p]
     if length(args) == 3
@@ -213,13 +213,34 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
   if head == :diag
     return distributive
   end
+  if head == :Array
+    return distributive
+  end
+  if isa(head, Expr)
+    println("head.head = ", head.head)
+    if head.head == :call
+      println("call")
+      println(head.args[1], " type = ", typeof(head.args[1]))
+      if isa(head.args[1], TopNode)
+        println("TopNode ", head.args[1:end])
+        if head.args[2] == :SparseAccelerator
+          return distributive
+        end 
+      end
+    end
+  end
+#  if head == Top
+#    println("getfield ", args[1], " ", args[2], " ", typeof(args[1]), " " , typeof(args[2]))
+#    #return distributive
+#  end
   # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
   # write all kinds of functions tediously.
   # TODO: a general mechanism to handle functions
    if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println
     return distributive
   end
- 
+
+  println("head type = ", typeof(head)) 
   throw(string("checkDistributivityForCall: unknown AST (", head, ",", args, ")"))
 end
 
@@ -372,6 +393,17 @@ end
 
 LivenessAnalysis.set_debug_level(4)
 
+# A temporary workaround for SpMV: A*x
+function SpMV(A::SparseMatrixCSC, x::Vector)
+    y = Array(Cdouble, size(x, 1))
+    SpMV!(y, A, x)
+#    ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
+#              (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+#               A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+#               pointer(x), pointer(y))
+    y
+end
+
 SpMV!(y::AbstractVector, A::SparseMatrixCSC, x::AbstractVector) = SpMV!(one(eltype(x)), A, x, zero(eltype(y)), y)
 
 function SpMV!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
@@ -406,6 +438,7 @@ function SpMV!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Numbe
     println("SparseMatrixCSC element type of x is not Float64")
     assert(0)
   end
+  y
 end
 
 end   # end of module
