@@ -641,8 +641,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   }
   delete[] temp;
 
-#ifdef PRINT_DBG
   printf("num of connected components = %d\n", cnt);
+#ifdef PRINT_DBG
   printf("sourceSelectionTime = %f\n", sourceSelectionTime);
   printf("bfsTime = %f\n", bfsTime);
   printf("prefixTime = %f\n", prefixTime);
