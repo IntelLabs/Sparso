@@ -1,3 +1,11 @@
+#include <cstdio>
+#include <cassert>
+#include <algorithm>
+
+#include <omp.h>
+
+using namespace std;
+
 extern "C" void reorderVector(double *v, double *tmp, const int *perm, int len)
 {
   if (!perm) return;
@@ -36,12 +44,25 @@ extern "C" void reorderVectorWithInversePerm(double *v, double *tmp, const int *
 // This is a temporary workaround. To remove in future.
 extern "C" void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y)
 {
-#pragma omp parallel for
-    for (int i = 0; i < num_rows; ++i) {
+#pragma omp parallel
+  {
+    int tid = omp_get_thread_num();
+    int nthreads = omp_get_num_threads();
+
+    int nnz = rowPtr[num_rows] - 1;
+    int nnzPerThread = (nnz + nthreads - 1)/nthreads;
+    int iBegin = lower_bound(rowPtr, rowPtr + num_rows, nnzPerThread*tid + 1) - rowPtr;
+    int iEnd = lower_bound(rowPtr, rowPtr + num_rows, nnzPerThread*(tid + 1) + 1) - rowPtr;
+    assert(iBegin <= iEnd);
+    assert(iBegin >= 0 && iBegin <= num_rows);
+    assert(iEnd >= 0 && iEnd <= num_rows);
+
+    for (int i = iBegin; i < iEnd; ++i) {
       double sum = 0;
       for (int j = rowPtr[i] - 1; j < rowPtr[i + 1] - 1; ++j) {
         sum += values[j]*x[colIdx[j] - 1];
       }
       y[i] = sum;
     }
-  }
+  } // omp parallel
+}
