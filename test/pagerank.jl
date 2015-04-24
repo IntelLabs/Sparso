@@ -16,13 +16,14 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   # of a union type and SpMV using q won't be recognized as distributive.
   d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
   time1 = time()
+  spmv_time = 0
   for i = 1:100
     q = p./d
 
-#    tic()
-#    Aq = A*q
-     Aq = SpMV(A, q)
-#    t += toq()
+    time3 = time()
+    #Aq = A*q
+    Aq = SparseAccelerator.SpMV(A, q)
+    spmv_time += time() - time3
 
     p2 = r + (1-r)*Aq
 #    println("$i: $(norm(p - p2)/norm(p))") # print out convergence
@@ -31,11 +32,13 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   end
   time2 = time()
   println("Time of original loop= ", time2 - time1, " seconds")  
+  println("SpMV BW (GB/s) = ", nnz(A)*12.*100/spmv_time/1e9)
   toc()
 end
 
 # This is for performance study only
 function pagerank_reordered(A, p, r) # p: initial rank, r: damping factor
+  spmv_time = 0
   d = max(vec(sum(A, 2)), 1) # num of neighbors
 
   time1 = time()
@@ -63,7 +66,9 @@ function pagerank_reordered(A, p, r) # p: initial rank, r: damping factor
 #  println("**** Entering pagerank loop")
   for i = 1:100
     q = p./d
+    time5 = time()
     Aq = A*q
+    spmv_time += time() - time5
     p2 = r + (1-r)*Aq
     p = p2
   end
@@ -71,6 +76,7 @@ function pagerank_reordered(A, p, r) # p: initial rank, r: damping factor
   
   time5 = time()
   println("Time of original loop= ", time5 - time1, " seconds") 
+  println("SpMV BW (GB/s) = ", nnz(A)*12.*100/spmv_time/1e9)
 #  println("Breakdown:");
 #  println("\tReorderMatrix A: ", time2 - time1, " seconds") 
 #  println("\tReorderVector p: ", time3 - time2, " seconds") 
