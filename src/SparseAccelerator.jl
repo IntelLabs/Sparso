@@ -5,7 +5,7 @@ include("liveness.jl")
 include("alias-analysis.jl")
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
-DEBUG_LVL=3
+DEBUG_LVL=0
 
 function set_debug_level(x)
     global DEBUG_LVL = x
@@ -102,7 +102,7 @@ end
 #   AbstractSparseMatrix, Matrix, Vector, Array, Bool, Number, Nothing
 
 function checkDistributivityForCall(head, args, symbolInfo, distributive)
-  println("\t**** checkDistributivityForCall ", head, " ", args)
+#  println("\t**** checkDistributivityForCall ", head, " ", args)
   if head == :(*) || head == :SpMV
     # "*" can have 2 or 3 operands. Example: [:*,:α,:A,:p]
     if length(args) == 3
@@ -391,7 +391,7 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
   return analyze_res
 end
 
-LivenessAnalysis.set_debug_level(4)
+LivenessAnalysis.set_debug_level(0)
 
 # Choose between Julia, PCL and MKL library. 
 const JULIA_LIB = 0

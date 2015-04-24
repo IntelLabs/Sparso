@@ -5,7 +5,7 @@ include("ast_walk.jl")
 export @acc 
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
-DEBUG_LVL=3
+DEBUG_LVL=0
 
 function set_debug_level(x)
     global DEBUG_LVL = x
