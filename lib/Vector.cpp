@@ -44,6 +44,12 @@ extern "C" void reorderVectorWithInversePerm(double *v, double *tmp, const int *
 // This is a temporary workaround. To remove in future.
 extern "C" void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y)
 {
+//#define MEASURE_LOAD_BALANCE
+#ifdef MEASURE_LOAD_BALANCE
+  double barrierTimes[omp_get_max_threads()];
+  double tBegin = omp_get_wtime();
+#endif
+
 #pragma omp parallel
   {
     int tid = omp_get_thread_num();
@@ -64,5 +70,21 @@ extern "C" void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *co
       }
       y[i] = sum;
     }
+#ifdef MEASURE_LOAD_BALANCE
+    double t = omp_get_wtime();
+#pragma omp barrier
+    barrierTimes[tid] = omp_get_wtime() - t;
+
+#pragma omp barrier
+#pragma omp master
+    {
+      double tEnd = omp_get_wtime();
+      double barrierTimeSum = 0;
+      for (int i = 0; i < nthreads; ++i) {
+        barrierTimeSum += barrierTimes[i];
+      }
+      printf("%f load imbalance = %f\n", tEnd - tBegin, barrierTimeSum/(tEnd - tBegin)/nthreads);
+    }
+#endif
   } // omp parallel
 }

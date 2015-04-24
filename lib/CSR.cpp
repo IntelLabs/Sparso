@@ -121,6 +121,12 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
 
 void CSR::multiplyWithVector(double *y, const double *x) const
 {
+//#define MEASURE_LOAD_BALANCE
+#ifdef MEASURE_LOAD_BALANCE
+  double barrierTimes[omp_get_max_threads()];
+  double tBegin = omp_get_wtime();
+#endif
+
 #pragma omp parallel
   {
     int tid = omp_get_thread_num();
@@ -141,6 +147,23 @@ void CSR::multiplyWithVector(double *y, const double *x) const
       }
       y[i] = sum;
     }
+
+#ifdef MEASURE_LOAD_BALANCE
+    double t = omp_get_wtime();
+#pragma omp barrier
+    barrierTimes[tid] = omp_get_wtime() - t;
+
+#pragma omp barrier
+#pragma omp master
+    {
+      double tEnd = omp_get_wtime();
+      double barrierTimeSum = 0;
+      for (int i = 0; i < nthreads; ++i) {
+        barrierTimeSum += barrierTimes[i];
+      }
+      printf("%f load imbalance = %f\n", tEnd - tBegin, barrierTimeSum/(tEnd - tBegin)/nthreads);
+    }
+#endif
   } // omp parallel
 }
 
