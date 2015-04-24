@@ -393,21 +393,28 @@ end
 
 LivenessAnalysis.set_debug_level(4)
 
-USE_MKL = false
-function use_mkl(value) 
-  global USE_MKL = value
+# Choose between Julia, PCL and MKL library. 
+const JULIA_LIB = 0
+const MKL_LIB = 1
+const PCL_LIB = 2
+DEFAULT_LIBRARY = JULIA_LIB
+function use_lib(value) 
+  global DEFAULT_LIBRARY = value
 end
 
 # A temporary workaround for SpMV: A*x
 function SpMV(A::SparseMatrixCSC, x::Vector)
     y = Array(Cdouble, size(x, 1))
-    if USE_MKL
+    if DEFAULT_LIBRARY == MKL_LIB
       SpMV!(y, A, x)
-    else
+    elseif DEFAULT_LIBRARY == PCL_LIB
       ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
               (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
                A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(x), pointer(y))
+    else
+        # use Julia implementation
+        y = A * x
     end
     y
 end

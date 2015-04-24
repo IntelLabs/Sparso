@@ -94,17 +94,21 @@ r = 0.15
 
 tests = 1
 
-println("**** original pagerank perf")
-for i = 1 : tests
-    p = repmat([1/m], m)
-    pagerank(A, p, r)
-end
-
-println("**** accelerated pagerank perf")
-for i = 1 : tests
-    p = repmat([1/m], m)
-    @acc pagerank(A, p, r)
-#    pagerank_reordered(A, p, r)
+for lib in [SparseAccelerator.JULIA_LIB, SparseAccelerator.MKL_LIB, SparseAccelerator.PCL_LIB]
+    lib_name = (lib == SparseAccelerator.JULIA_LIB) ? "JULIA" : (lib == SparseAccelerator.MKL_LIB) ? "MKL" : "PCL"
+    println("**** original pagerank perf: use ", lib_name, " SpMV")
+    SparseAccelerator.use_lib(lib)
+    for i = 1 : tests
+        p = repmat([1/m], m)
+        pagerank(A, p, r)
+    end
+ 
+    println("**** accelerated pagerank perf: use ", lib_name, " SpMV")
+    for i = 1 : tests
+        p = repmat([1/m], m)
+        @acc pagerank(A, p, r)
+    #    pagerank_reordered(A, p, r)
+    end
 end
 
 
