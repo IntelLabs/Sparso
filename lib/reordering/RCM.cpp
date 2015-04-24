@@ -64,7 +64,7 @@ static void prefixSumOfLevels(
 #pragma omp barrier
     if (0 == tid)
     {
-      for (int t = 1; t <= nthreads; ++t) {
+      for (int t = 1; t < nthreads; ++t) {
         local_sum_array[t + 1] += local_sum_array[t];
       }
       assert(local_sum_array[nthreads] == numOfComponents);
