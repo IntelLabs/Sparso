@@ -119,48 +119,60 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
   } // omp parallel
 }
 
-void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm) const
+void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm, bool sort/*=false*/) const
 {
   permuteRowPtr_(out, rowInversePerm);
 
+  if (sort) {
 #pragma omp parallel for
-  for (int i = 0; i < m; ++i) {
-    int row = rowInversePerm ? rowInversePerm[i] : i;
-    int begin = rowPtr[row] - 1, end = rowPtr[row + 1] - 1;
-    int newBegin = out->rowPtr[i] - 1;
+    for (int i = 0; i < m; ++i) {
+      int row = rowInversePerm ? rowInversePerm[i] : i;
+      int begin = rowPtr[row] - 1, end = rowPtr[row + 1] - 1;
+      int newBegin = out->rowPtr[i] - 1;
 
-    int k = newBegin;
-    for (int j = begin; j < end; ++j, ++k) {
-      int c = colIdx[j] - 1;
-      int newColIdx = columnPerm[c];
+      int k = newBegin;
+      for (int j = begin; j < end; ++j, ++k) {
+        int c = colIdx[j] - 1;
+        int newColIdx = columnPerm[c];
 
-      out->colIdx[k] = newColIdx + 1;
-      out->values[k] = values[j];
-    }
-
-    memcpy(
-      out->values + newBegin + (end - begin),
-      values + end, (rowPtr[row + 1] -1 - end)*sizeof(double));
-    memcpy(
-      out->colIdx + newBegin + (end - begin),
-      colIdx + end, (rowPtr[row + 1] -1 - end)*sizeof(int));
-
-    // insertion sort
-    for (int j = newBegin + 1; j < newBegin + (end - begin); ++j) {
-      int c = out->colIdx[j];
-      double v = out->values[j];
-
-      int k = j - 1;
-      while (k >= newBegin && out->colIdx[k] > c) {
-        out->colIdx[k + 1] = out->colIdx[k];
-        out->values[k + 1] = out->values[k];
-        --k;
+        out->colIdx[k] = newColIdx + 1;
+        out->values[k] = values[j];
       }
 
-      out->colIdx[k + 1] = c;
-      out->values[k + 1] = v;
+      // insertion sort
+      for (int j = newBegin + 1; j < newBegin + (end - begin); ++j) {
+        int c = out->colIdx[j];
+        double v = out->values[j];
+
+        int k = j - 1;
+        while (k >= newBegin && out->colIdx[k] > c) {
+          out->colIdx[k + 1] = out->colIdx[k];
+          out->values[k + 1] = out->values[k];
+          --k;
+        }
+
+        out->colIdx[k + 1] = c;
+        out->values[k + 1] = v;
+      }
+    } // for each row
+  }
+  else {
+#pragma omp parallel for
+    for (int i = 0; i < m; ++i) {
+      int row = rowInversePerm ? rowInversePerm[i] : i;
+      int begin = rowPtr[row] - 1, end = rowPtr[row + 1] - 1;
+      int newBegin = out->rowPtr[i] - 1;
+
+      int k = newBegin;
+      for (int j = begin; j < end; ++j, ++k) {
+        int c = colIdx[j] - 1;
+        int newColIdx = columnPerm[c];
+
+        out->colIdx[k] = newColIdx + 1;
+        out->values[k] = values[j];
+      }
     }
-  } // for each row
+  }
 }
 
 int CSR::getBandwidth() const
