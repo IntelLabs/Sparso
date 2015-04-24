@@ -6,6 +6,7 @@
 #include <cstring>
 #include <climits>
 #include <vector>
+#include <algorithm>
 
 #include <omp.h>
 
