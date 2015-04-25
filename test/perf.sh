@@ -8,15 +8,11 @@ rm -rf a stat
 while read i; 
 do
     echo working on pagerank.jl $PLACE$i.mtx
-    julia pagerank.jl $PLACE$i.mtx >& a
-    echo  !!!! pagerank.jl $PLACE$i.mtx >> stat
-    grep "seconds$\|perf$" a >> stat
+    julia pagerank.jl $PLACE$i.mtx
 done < pagerank.lst
   
 while read i;
 do
     echo working on pcg.jl $PLACE$i.mtx
-    julia pcg.jl $PLACE$i.mtx >& a
-    echo  !!!! pcg.jl $PLACE$i.mtx >> stat
-    grep "seconds$\|perf$" a >> stat
+    julia pcg.jl $PLACE$i.mtx
 done < pcg.lst

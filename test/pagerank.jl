@@ -15,8 +15,8 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   # We are smarter here and convert to exactly the right type.  Without this convert, d and q will be
   # of a union type and SpMV using q won't be recognized as distributive.
   d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
+  spmv_time = 0.0
   time1 = time()
-  spmv_time = 0
   for i = 1:100
     q = p./d
 
@@ -31,9 +31,11 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
     p = p2
   end
   time2 = time()
+  original_loop_exec_time = time2 - time1
   println("Time of original loop= ", time2 - time1, " seconds")  
   println("SpMV BW (GB/s) = ", nnz(A)*12.*100/spmv_time/1e9)
   toc()
+  original_loop_exec_time
 end
 
 # This is for performance study only
@@ -93,22 +95,36 @@ r = 0.15
 
 
 tests = 1
+times = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+idx = 1
 
 for lib in [SparseAccelerator.JULIA_LIB, SparseAccelerator.MKL_LIB, SparseAccelerator.PCL_LIB]
-    lib_name = (lib == SparseAccelerator.JULIA_LIB) ? "JULIA" : (lib == SparseAccelerator.MKL_LIB) ? "MKL" : "PCL"
-    println("**** original pagerank: use ", lib_name, " SpMV perf")
     SparseAccelerator.use_lib(lib)
+    
+    original_time = 0.0
     for i = 1 : tests
         p = repmat([1/m], m)
-        pagerank(A, p, r)
+        original_loop_exec_time = pagerank(A, p, r)
+        original_time += original_loop_exec_time
     end
- 
-    println("**** accelerated pagerank: use ", lib_name, " SpMV perf")
+    
+    accelerated_time = 0.0
     for i = 1 : tests
         p = repmat([1/m], m)
-        @acc pagerank(A, p, r)
+        @acc original_loop_exec_time = pagerank(A, p, r)
     #    pagerank_reordered(A, p, r)
+        accelerated_time += original_loop_exec_time
     end
+        
+    times[idx] = original_time / tests
+    times[idx + 1] = accelerated_time / tests
+    idx += 2
 end
 
-
+file = open("pagerank.timing", "a")
+@printf(file, "%s", ARGS[1])
+for i = 1 : size(times, 1)
+    @printf(file, " %f", times[i])
+end
+@printf(file, "%s", "\n")
+close(file)

@@ -22,7 +22,7 @@ function cg(x, A, b, tol, maxiter)
     while k <= maxiter
         old_rz = rz
 #        Ap = A*p # This takes most time. Compiler can reorder A to make faster
-        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -37,9 +37,10 @@ function cg(x, A, b, tol, maxiter)
         k += 1
     end
     time2 = time()
+    original_loop_exec_time = time2 - time1
     println("Time of original loop= ", time2 - time1, " seconds")
     toc()
-    return x, k, rel_err
+    return x, k, rel_err, original_loop_exec_time
 end
 
 function pcg_jacobi(x, A, b, tol, maxiter)
@@ -57,7 +58,7 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     while k <= maxiter
         old_rz = rz
 #        Ap = A*p
-        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -73,9 +74,10 @@ function pcg_jacobi(x, A, b, tol, maxiter)
         k += 1
     end
     time2 = time()
+    original_loop_exec_time = time2 - time1
     println("Time of original loop= ", time2 - time1, " seconds")
     toc()
-    return x, k, rel_err
+    return x, k, rel_err, original_loop_exec_time
 end
 
 #Check that matrix is square
@@ -178,7 +180,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
     while k <= maxiter
         old_rz = rz
 #        Ap = A*p
-        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -200,9 +202,10 @@ function pcg_symgs(x, A, b, tol, maxiter)
         k += 1
     end
     time2 = time()
+    original_loop_exec_time = time2 - time1
     println("Time of original loop= ", time2 - time1, " seconds")
     toc()
-    return x, k, rel_err
+    return x, k, rel_err, original_loop_exec_time
 end
 
 function pcg(x, A, b, M, tol, maxiter)
@@ -218,7 +221,7 @@ function pcg(x, A, b, M, tol, maxiter)
     while k <= maxiter
         old_rz = rz
 #        Ap = A*p
-        Ap = SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -234,9 +237,10 @@ function pcg(x, A, b, M, tol, maxiter)
         k += 1
     end
     time2 = time()
+    original_loop_exec_time = time2 - time1
     println("Time of original loop= ", time2 - time1, " seconds")
     toc()
-    return x, k, rel_err
+    return x, k, rel_err, original_loop_exec_time
 end
 
 #matrices = [
@@ -257,55 +261,72 @@ maxiter = 1000
   N   = size(A, 1)
   b   = ones(Float64, N)
 
-  tests = 5
-  
+  tests = 2
+  times = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
   println("\n\n**** original cg perf")
+  loop_exec_time = 0.0
   for i = 1:tests
       x   = zeros(Float64, N)
-      x, k, err = cg(x, A, b, tol, maxiter)
+      x, k, err, original_loop_exec_time = cg(x, A, b, tol, maxiter)
       # The line below invokes generic PCG.
       # Ideally, want to get same performance with specialized ver. in above line
       #@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
-      println("Identity preconditioner: $k iterations $err error")
+      loop_exec_time += original_loop_exec_time
+      println("Identity preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
+  times[1] = loop_exec_time / tests
 
   println("\n\n**** accelerated cg perf")
+  loop_exec_time = 0.0
   for i = 1:tests
       x   = zeros(Float64, N)
       @acc result = cg(x, A, b, tol, maxiter)
-      x, k, err = result
+      x, k, err, original_loop_exec_time = result
       # The line below invokes generic PCG.
       # Ideally, want to get same performance with specialized ver. in above line
       #@time x, k, err = pcg(x, A, b, speye(N), tol, maxiter)
-      println("Identity preconditioner: $k iterations $err error")
+      loop_exec_time += original_loop_exec_time
+      println("Identity preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
+  times[2] = loop_exec_time / tests
 
   println("\n\n**** original pcg_jacobi perf")
+  loop_exec_time = 0.0
   for i = 1:tests
       x   = zeros(Float64, N)
-      x, k, err = pcg_jacobi(x, A, b, tol, maxiter)
+      x, k, err, original_loop_exec_time = pcg_jacobi(x, A, b, tol, maxiter)
       #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
-      println("Jacobi preconditioner: $k iterations $err error")
+      loop_exec_time += original_loop_exec_time
+      println("Jacobi preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
+  times[3] = loop_exec_time / tests
 
   println("\n\n**** accelerated pcg_jacobi perf")
+  loop_exec_time = 0.0
   for i = 1:tests
       x   = zeros(Float64, N)
       @acc result = pcg_jacobi(x, A, b, tol, maxiter)
-      x, k, err = result
+      x, k, err, original_loop_exec_time = result
       #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
-      println("Jacobi preconditioner: $k iterations $err error")
+      loop_exec_time += original_loop_exec_time
+      println("Jacobi preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
-  
+  times[4] = loop_exec_time / tests
+
   println("\n\n**** original pcg_symgs perf")
+  loop_exec_time = 0.0
   for i = 1:tests
       x   = zeros(Float64, N)
-      x, k, err = pcg_symgs(x, A, b, tol, maxiter)
+      x, k, err, original_loop_exec_time = pcg_symgs(x, A, b, tol, maxiter)
       #@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
-      println("SymGS preconditioner: $k iterations $err error")
+      loop_exec_time += original_loop_exec_time
+      println("SymGS preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
+  times[5] = loop_exec_time / tests
 
   println("\n\n**** accelerated pcg_symgs perf")
+  loop_exec_time = 0.0
   for i = 1:tests
 #      x   = zeros(Float64, N)
 #      @acc result = pcg_symgs(x, A, b, tol, maxiter)
@@ -313,23 +334,39 @@ maxiter = 1000
       #@time x, k, err = pcg(x, A, b, tril(A)*spdiagm(1./diag(A))*triu(A), tol, maxiter)
 #      println("SymGS preconditioner: $k iterations $err error")
   end
+  times[6] = loop_exec_time / tests
   
   println("\n\n**** original pcg perf")
+  loop_exec_time = 0.0
   for i = 1:tests  
       M = A # Perfect
       x   = zeros(Float64, N)
-      x, k, err = pcg(x, A, b, M, tol, maxiter)
-      println("Perfect preconditioner: $k iterations $err error")
+      x, k, err, original_loop_exec_time = pcg(x, A, b, M, tol, maxiter)
+      loop_exec_time += original_loop_exec_time
+      println("Perfect preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
+  times[7] = loop_exec_time / tests
 
   println("\n\n**** accelerated pcg perf")
+  loop_exec_time = 0.0
   for i = 1:tests  
       M = A # Perfect
       x   = zeros(Float64, N)
       @acc result = pcg(x, A, b, M, tol, maxiter)
-      x, k, err = result
-      println("Perfect preconditioner: $k iterations $err error")
+      x, k, err, original_loop_exec_time = result
+      loop_exec_time += original_loop_exec_time
+      println("Perfect preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
+  times[8] = loop_exec_time / tests
   
   println()
+
+file = open("pcg.timing", "a")
+@printf(file, "%s", ARGS[1])
+for i = 1 : size(times, 1)
+    @printf(file, " %f",  times[i])
+end
+@printf(file, "%s", "\n")
+close(file)
+  
 #end
