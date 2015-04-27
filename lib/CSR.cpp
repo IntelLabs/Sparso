@@ -12,6 +12,10 @@
 
 #include "CSR.hpp"
 
+#ifdef VTUNE
+#include <ittnotify.h>
+#endif
+
 using namespace std;
 
 void getInversePerm(int *inversePerm, const int *perm, int n)
@@ -34,12 +38,13 @@ using namespace boost;
 typedef compressed_sparse_row_graph<directedS> Graph;
 
 // convert CSR to boost Graph
+template<int BASE = 0>
 static Graph *constructBoostTaskGraph(const CSR& A)
 {
   vector<pair<int, int> > edges;
   for (int i = 0; i < A.m; ++i) {
-    for (int j = A.rowPtr[i]; j < A.rowPtr[i + 1]; ++j) {
-      int src = A.colIdx[j];
+    for (int j = A.rowPtr[i] - BASE; j < A.rowPtr[i + 1] - BASE; ++j) {
+      int src = A.colIdx[j] - BASE;
       if (src != i) {
         edges.push_back(make_pair(src, i));
       }
@@ -51,7 +56,13 @@ static Graph *constructBoostTaskGraph(const CSR& A)
 
 void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
 {
-  Graph *g = constructBoostTaskGraph(*this);
+  Graph *g = NULL;
+  if (0 == base) {
+    g = constructBoostTaskGraph(*this);
+  }
+  else {
+    g = constructBoostTaskGraph<1>(*this);
+  }
 
   vector<int> v;
   if (-1 == source) {
@@ -71,9 +82,10 @@ void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/
 }
 #endif // USE_BOOST
 
-void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
+void permuteRowPtr_(CSR* out, const CSR *in, const int *inversePerm)
 {
-  out->rowPtr[0] = 0;
+  out->base = in->base;
+  out->rowPtr[0] = in->base;
 
   int rowPtrSum[omp_get_max_threads() + 1];
   rowPtrSum[0] = 0;
@@ -83,21 +95,21 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
     int nthreads = omp_get_num_threads();
     int tid = omp_get_thread_num();
 
-    int iPerThread = (m + nthreads - 1)/nthreads;
-    int iBegin = min(iPerThread*tid, m);
-    int iEnd = min(iBegin + iPerThread, m);
+    int iPerThread = (in->m + nthreads - 1)/nthreads;
+    int iBegin = min(iPerThread*tid, in->m);
+    int iEnd = min(iBegin + iPerThread, in->m);
 
-    out->rowPtr[iBegin] = 0;
+    out->rowPtr[iBegin] = in->base;
     int i;
     for (i = iBegin; i < iEnd - 1; ++i) {
       int row = inversePerm ? inversePerm[i] : i;
-      int begin = rowPtr[row], end = rowPtr[row + 1];
+      int begin = in->rowPtr[row], end = in->rowPtr[row + 1];
       out->rowPtr[i + 1] = out->rowPtr[i] + end - begin;
     }
     if (i < iEnd) {
       int row = inversePerm ? inversePerm[i] : i;
-      int begin = rowPtr[row], end = rowPtr[row + 1];
-      rowPtrSum[tid + 1] = out->rowPtr[i] + end - begin;
+      int begin = in->rowPtr[row], end = in->rowPtr[row + 1];
+      rowPtrSum[tid + 1] = out->rowPtr[i] + end - begin - in->base;
     }
     else {
       rowPtrSum[tid + 1] = 0;
@@ -109,7 +121,7 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
       for (int tid = 1; tid < nthreads; ++tid) {
         rowPtrSum[tid + 1] += rowPtrSum[tid];
       }
-      out->rowPtr[m] = rowPtrSum[nthreads];
+      out->rowPtr[in->m] = rowPtrSum[nthreads] + in->base;
       assert(out->rowPtr[m] == rowPtr[m]);
     }
 
@@ -119,7 +131,14 @@ void CSR::permuteRowPtr_(CSR* out, const int *inversePerm) const
   } // omp parallel
 }
 
-void CSR::multiplyWithVector(double *y, const double *x) const
+  /**
+   * Compute y = A*x
+   */
+// TODO: remove this once MKL libray call is fine, or when reusing 
+// works so that we can convert 0 to 1 based only once in the loop
+// This is a temporary workaround. To remove in future.
+template<int BASE = 0>
+void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, const double* values, const double *x, double *y)
 {
 //#define MEASURE_LOAD_BALANCE
 #ifdef MEASURE_LOAD_BALANCE
@@ -127,27 +146,30 @@ void CSR::multiplyWithVector(double *y, const double *x) const
   double tBegin = omp_get_wtime();
 #endif
 
+#ifdef VTUNE
+  __itt_resume();
+#endif
+
 #pragma omp parallel
   {
     int tid = omp_get_thread_num();
     int nthreads = omp_get_num_threads();
 
-    int nnz = rowPtr[m];
+    int nnz = rowPtr[num_rows] - BASE;
     int nnzPerThread = (nnz + nthreads - 1)/nthreads;
-    int iBegin = lower_bound(rowPtr, rowPtr + m, nnzPerThread*tid) - rowPtr;
-    int iEnd = lower_bound(rowPtr, rowPtr + m, nnzPerThread*(tid + 1)) - rowPtr;
+    int iBegin = lower_bound(rowPtr, rowPtr + num_rows, nnzPerThread*tid + BASE) - rowPtr;
+    int iEnd = lower_bound(rowPtr, rowPtr + num_rows, nnzPerThread*(tid + 1) + BASE) - rowPtr;
     assert(iBegin <= iEnd);
-    assert(iBegin >= 0 && iBegin <= m);
-    assert(iEnd >= 0 && iEnd <= m);
+    assert(iBegin >= 0 && iBegin <= num_rows);
+    assert(iEnd >= 0 && iEnd <= num_rows);
 
     for (int i = iBegin; i < iEnd; ++i) {
       double sum = 0;
-      for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
-        sum += values[j]*x[colIdx[j]];
+      for (int j = rowPtr[i] - BASE; j < rowPtr[i + 1] - BASE; ++j) {
+        sum += values[j]*x[colIdx[j] - BASE];
       }
       y[i] = sum;
     }
-
 #ifdef MEASURE_LOAD_BALANCE
     double t = omp_get_wtime();
 #pragma omp barrier
@@ -165,28 +187,46 @@ void CSR::multiplyWithVector(double *y, const double *x) const
     }
 #endif
   } // omp parallel
+
+#ifdef VTUNE
+  __itt_resume();
+#endif
 }
 
-void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm, bool sort/*=false*/) const
+extern "C" void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y)
 {
-  permuteRowPtr_(out, rowInversePerm);
+  return CSR_MultiplyWithVector<1>(num_rows, rowPtr, colIdx, values, x, y);
+}
 
-  if (sort) {
+void CSR::multiplyWithVector(double *y, const double *x) const
+{
+  return CSR_MultiplyWithVector<0>(m, rowPtr, colIdx, values, x, y);
+}
+
+template<int BASE = 0, bool SORT = false>
+void permute_(
+  CSR *out, const CSR *in,
+  const int *columnPerm, const int *rowInversePerm)
+{
+  assert(in->base == BASE);
+  permuteRowPtr_(out, in, rowInversePerm);
+
 #pragma omp parallel for
-    for (int i = 0; i < m; ++i) {
-      int row = rowInversePerm ? rowInversePerm[i] : i;
-      int begin = rowPtr[row], end = rowPtr[row + 1];
-      int newBegin = out->rowPtr[i];
+  for (int i = 0; i < in->m; ++i) {
+    int row = rowInversePerm ? rowInversePerm[i] : i;
+    int begin = in->rowPtr[row] - BASE, end = in->rowPtr[row + 1] - BASE;
+    int newBegin = out->rowPtr[i] - BASE;
 
-      int k = newBegin;
-      for (int j = begin; j < end; ++j, ++k) {
-        int c = colIdx[j];
-        int newColIdx = columnPerm[c];
+    int k = newBegin;
+    for (int j = begin; j < end; ++j, ++k) {
+      int c = in->colIdx[j] - BASE;
+      int newColIdx = columnPerm[c];
 
-        out->colIdx[k] = newColIdx;
-        out->values[k] = values[j];
-      }
+      out->colIdx[k] = newColIdx + BASE;
+      out->values[k] = in->values[j];
+    }
 
+    if (SORT) {
       // insertion sort
       for (int j = newBegin + 1; j < newBegin + (end - begin); ++j) {
         int c = out->colIdx[j];
@@ -202,34 +242,40 @@ void CSR::permute(CSR *out, const int *columnPerm, const int *rowInversePerm, bo
         out->colIdx[k + 1] = c;
         out->values[k + 1] = v;
       }
-    } // for each row
+    }
+  } // for each row
+}
+
+void CSR::permute(
+  CSR *out, const int *columnPerm, const int *rowInversePerm, bool sort/*=false*/) const
+{
+  if (0 == base) {
+    if (sort) {
+      permute_<0, true>(out, this, columnPerm, rowInversePerm);
+    }
+    else {
+      permute_<0, false>(out, this, columnPerm, rowInversePerm);
+    }
   }
   else {
-#pragma omp parallel for
-    for (int i = 0; i < m; ++i) {
-      int row = rowInversePerm ? rowInversePerm[i] : i;
-      int begin = rowPtr[row], end = rowPtr[row + 1];
-      int newBegin = out->rowPtr[i];
-
-      int k = newBegin;
-      for (int j = begin; j < end; ++j, ++k) {
-        int c = colIdx[j];
-        int newColIdx = columnPerm[c];
-
-        out->colIdx[k] = newColIdx;
-        out->values[k] = values[j];
-      }
-    } // for each row
+    assert(1 == base);
+    if (sort) {
+      permute_<1, true>(out, this, columnPerm, rowInversePerm);
+    }
+    else {
+      permute_<1, false>(out, this, columnPerm, rowInversePerm);
+    }
   }
 }
 
-int CSR::getBandwidth() const
+template<int BASE = 0>
+int getBandwidth_(const CSR *A)
 {
   int bw = INT_MIN;
 #pragma omp parallel for reduction(max:bw)
-  for (int i = 0; i < m; ++i) {
-    for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
-      int c = colIdx[j];
+  for (int i = 0; i < A->m; ++i) {
+    for (int j = A->rowPtr[i] - BASE; j < A->rowPtr[i + 1] - BASE; ++j) {
+      int c = A->colIdx[j] - BASE;
       int temp = c - i;
       if (temp < 0) temp = -temp;
       bw = max(temp, bw);
@@ -238,34 +284,57 @@ int CSR::getBandwidth() const
   return bw;
 }
 
-void CSR::printInDense() const
+int CSR::getBandwidth() const
+{
+  if (0 == base) {
+    return getBandwidth_<0>(this);
+  }
+  else {
+    assert(1 == base);
+    return getBandwidth_<1>(this);
+  }
+}
+
+template<int BASE = 0>
+void printInDense_(const CSR *A)
 {
   // Raw format
   printf("RowPtr: ");
-  for (int i = 0; i <= m; i++) {
-    printf("%d ", rowPtr[i]);
+  for (int i = 0; i <= A->m; i++) {
+    printf("%d ", A->rowPtr[i]);
   }
   printf("\nColIdx: ");
-  for (int i = 0; i < rowPtr[m]; i++) {
-    printf("%d ", colIdx[i]);
+  for (int i = 0; i < A->rowPtr[A->m] - BASE; i++) {
+    printf("%d ", A->colIdx[i]);
   }
   printf("\nValues: ");
-  for (int i = 0; i < rowPtr[m]; i++) {
-    printf("%f ", values[i]);
+  for (int i = 0; i < A->rowPtr[A->m] - BASE; i++) {
+    printf("%f ", A->values[i]);
   }
   printf("\n\n");
 
-  for (int i = 0; i < m; ++i) {
+  for (int i = 0; i < A->m; ++i) {
     int jj = 0;
     printf("%d: ", i);
-    for (int j = rowPtr[i]; j < rowPtr[i + 1]; ++j) {
-      int c = colIdx[j];
+    for (int j = A->rowPtr[i] - BASE; j < A->rowPtr[i + 1] - BASE; ++j) {
+      int c = A->colIdx[j] - BASE;
       for ( ; jj < c; ++jj) printf("0 ");
-      printf("%g ", values[j]);
+      printf("%g ", A->values[j]);
       ++jj;
     }
-    for ( ; jj < m; ++jj) printf("0 ");
+    for ( ; jj < A->m; ++jj) printf("0 ");
     printf("\n");
+  }
+}
+
+void CSR::printInDense() const
+{
+  if (0 == base) {
+    printInDense_<0>(this);
+  }
+  else {
+    assert(1 == base);
+    printInDense_<1>(this);
   }
 }
 
@@ -444,26 +513,34 @@ void CSR::transpose(CSR *out)
  }
 #endif
 
- void CSR::make0BasedIndexing() const
- {
+void CSR::make0BasedIndexing()
+{
+  if (1 == base) {
 #pragma omp parallel for
-   for (int i = 0; i <= m; ++i) {
-     rowPtr[i]--;
-   }
+    for (int i = 0; i <= m; ++i) {
+      rowPtr[i]--;
+    }
 #pragma omp parallel for
-   for (int i = 0; i < rowPtr[m]; ++i) {
-     colIdx[i]--;
-   }
- }
+    for (int i = 0; i < rowPtr[m]; ++i) {
+      colIdx[i]--;
+    }
 
- void CSR::make1BasedIndexing() const
- {
+    base = 0;
+  }
+}
+
+void CSR::make1BasedIndexing()
+{
+  if (0 == base) {
 #pragma omp parallel for
-   for (int i = 0; i < rowPtr[m]; ++i) {
-     colIdx[i]++;
-   }
+    for (int i = 0; i < rowPtr[m]; ++i) {
+      colIdx[i]++;
+    }
 #pragma omp parallel for
-   for (int i = 0; i <= m; ++i) {
-     rowPtr[i]++;
-   }
- }
+    for (int i = 0; i <= m; ++i) {
+      rowPtr[i]++;
+    }
+
+    base = 1;
+  }
+}

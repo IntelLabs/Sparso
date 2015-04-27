@@ -8,8 +8,8 @@
  */
 class CSR {
 public :
-  CSR(int numRows, int numCols, int *i, int *j, double *v) :
-    m(numRows), n(numCols), rowPtr(i), colIdx(j), values(v)
+  CSR(int numRows, int numCols, int *i, int *j, double *v, int base = 0) :
+    m(numRows), n(numCols), rowPtr(i), colIdx(j), values(v), base(base)
   {
   }
 
@@ -38,8 +38,8 @@ public :
 
   int getBandwidth() const;
 
-  void make0BasedIndexing() const; // assume it's originally in 1-based indexing. This function is not idempotent
-  void make1BasedIndexing() const; // assume it's originally in 0-based indexing.
+  void make0BasedIndexing(); // assume it's originally in 1-based indexing. This function is not idempotent
+  void make1BasedIndexing(); // assume it's originally in 0-based indexing.
 
   void printInDense() const;
   void printSomeValues(int distance, bool is_1_based) const;
@@ -48,6 +48,8 @@ public :
   int *rowPtr; // rowptr. rowPtr[0] = 0, rowPtr[m] = nnz
   int *colIdx; // colidx
   double *values;
+
+  int base; // 0 : 0-based, 1-based
 
 protected:
   void permuteRowPtr_(CSR *out, const int *inversePerm) const;
