@@ -18,7 +18,7 @@ void getInversePerm(int *inversePerm, const int *perm, int n);
 static void prefixSumOfLevels(
   int *prefixSum,
   const CSR *A, const int *levels, int numLevels,
-  const int *components, int numOfComponents)
+  const int *components, int sizeOfComponents)
 {
   int *local_count = new int[omp_get_max_threads()*numLevels];
   int *local_sum_array = new int[omp_get_max_threads() + 1];
@@ -39,7 +39,7 @@ static void prefixSumOfLevels(
     }
     else {
 #pragma omp for
-      for (int i = 0; i < numOfComponents; ++i) {
+      for (int i = 0; i < sizeOfComponents; ++i) {
         assert(components[i] >= 0 && components[i] < A->m);
         assert(levels[components[i]] != INT_MAX);
         ++local_count[tid*numLevels + levels[components[i]]];
@@ -67,8 +67,8 @@ static void prefixSumOfLevels(
       for (int t = 1; t < nthreads; ++t) {
         local_sum_array[t + 1] += local_sum_array[t];
       }
-      assert(local_sum_array[nthreads] == numOfComponents);
-      prefixSum[numLevels] = numOfComponents;
+      assert(local_sum_array[nthreads] == sizeOfComponents);
+      prefixSum[numLevels] = sizeOfComponents;
     }
 #pragma omp barrier
 
@@ -355,11 +355,11 @@ static int getMinDegreeNode(const CSR *A, const int *nodes, int numOfNodes)
 
 int getVerticesAtLevel(
   int *vertices,
-  const int *levels, int level, const int *components, int numOfComponents)
+  const int *levels, int level, const int *components, int sizeOfComponents)
 {
   int idx = 0;
 #pragma omp parallel for
-  for (int i = 0; i < numOfComponents; ++i) {
+  for (int i = 0; i < sizeOfComponents; ++i) {
     int u = components[i];
     if (levels[u] == level) {
       int idx_save = __sync_fetch_and_add(&idx, 1);
@@ -383,10 +383,11 @@ static void initializeLevels(
 }
 
 int selectSourcesWithPseudoDiameter(
-  const CSR *A, int *levels, const int *components, int numOfComponents, bfsAuxData *aux)
+  const CSR *A, int *levels, const int *components, int sizeOfComponents, bfsAuxData *aux)
 {
   // find the min degree node of this connected component
-  int s = getMinDegreeNode(A, components, numOfComponents);
+  int s = getMinDegreeNode(A, components, sizeOfComponents);
+//#define PRINT_DBG
 #ifdef PRINT_DBG
   printf("%d is the min degree node of this component\n", s);
 #endif
@@ -395,14 +396,14 @@ int selectSourcesWithPseudoDiameter(
   int *candidates = aux->candidates;
 
   while (e == -1) {
-    initializeLevels(levels, A->m, components, numOfComponents);
+    initializeLevels(levels, A->m, components, sizeOfComponents);
     int diameter = bfs(A, s, levels, aux);
 
 #ifdef PRINT_DBG
     printf("diameter from %d is %d\n", s, diameter);
 #endif
     int nCandidates = getVerticesAtLevel(
-      candidates, levels, diameter - 2, components, numOfComponents);
+      candidates, levels, diameter - 2, components, sizeOfComponents);
 
     // sort by vertex by ascending degree
     for (int i = 1; i < nCandidates; ++i) {
@@ -446,7 +447,7 @@ int selectSourcesWithPseudoDiameter(
 
     int minWidth = INT_MAX;
     for (int i = 0; i < nCandidates; ++i) {
-      initializeLevels(levels, A->m, components, numOfComponents);
+      initializeLevels(levels, A->m, components, sizeOfComponents);
 
       int width = INT_MIN;
       int newDiameter = bfs(
@@ -494,7 +495,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   int *components = NULL;
   if (!sourcePreselected) components = new int[m];
   int offset = 0;
-  int cnt = 0;
+  int connectedCmpCnt = 0, singletonCnt = 0, twinCnt = 0;
 
   bfsAuxData aux(m);
   volatile int *read_offset = new int[m + 1];
@@ -505,22 +506,61 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   int iEnd = sourcePreselected ? 1 : m;
   for (int i = 0; i < m; ++i) {
     // 1. Automatic selection of source
-    int numOfComponents;
+    int sizeOfComponents;
     if (!sourcePreselected) {
       if (levels[i] != INT_MAX) continue;
-      ++cnt;
+      ++connectedCmpCnt;
+
+      // short circuit for a singleton or a twin
+      if (rowPtr[i + 1] == rowPtr[i] + 1 && colIdx[rowPtr[i]] == i || rowPtr[i + 1] == rowPtr[i]) {
+        inversePerm[offset] = i;
+        ++offset;
+        ++singletonCnt;
+        continue;
+      }
+      else if (rowPtr[i + 1] == rowPtr[i] + 1) {
+        int u = colIdx[rowPtr[i]];
+        if (rowPtr[u + 1] == rowPtr[u] + 1 && colIdx[rowPtr[u]] == i) {
+          inversePerm[offset] = i;
+          inversePerm[offset + 1] = u;
+          levels[u] = 1;
+          offset += 2;
+          ++twinCnt;
+          continue;
+        }
+      }
+      else if (rowPtr[i + 1] == rowPtr[i] + 2) {
+        int u = -1;
+        if (colIdx[rowPtr[i]] == i) {
+          u = colIdx[rowPtr[i] + 1];
+        }
+        else if (colIdx[rowPtr[i] + 1] == i) {
+          u = colIdx[rowPtr[i]];
+        }
+        if (u != -1 &&
+          rowPtr[u + 1] == rowPtr[u] + 2 &&
+            (colIdx[rowPtr[u]] == u && colIdx[rowPtr[u] + 1] == i ||
+              colIdx[rowPtr[u] + 1] == u && colIdx[rowPtr[u]] == i)) {
+          inversePerm[offset] = i;
+          inversePerm[offset + 1] = u;
+          levels[u] = 1;
+          offset += 2;
+          ++twinCnt;
+          continue;
+        }
+      }
 
       t = omp_get_wtime();
 
       // collect nodes of this connected component
-      bfs<true>(this, i, levels, &aux, components, &numOfComponents);
+      bfs<true>(this, i, levels, &aux, components, &sizeOfComponents);
 #ifdef PRINT_DBG
-      printf("numOfComponents = %d\n", numOfComponents);
+      printf("sizeOfComponents = %d\n", sizeOfComponents);
 #endif
 
       // select source
       source = selectSourcesWithPseudoDiameter(
-        this, levels, components, numOfComponents, &aux);
+        this, levels, components, sizeOfComponents, &aux);
 #ifdef PRINT_DBG
       printf("source selection takes %f\n", omp_get_wtime() - t);
       printf("source = %d\n", source);
@@ -530,13 +570,13 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
       sourceSelectionTime += omp_get_wtime() - t;
     }
     else {
-      numOfComponents = m;
+      sizeOfComponents = m;
     }
 
     // 2. BFS
     t = omp_get_wtime();
     if (!sourcePreselected) {
-      initializeLevels(levels, m, components, numOfComponents);
+      initializeLevels(levels, m, components, sizeOfComponents);
     }
     int numLevels = bfs(this, source, levels, &aux);
 #ifdef PRINT_DBG
@@ -552,7 +592,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
     }
     else {
       prefixSumOfLevels(
-        prefixSum, this, levels, numLevels, components, numOfComponents);
+        prefixSum, this, levels, numLevels, components, sizeOfComponents);
     }
 #ifdef PRINT_DBG
     printf("prefix sum takes %f\n", omp_get_wtime() - t);
@@ -620,7 +660,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
 #endif
     placeTime += omp_get_wtime() - t;
 
-    offset += numOfComponents;
+    offset += sizeOfComponents;
   }
 
   delete[] levels;
@@ -641,11 +681,9 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   }
   delete[] temp;
 
-  printf("num of connected components = %d\n", cnt);
-#ifdef PRINT_DBG
+  printf("num of connected components = %d (singleton = %d, twin = %d)\n", connectedCmpCnt, singletonCnt, twinCnt);
   printf("sourceSelectionTime = %f\n", sourceSelectionTime);
   printf("bfsTime = %f\n", bfsTime);
   printf("prefixTime = %f\n", prefixTime);
   printf("placeTime = %f\n", placeTime);
-#endif
 }
