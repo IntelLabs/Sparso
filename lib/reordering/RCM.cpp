@@ -476,6 +476,19 @@ int selectSourcesWithPseudoDiameter(
   return s;
 }
 
+class DegreeComparator
+{
+public :
+  DegreeComparator(const int *rowPtr) : rowPtr_(rowPtr) { };
+
+  bool operator()(int a, int b) {
+    return rowPtr_[a + 1] - rowPtr_[a] < rowPtr_[b + 1] - rowPtr_[b];
+  }
+
+private :
+  const int *rowPtr_;
+};
+
 void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
 {
   // 1. Start vertex
@@ -489,6 +502,9 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
     levels[i] = INT_MAX;
     maxDegree = max(maxDegree, rowPtr[i + 1] - rowPtr[i]);
   }
+#ifdef PRINT_DBG
+  printf("maxDegree = %d\n", maxDegree);
+#endif
   int *children_array = new int[omp_get_max_threads()*maxDegree];
 
   bool sourcePreselected = source != -1;
@@ -502,6 +518,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   volatile int *write_offset = new int[m + 1];
   int *prefixSum = new int[m + 1];
 
+  DegreeComparator comparator(rowPtr);
+
   // for each connected component
   int iEnd = sourcePreselected ? 1 : m;
   for (int i = 0; i < m; ++i) {
@@ -513,7 +531,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
 
       // short circuit for a singleton or a twin
       if (rowPtr[i + 1] == rowPtr[i] + 1 && colIdx[rowPtr[i]] == i || rowPtr[i + 1] == rowPtr[i]) {
-        inversePerm[offset] = i;
+        inversePerm[m - offset - 1] = i;
+        perm[i] = m - offset - 1;
         ++offset;
         ++singletonCnt;
         continue;
@@ -521,8 +540,10 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
       else if (rowPtr[i + 1] == rowPtr[i] + 1) {
         int u = colIdx[rowPtr[i]];
         if (rowPtr[u + 1] == rowPtr[u] + 1 && colIdx[rowPtr[u]] == i) {
-          inversePerm[offset] = i;
-          inversePerm[offset + 1] = u;
+          inversePerm[m - offset - 1] = i;
+          inversePerm[m - (offset + 1) - 1] = u;
+          perm[i] = m - offset - 1;
+          perm[u] = m - (offset + 1) - 1;
           levels[u] = 1;
           offset += 2;
           ++twinCnt;
@@ -541,8 +562,10 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
           rowPtr[u + 1] == rowPtr[u] + 2 &&
             (colIdx[rowPtr[u]] == u && colIdx[rowPtr[u] + 1] == i ||
               colIdx[rowPtr[u] + 1] == u && colIdx[rowPtr[u]] == i)) {
-          inversePerm[offset] = i;
-          inversePerm[offset + 1] = u;
+          inversePerm[m - offset - 1] = i;
+          inversePerm[m - (offset + 1) - 1] = u;
+          perm[i] = m - offset - 1;
+          perm[u] = m - (offset + 1) - 1;
           levels[u] = 1;
           offset += 2;
           ++twinCnt;
@@ -600,7 +623,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
     prefixTime += omp_get_wtime() - t;
 
     t = omp_get_wtime();
-    inversePerm[offset] = source;
+    inversePerm[m - offset - 1] = source;
+    perm[source] = m - offset - 1;
 
     read_offset[0] = offset;
     write_offset[0] = offset + 1;
@@ -621,7 +645,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
       for (int l = tid; l < numLevels; l += nthreads) {
         while (read_offset[l] != prefixSum[l + 1] + offset) {
           while (read_offset[l] == write_offset[l]); // spin
-          int u = inversePerm[read_offset[l]];
+          int u = inversePerm[m - read_offset[l] - 1];
           ++read_offset[l];
           int childrenIdx = 0;
           for (int j = rowPtr[u]; j < rowPtr[u + 1]; ++j) {
@@ -632,24 +656,16 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
               levels[v] = -1;
             }
           }
-          // sort increasing order of degree
-          for (int i = 1; i < childrenIdx; ++i) {
-            int c = children[i];
-            int degree = rowPtr[c + 1] - rowPtr[c];
 
-            int j = i - 1;
-            while (j >= 0 && rowPtr[children[j] + 1] - rowPtr[children[j]] > degree) {
-              children[j + 1] = children[j];
-              --j;
-            }
+          std::sort(children, children + childrenIdx, comparator);
 
-            children[j + 1] = c;
-          }
-
+          int w = write_offset[l + 1];
           for (int i = 0; i < childrenIdx; ++i) {
             int c = children[i];
-            inversePerm[write_offset[l + 1]] = c;
-            ++write_offset[l + 1];
+            int idx = m - (w + i) - 1;
+            inversePerm[idx] = c;
+            perm[c] = idx;
+            write_offset[l + 1] = w + i + 1;
           }
         }
       } // for each level
@@ -668,18 +684,6 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   delete[] read_offset;
   delete[] write_offset;
   delete[] prefixSum;
-
-  int *temp = new int[m];
-#pragma omp parallel for
-  for (int i = 0; i < m; ++i) {
-    temp[m - i - 1] = inversePerm[i];
-  }
-#pragma omp parallel for
-  for (int i = 0; i < m; ++i) {
-    inversePerm[i] = temp[i];
-    perm[inversePerm[i]] = i;
-  }
-  delete[] temp;
 
   printf("num of connected components = %d (singleton = %d, twin = %d)\n", connectedCmpCnt, singletonCnt, twinCnt);
   printf("sourceSelectionTime = %f\n", sourceSelectionTime);
