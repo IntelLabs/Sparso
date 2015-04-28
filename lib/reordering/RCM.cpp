@@ -122,6 +122,55 @@ bfsAuxData::~bfsAuxData()
   delete[] candidates;
 }
 
+typedef char BitVectorType;
+
+class BitVector
+{
+public :
+  BitVector(int n) {
+    int n_ = (n + sizeof(BitVectorType) - 1)/sizeof(BitVectorType);
+    bv_ = new BitVectorType[n_];
+#pragma omp parallel for
+    for (int i = 0; i < n_; ++i) {
+      bv_[i] = 0;
+    }
+  }
+
+  ~BitVector() { delete[] bv_; }
+
+  void set(int i) {
+    bv_[getIndexOf_(i)] |= getMaskOf_(i);
+  }
+
+  bool get(int i) const {
+    return bv_[getIndexOf_(i)] & getMaskOf_(i);
+  }
+
+  bool testAndSet(int i) {
+    if (!get(i)) {
+      BitVectorType mask = getMaskOf_(i);
+      BitVectorType prev = __sync_fetch_and_or(bv_ + getIndexOf_(i), mask);
+      return !(prev & mask);
+    }
+    else {
+      return false;
+    }
+  }
+
+  bool atomicClear(int i) {
+    __sync_fetch_and_and(bv_ + getIndexOf_(i), ~getMaskOf_(i));
+  }
+
+private :
+  typedef char BitVectorType;
+
+  static int getIndexOf_(int i) { return i/sizeof(BitVectorType); }
+  static int getBitIndexOf_(int i) { return i%sizeof(BitVectorType); }
+  static BitVectorType getMaskOf_(int i) { return 1 << getBitIndexOf_(i); }
+
+  BitVectorType *bv_;
+};
+
 /**
  * @return -1 if shortcircuited num of levels otherwise
  *
@@ -129,13 +178,14 @@ bfsAuxData::~bfsAuxData()
  */
 template<bool OUTPUT_VISITED = false>
 int bfs(
-  const CSR *A, int source, int *levels,
+  const CSR *A, int source, int *levels, BitVector *bv,
   bfsAuxData *aux,
   int *visited = NULL, int *numOfVisited = NULL,
   int *width = NULL, int *shortCircuitWidth = NULL) {
 
   int numLevels = 0;
   levels[source] = numLevels;
+  bv->set(source);
 
   int **q = aux->q;
   q[0][0] = source;
@@ -252,25 +302,28 @@ int bfs(
         for (int j = A->rowPtr[u]; j < A->rowPtr[u + 1]; ++j) {
           int v = A->colIdx[j];
           if (OUTPUT_VISITED) {
-            if (__sync_bool_compare_and_swap(levels + v, INT_MAX, numLevels)) {
+            if (bv->testAndSet(v)) {
+              levels[v] = numLevels;
+
               *tailPtr = v;
               *(rowPtr + 1) = *rowPtr + A->rowPtr[v + 1] - A->rowPtr[v];
 
               ++tailPtr;
               ++rowPtr;
-              /*if (187905 == source && numLevels >= 1033) {
-                printf("%d: %d->%d\n", numLevels, source, v);
-              }*/
             }
           }
           else {
-            if (INT_MAX == levels[v]) {
-              levels[v] = numLevels;
-              *tailPtr = v;
-              *(rowPtr + 1) = *rowPtr + A->rowPtr[v + 1] - A->rowPtr[v];
+            if (!bv->get(v)) {
+              bv->set(v);
+              if (INT_MAX == levels[v]) {
+                levels[v] = numLevels;
 
-              ++tailPtr;
-              ++rowPtr;
+                *tailPtr = v;
+                *(rowPtr + 1) = *rowPtr + A->rowPtr[v + 1] - A->rowPtr[v];
+
+                ++tailPtr;
+                ++rowPtr;
+              }
             }
           }
         }
@@ -373,17 +426,19 @@ int getVerticesAtLevel(
 }
 
 static void initializeLevels(
-  int *levels, int m, const int *nodes, int numOfNodes)
+  int *levels, BitVector *bv, int m, const int *nodes, int numOfNodes)
 {
 #pragma omp parallel for
   for (int i = 0; i < numOfNodes; ++i) {
-    assert(nodes[i] >= 0 && nodes[i] < m);
-    levels[nodes[i]] = INT_MAX;
+    int u = nodes[i];
+    assert(u >= 0 && u < m);
+    levels[u] = INT_MAX;
+    bv->atomicClear(u);
   }
 }
 
 int selectSourcesWithPseudoDiameter(
-  const CSR *A, int *levels, const int *components, int sizeOfComponents, bfsAuxData *aux)
+  const CSR *A, int *levels, BitVector *bv, const int *components, int sizeOfComponents, bfsAuxData *aux)
 {
   // find the min degree node of this connected component
   int s = getMinDegreeNode(A, components, sizeOfComponents);
@@ -396,8 +451,8 @@ int selectSourcesWithPseudoDiameter(
   int *candidates = aux->candidates;
 
   while (e == -1) {
-    initializeLevels(levels, A->m, components, sizeOfComponents);
-    int diameter = bfs(A, s, levels, aux);
+    initializeLevels(levels, bv, A->m, components, sizeOfComponents);
+    int diameter = bfs(A, s, levels, bv, aux);
 
 #ifdef PRINT_DBG
     printf("diameter from %d is %d\n", s, diameter);
@@ -447,11 +502,11 @@ int selectSourcesWithPseudoDiameter(
 
     int minWidth = INT_MAX;
     for (int i = 0; i < nCandidates; ++i) {
-      initializeLevels(levels, A->m, components, sizeOfComponents);
+      initializeLevels(levels, bv, A->m, components, sizeOfComponents);
 
       int width = INT_MIN;
       int newDiameter = bfs(
-        A, candidates[i], levels, aux, NULL, NULL, &width, &minWidth);
+        A, candidates[i], levels, bv, aux, NULL, NULL, &width, &minWidth);
 #ifdef PRINT_DBG
       printf("(diameter, width) from %d is (%d, %d)\n", candidates[i], newDiameter, width);
 #endif
@@ -505,6 +560,9 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
 #ifdef PRINT_DBG
   printf("maxDegree = %d\n", maxDegree);
 #endif
+
+  BitVector *bv = new BitVector(m);
+
   int *children_array = new int[omp_get_max_threads()*maxDegree];
 
   bool sourcePreselected = source != -1;
@@ -525,7 +583,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
     // 1. Automatic selection of source
     int sizeOfComponents;
     if (!sourcePreselected) {
-      if (levels[i] != INT_MAX) continue;
+
+      if (bv->get(i)) continue;
       ++connectedCmpCnt;
 
       // short circuit for a singleton or a twin
@@ -544,6 +603,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
           perm[i] = m - offset - 1;
           perm[u] = m - (offset + 1) - 1;
           levels[u] = 1;
+          bv->set(u);
           offset += 2;
           ++twinCnt;
           continue;
@@ -566,6 +626,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
           perm[i] = m - offset - 1;
           perm[u] = m - (offset + 1) - 1;
           levels[u] = 1;
+          bv->set(u);
           offset += 2;
           ++twinCnt;
           continue;
@@ -575,14 +636,14 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
       t = omp_get_wtime();
 
       // collect nodes of this connected component
-      bfs<true>(this, i, levels, &aux, components, &sizeOfComponents);
+      bfs<true>(this, i, levels, bv, &aux, components, &sizeOfComponents);
 #ifdef PRINT_DBG
       printf("sizeOfComponents = %d\n", sizeOfComponents);
 #endif
 
       // select source
       source = selectSourcesWithPseudoDiameter(
-        this, levels, components, sizeOfComponents, &aux);
+        this, levels, bv, components, sizeOfComponents, &aux);
 #ifdef PRINT_DBG
       printf("source selection takes %f\n", omp_get_wtime() - t);
       printf("source = %d\n", source);
@@ -598,9 +659,9 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
     // 2. BFS
     t = omp_get_wtime();
     if (!sourcePreselected) {
-      initializeLevels(levels, m, components, sizeOfComponents);
+      initializeLevels(levels, bv, m, components, sizeOfComponents);
     }
-    int numLevels = bfs(this, source, levels, &aux);
+    int numLevels = bfs(this, source, levels, bv, &aux);
 #ifdef PRINT_DBG
     printf("numLevels = %d\n", numLevels);
     printf("bfs takes %f\n", omp_get_wtime() - t);
@@ -680,6 +741,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   }
 
   delete[] levels;
+  delete bv;
   delete[] children_array;
   delete[] write_offset;
   delete[] prefixSum;
