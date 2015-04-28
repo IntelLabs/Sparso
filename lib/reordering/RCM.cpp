@@ -514,8 +514,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   int connectedCmpCnt = 0, singletonCnt = 0, twinCnt = 0;
 
   bfsAuxData aux(m);
-  volatile int *read_offset = new int[m + 1];
-  volatile int *write_offset = new int[m + 1];
+  volatile int *write_offset = new int[(m + 1)*16];
   int *prefixSum = new int[m + 1];
 
   DegreeComparator comparator(rowPtr);
@@ -626,9 +625,6 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
     inversePerm[m - offset - 1] = source;
     perm[source] = m - offset - 1;
 
-    read_offset[0] = offset;
-    write_offset[0] = offset + 1;
-
 #pragma omp parallel
     {
       int nthreads = omp_get_num_threads();
@@ -636,17 +632,21 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
 
       int *children = children_array + tid*maxDegree;
 
-#pragma omp for
-      for (int l = 1; l <= numLevels; ++l) {
-        read_offset[l] = prefixSum[l] + offset;
-        write_offset[l] = prefixSum[l] + offset;
+      for (int l = tid; l <= numLevels; l += nthreads) {
+        write_offset[16*l] = prefixSum[l] + offset;
+      }
+      if (0 == tid) {
+        write_offset[0] = offset + 1;
       }
 
+#pragma omp barrier
+
       for (int l = tid; l < numLevels; l += nthreads) {
-        while (read_offset[l] != prefixSum[l + 1] + offset) {
-          while (read_offset[l] == write_offset[l]); // spin
-          int u = inversePerm[m - read_offset[l] - 1];
-          ++read_offset[l];
+        int r = prefixSum[l] + offset;
+        while (r != prefixSum[l + 1] + offset) {
+          while (r == write_offset[16*l]); // spin
+          int u = inversePerm[m - r - 1];
+          ++r;
           int childrenIdx = 0;
           for (int j = rowPtr[u]; j < rowPtr[u + 1]; ++j) {
             int v = colIdx[j];
@@ -659,13 +659,13 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
 
           std::sort(children, children + childrenIdx, comparator);
 
-          int w = write_offset[l + 1];
+          int w = write_offset[16*(l + 1)];
           for (int i = 0; i < childrenIdx; ++i) {
             int c = children[i];
             int idx = m - (w + i) - 1;
             inversePerm[idx] = c;
             perm[c] = idx;
-            write_offset[l + 1] = w + i + 1;
+            write_offset[16*(l + 1)] = w + i + 1;
           }
         }
       } // for each level
@@ -681,7 +681,6 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
 
   delete[] levels;
   delete[] children_array;
-  delete[] read_offset;
   delete[] write_offset;
   delete[] prefixSum;
 
