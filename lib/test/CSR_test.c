@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
     bool one_based_CSR = false;
     load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz, one_based_CSR);
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
-    double bytes = nnz*12;
+    double bytes = (double)nnz*12;
 
     CSR_Handle *A = CSR_Create(m, n, ai, aj, a);
     printf("CSR matrix content:\n");
