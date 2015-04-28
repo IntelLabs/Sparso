@@ -87,7 +87,7 @@ static void prefixSumOfLevels(
 struct bfsAuxData
 {
   int *q[2];
-  int *qTail;
+  int *qTail[2];
   int *qTailPrefixSum;
   int *rowPtrs;
   int *nnzPrefixSum;
@@ -102,7 +102,9 @@ bfsAuxData::bfsAuxData(int m)
   q[0] = new int[m*omp_get_max_threads()];
   q[1] = new int[m*omp_get_max_threads()];
 
-  qTail = new int[omp_get_max_threads()];
+  qTail[0] = new int[omp_get_max_threads()];
+  qTail[1] = new int[omp_get_max_threads()];
+
   qTailPrefixSum = new int[omp_get_max_threads() + 1];
 
   rowPtrs = new int[omp_get_max_threads()*m];
@@ -115,7 +117,8 @@ bfsAuxData::~bfsAuxData()
 {
   delete[] q[0];
   delete[] q[1];
-  delete[] qTail;
+  delete[] qTail[0];
+  delete[] qTail[1];
   delete[] qTailPrefixSum;
   delete[] rowPtrs;
   delete[] nnzPrefixSum;
@@ -190,8 +193,8 @@ int bfs(
   int **q = aux->q;
   q[0][0] = source;
 
-  int *qTail = aux->qTail;
-  qTail[0] = 1;
+  int *qTail[2] = { aux->qTail[0], aux->qTail[1] };
+  qTail[0][0] = 1;
 
   int *qTailPrefixSum = aux->qTailPrefixSum;
   qTailPrefixSum[0] = 0;
@@ -212,7 +215,7 @@ int bfs(
   int nthreads = omp_get_num_threads();
 
   if (tid > 0) {
-    qTail[tid] = 0;
+    qTail[0][tid] = 0;
     nnzPrefixSum[tid + 1] = 0;
   }
 
@@ -221,7 +224,7 @@ int bfs(
 #pragma omp master
     {
       for (int t = 0; t < nthreads; ++t) {
-        qTailPrefixSum[t + 1] = qTailPrefixSum[t] + qTail[t];
+        qTailPrefixSum[t + 1] = qTailPrefixSum[t] + qTail[numLevels%2][t];
         nnzPrefixSum[t + 1] += nnzPrefixSum[t];
       }
       ++numLevels;
@@ -261,11 +264,11 @@ int bfs(
       iBegin = 0;
     }
     else if (tBegin == nthreads) {
-      iBegin = qTail[tEnd - 1];
+      iBegin = qTail[numLevels%2][tEnd - 1];
     }
     else {
       iBegin = upper_bound(
-          rowPtrs + tBegin*A->m, rowPtrs + tBegin*A->m + qTail[tBegin],
+          rowPtrs + tBegin*A->m, rowPtrs + tBegin*A->m + qTail[numLevels%2][tBegin],
           nnzPerThread*tid - nnzPrefixSum[tBegin]) -
         (rowPtrs + tBegin*A->m) - 1;
     }
@@ -275,7 +278,7 @@ int bfs(
     }
     else {
       iEnd = upper_bound(
-          rowPtrs + tEnd*A->m, rowPtrs + tEnd*A->m + qTail[tEnd],
+          rowPtrs + tEnd*A->m, rowPtrs + tEnd*A->m + qTail[numLevels%2][tEnd],
           nnzPerThread*(tid + 1) - nnzPrefixSum[tEnd]) -
         (rowPtrs + tEnd*A->m) - 1;
     }
@@ -294,7 +297,7 @@ int bfs(
 
     for (int t = tBegin; t <= tEnd; ++t) {
       for (int i = (t == tBegin ? iBegin : 0);
-          i < (t == tEnd ? iEnd : qTail[t]);
+          i < (t == tEnd ? iEnd : qTail[numLevels%2][t]);
           ++i) {
         int u = q[1 - numLevels%2][t*A->m + i];
         assert(levels[u] == numLevels - 1);
@@ -332,7 +335,7 @@ int bfs(
 
 #pragma omp barrier
 
-    qTail[tid] = tailPtr - (q[numLevels%2] + tid*A->m);
+    qTail[1 - numLevels%2][tid] = tailPtr - (q[numLevels%2] + tid*A->m);
     nnzPrefixSum[tid + 1] = *rowPtr;
   } // while true
   } // omp parallel
@@ -442,7 +445,7 @@ int selectSourcesWithPseudoDiameter(
 {
   // find the min degree node of this connected component
   int s = getMinDegreeNode(A, components, sizeOfComponents);
-//#define PRINT_DBG
+#define PRINT_DBG
 #ifdef PRINT_DBG
   printf("%d is the min degree node of this component\n", s);
 #endif
@@ -459,6 +462,17 @@ int selectSourcesWithPseudoDiameter(
 #endif
     int nCandidates = getVerticesAtLevel(
       candidates, levels, diameter - 2, components, sizeOfComponents);
+
+    /*for (int i = 0; i < omp_get_max_threads(); ++i) {
+      for (int j = 0; j < A->m; ++j) {
+        int u = aux->q[diameter%2][i*A->m + j];
+        if (u < 0 || u >= A->m || levels[u] != diameter - 2) {
+          break;
+        }
+        printf("%d ", u);
+      }
+    }
+    printf("\n");*/
 
     // sort by vertex by ascending degree
     for (int i = 1; i < nCandidates; ++i) {
