@@ -9,10 +9,12 @@ while read i;
 do
     echo working on pagerank.jl $PLACE$i.mtx
     julia pagerank.jl $PLACE$i.mtx
+    echo
 done < pagerank.lst
   
 while read i;
 do
     echo working on pcg.jl $PLACE$i.mtx
     julia pcg.jl $PLACE$i.mtx
+    echo
 done < pcg.lst
