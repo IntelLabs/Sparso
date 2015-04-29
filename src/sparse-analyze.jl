@@ -33,6 +33,19 @@ function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector,
                pointer(P), pointer(Pprime), getPermuation, oneBasedInput, oneBasedOutput)
 end
 
+function CSR_Bandwidth(A::SparseMatrixCSC)
+   A2 = ccall((:CSR_Create, "../lib/libcsr.so"), Ptr{Void},
+         (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
+         A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+   bw = ccall((:CSR_GetBandwidth, "../lib/libcsr.so"), Cint,
+         (Ptr{Void},),
+         A2)
+   ccall((:CSR_Destroy, "../lib/libcsr.so"), Void,
+         (Ptr{Void},),
+         A2)
+   bw
+end
+
 function reorderVector(V::Vector, newV::Vector, P::Vector)
    ccall((:reorderVector, "../lib/libcsr.so"), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
