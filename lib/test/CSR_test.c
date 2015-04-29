@@ -135,6 +135,7 @@ int main(int argc, char *argv[])
     t = -omp_get_wtime();
     CSR_GetRCMPemutation(A, perm, inversePerm);
     t += omp_get_wtime();
+
     isPerm(perm, m);
     isPerm(inversePerm, m);
     
@@ -142,7 +143,12 @@ int main(int argc, char *argv[])
 
     A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
 
+    t = -omp_get_wtime();
     CSR_Permute(A, A2, perm, inversePerm);
+    t += omp_get_wtime();
+
+    printf("Permute takes %f (%f GB/s)\n", t, bytes/t/1e9);
+
     printf("My permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
 
     t = -omp_get_wtime();
