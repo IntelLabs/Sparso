@@ -190,7 +190,8 @@ void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, 
       }
       printf("%f load imbalance = %f\n", tEnd - tBegin, barrierTimeSum/(tEnd - tBegin)/nthreads);
     }
-#endif
+#undef MEASURE_LOAD_BALANCE
+#endif // MEASURE_LOAD_BALANCE
   } // omp parallel
 
 #ifdef SEP
@@ -219,39 +220,81 @@ void permute_(
   assert(in->base == BASE);
   permuteRowPtr_(out, in, rowInversePerm);
 
-#pragma omp parallel for
-  for (int i = 0; i < in->m; ++i) {
-    int row = rowInversePerm ? rowInversePerm[i] : i;
-    int begin = in->rowPtr[row] - BASE, end = in->rowPtr[row + 1] - BASE;
-    int newBegin = out->rowPtr[i] - BASE;
+  int m = in->m;
 
-    int k = newBegin;
-    for (int j = begin; j < end; ++j, ++k) {
-      int c = in->colIdx[j] - BASE;
-      int newColIdx = columnPerm[c];
+//#define MEASURE_LOAD_BALANCE
+#ifdef MEASURE_LOAD_BALANCE
+  double barrierTimes[omp_get_max_threads()];
+  double tBegin = omp_get_wtime();
+#endif
 
-      out->colIdx[k] = newColIdx + BASE;
-      out->values[k] = in->values[j];
-    }
+#pragma omp parallel
+  {
+    int tid = omp_get_thread_num();
+    int nthreads = omp_get_num_threads();
 
-    if (SORT) {
-      // insertion sort
-      for (int j = newBegin + 1; j < newBegin + (end - begin); ++j) {
-        int c = out->colIdx[j];
-        double v = out->values[j];
+    int nnz = in->rowPtr[m] - BASE;
+    int nnzPerThread = (nnz + nthreads - 1)/nthreads;
+    int iBegin = lower_bound(out->rowPtr, out->rowPtr + m, nnzPerThread*tid + BASE) - out->rowPtr;
+    int iEnd = lower_bound(out->rowPtr, out->rowPtr + m, nnzPerThread*(tid + 1) + BASE) - out->rowPtr;
+    assert(iBegin <= iEnd);
+    assert(iBegin >= 0 && iBegin <= m);
+    assert(iEnd >= 0 && iEnd <= m);
 
-        int k = j - 1;
-        while (k >= newBegin && out->colIdx[k] > c) {
-          out->colIdx[k + 1] = out->colIdx[k];
-          out->values[k + 1] = out->values[k];
-          --k;
-        }
+    for (int i = iBegin; i < iEnd; ++i) {
+      int row = rowInversePerm ? rowInversePerm[i] : i;
+      int begin = in->rowPtr[row] - BASE, end = in->rowPtr[row + 1] - BASE;
+      int newBegin = out->rowPtr[i] - BASE;
 
-        out->colIdx[k + 1] = c;
-        out->values[k + 1] = v;
+      int k = newBegin;
+      for (int j = begin; j < end; ++j, ++k) {
+        int c = in->colIdx[j] - BASE;
+        int newColIdx = columnPerm[c];
+
+        out->colIdx[k] = newColIdx + BASE;
+        out->values[k] = in->values[j];
       }
+
+      if (SORT) {
+        // insertion sort
+        for (int j = newBegin + 1; j < newBegin + (end - begin); ++j) {
+          int c = out->colIdx[j];
+          double v = out->values[j];
+
+          int k = j - 1;
+          while (k >= newBegin && out->colIdx[k] > c) {
+            out->colIdx[k + 1] = out->colIdx[k];
+            out->values[k + 1] = out->values[k];
+            --k;
+          }
+
+          out->colIdx[k + 1] = c;
+          out->values[k + 1] = v;
+        }
+      }
+    } // for each row
+
+#ifdef MEASURE_LOAD_BALANCE
+    double t = omp_get_wtime();
+#pragma omp barrier
+    barrierTimes[tid] = omp_get_wtime() - t;
+
+#pragma omp barrier
+#pragma omp master
+    {
+      double tEnd = omp_get_wtime();
+      double barrierTimeSum = 0;
+      for (int i = 0; i < nthreads; ++i) {
+        barrierTimeSum += barrierTimes[i];
+        int iBegin = lower_bound(out->rowPtr, out->rowPtr + m, nnzPerThread*i + BASE) - out->rowPtr;
+        int iEnd = lower_bound(out->rowPtr, out->rowPtr + m, nnzPerThread*(i + 1) + BASE) - out->rowPtr;
+        printf("%d %d-%d %d %f\n", i, iBegin, iEnd, out->rowPtr[iEnd] - out->rowPtr[iBegin], barrierTimes[i]);
+      }
+      printf("%f load imbalance = %f\n", tEnd - tBegin, barrierTimeSum/(tEnd - tBegin)/nthreads);
     }
-  } // for each row
+#undef MEASURE_LOAD_BALANCE
+#endif // MEASURE_LOAD_BALANCE
+  } // omp parallel
 }
 
 void CSR::permute(
