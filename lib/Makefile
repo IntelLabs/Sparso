@@ -11,8 +11,9 @@ ifeq (yes, $(BOOST))
   CFLAGS += -DUSE_BOOST
   CFLAGS += -I/opt/apps/intel13/boost/1.51.0/include # for stampede
 endif
-ifeq (yes, $(VTUNE))
-  CFLAGS += -DVTUNE -I/swtools/intel/vtune_amplifier_xe/include /swtools/intel/vtune_amplifier_xe/lib64/libittnotify.a
+ifeq (yes, $(SEP))
+  SEP_BASE_DIR ?= /opt/intel/sep # typically set by sep_vars.sh
+  CFLAGS += -DSEP -I$(SEP_BASE_DIR)/../include $(SEP_BASE_DIR)/libprog_api.so
 endif
 
 test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp reordering/RCM.cpp
