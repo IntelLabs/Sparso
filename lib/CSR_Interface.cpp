@@ -2,7 +2,7 @@
 #include "CSR_Interface.h"
 #include <assert.h>
 
-//#define PERF_TUNE
+#define PERF_TUNE
 
 #ifdef PERF_TUNE
 #include <sys/time.h>
@@ -141,12 +141,13 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 
 #ifdef PERF_TUNE
     double t5 = omp_get_wtime();
+    double bytes = (double)i[numRows]*12;
 
     printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
-    printf("\tmake 0 based: %f sec\n", t2 - t1);
-    printf("\tCSR_GetRCMPemutation: %f sec\n", t3 - t2);
-    printf("\tCSR_Permute: %f sec\n", t4 - t3);
-    printf("\tmake 1 based: %f sec\n", t5 - t4);
+    printf("\tmake 0 based: %f sec (%f GB/s)\n", t2 - t1, bytes/(t2 - t1)/1e9);
+    printf("\tCSR_GetRCMPemutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
+    printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
+    printf("\tmake 1 based: %f sec (%f GB/s)\n", t5 - t4, bytes/(t5 - t4)/1e9);
     fflush(stdout);
 #endif
 }
