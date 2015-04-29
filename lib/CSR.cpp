@@ -12,8 +12,8 @@
 
 #include "CSR.hpp"
 
-#ifdef VTUNE
-#include <ittnotify.h>
+#ifdef SEP
+#include <sampling.h>
 #endif
 
 using namespace std;
@@ -146,8 +146,11 @@ void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, 
   double tBegin = omp_get_wtime();
 #endif
 
-#ifdef VTUNE
-  __itt_resume();
+#ifdef SEP
+  static int cnt = 0;
+  if (2 == cnt) {
+    VTResumeSampling();
+  }
 #endif
 
 #pragma omp parallel
@@ -188,8 +191,11 @@ void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, 
 #endif
   } // omp parallel
 
-#ifdef VTUNE
-  __itt_resume();
+#ifdef SEP
+  if (2 == cnt) {
+    VTPauseSampling();
+  }
+  ++cnt;
 #endif
 }
 
@@ -351,7 +357,8 @@ void CSR::printSomeValues(int distance, bool is_1_based) const
     for (int j = rowPtr[i] - decrement; j < rowPtr[i + 1] - decrement; ++j) {
       int c = colIdx[j] - decrement;
       if ((count % distance) == 0 || count < 10 || nnz - count < 10) {
-          printf("%d %d %.11f\n", i + decrement, c + decrement, values[j]);
+          printf("%d %d %g\n", i + 1, c + 1, values[j]);
+          // always print in 1-based for easier compare with .mtx file
       }
       count++;
     }
