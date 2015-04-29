@@ -76,8 +76,8 @@ void CSR_PrintInDense(CSR_Handle *A)
 
 void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance, bool is_1_based)
 {
-  CSR_Handle *A = CSR_Create(numRows, numCols, i, j, v);
-  ((CSR*)A)->printSomeValues(distance, is_1_based);
+  CSR *A = new CSR(numRows, numCols, i, j, v);
+  A->printSomeValues(distance, is_1_based);
 }
 
 void CSR_Destroy(CSR_Handle *A)
@@ -104,10 +104,10 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     assert(j != j1);    
     assert(v != v1);
     
-    CSR_Handle *A = CSR_Create(numRows, numCols, i, j, v);
+    CSR *A = new CSR(numRows, numCols, i, j, v);
     if (oneBasedInput) {
         // The library assumes arrays are all 0-based indexing
-        ((CSR *)A)->make0BasedIndexing();
+        A->make0BasedIndexing();
     }
 
 #ifdef PERF_TUNE
@@ -115,29 +115,29 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 #endif
 
     if (getPermutation) {
-        CSR_GetRCMPemutation(A, perm, inversePerm);
+        A->getRCMPermutation(perm, inversePerm);
     }
 
 #ifdef PERF_TUNE
     double t3 = omp_get_wtime();
 #endif
 
-    CSR_Handle *newA = CSR_Create(numRows, numCols, i1, j1, v1);
-    CSR_Permute(A, newA, perm, inversePerm);
+    CSR *newA = new CSR(numRows, numCols, i1, j1, v1);
+    A->permute(newA, perm, inversePerm);
     
 #ifdef PERF_TUNE
     double t4 = omp_get_wtime();
 #endif
 
     if (oneBasedOutput) {
-        ((CSR *)newA)->make1BasedIndexing();
+        newA->make1BasedIndexing();
     }
     if (oneBasedInput) {
         // Recover the inpt from 0-based to 1-based indexing
-        ((CSR *)A)->make1BasedIndexing();
+        A->make1BasedIndexing();
     }
-    CSR_Destroy(newA);
-    CSR_Destroy(A);
+    delete newA;
+    delete A;
 
 #ifdef PERF_TUNE
     double t5 = omp_get_wtime();
