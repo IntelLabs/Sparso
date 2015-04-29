@@ -8,7 +8,7 @@ extern "C" {
 typedef struct CSR_Handle CSR_Handle;
 
 // const/destruct
-CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v);
+CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v, int base);
 void CSR_Destroy(CSR_Handle *A);
 
 // accessors

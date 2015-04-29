@@ -12,9 +12,9 @@
 
 extern "C" {
 
-CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v)
+CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v, int base)
 {
-  return (CSR_Handle *)(new CSR(numRows, numCols, i, j, v));
+  return (CSR_Handle *)(new CSR(numRows, numCols, i, j, v, base));
 }
 
 int CSR_GetNumRows(CSR_Handle *A)

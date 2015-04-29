@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
     double bytes = (double)nnz*12;
 
-    CSR_Handle *A = CSR_Create(m, n, ai, aj, a);
+    CSR_Handle *A = CSR_Create(m, n, ai, aj, a, one_based_CSR ? 1 : 0);
     printf("CSR matrix content:\n");
     unsigned int distance = nnz / 100; // print out about 100 elements for manual verification
     //CSR_PrintSomeValues(m, n, ai, aj, a, distance, one_based_CSR);
@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 
     printf("Boost RCM takes %f (%f GB/s)\n", t, bytes/t/1e9);
 
-    A2 = CSR_Create(m, n, ai2, aj2, a2);
+    A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
 
     CSR_Permute(A, A2, perm, inversePerm);
     printf("Boost RCM permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
     
     printf("My RCM takes %f (%f GB/s)\n", t, bytes/t/1e9);
 
-    A2 = CSR_Create(m, n, ai2, aj2, a2);
+    A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
 
     CSR_Permute(A, A2, perm, inversePerm);
     printf("My permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
