@@ -974,7 +974,7 @@ void load_matrix_market_step (char *file, T *a, int *j, int *i, int *sizes, bool
             }
             if (pattern == 1)
             {
-                values[count] = RAND01();
+                values[count] = 1;//RAND01();
             }
             else
             {
@@ -1017,7 +1017,7 @@ void load_matrix_market_step (char *file, T *a, int *j, int *i, int *sizes, bool
         int m = sizes[1];
         int nnz = sizes[3];
 
-        printf("************* step 2, some COO values: m =%d, nnz=%d\n", m, nnz);        
+        //printf("************* step 2, some COO values: m =%d, nnz=%d\n", m, nnz);        
         //print_some_COO_values(nnz, values, rowidx, colidx);
         
         coo2csr(m, nnz, values, rowidx, colidx, a, j, i);
