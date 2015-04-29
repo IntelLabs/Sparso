@@ -84,6 +84,8 @@ void CSR::boostGetRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/
 
 void permuteRowPtr_(CSR* out, const CSR *in, const int *inversePerm)
 {
+  int m = in->m;
+
   out->base = in->base;
   out->rowPtr[0] = in->base;
 
@@ -95,9 +97,9 @@ void permuteRowPtr_(CSR* out, const CSR *in, const int *inversePerm)
     int nthreads = omp_get_num_threads();
     int tid = omp_get_thread_num();
 
-    int iPerThread = (in->m + nthreads - 1)/nthreads;
-    int iBegin = min(iPerThread*tid, in->m);
-    int iEnd = min(iBegin + iPerThread, in->m);
+    int iPerThread = (m + nthreads - 1)/nthreads;
+    int iBegin = min(iPerThread*tid, m);
+    int iEnd = min(iBegin + iPerThread, m);
 
     out->rowPtr[iBegin] = in->base;
     int i;
@@ -121,8 +123,8 @@ void permuteRowPtr_(CSR* out, const CSR *in, const int *inversePerm)
       for (int tid = 1; tid < nthreads; ++tid) {
         rowPtrSum[tid + 1] += rowPtrSum[tid];
       }
-      out->rowPtr[in->m] = rowPtrSum[nthreads] + in->base;
-      assert(out->rowPtr[m] == rowPtr[m]);
+      out->rowPtr[m] = rowPtrSum[nthreads] + in->base;
+      assert(out->rowPtr[m] == in->rowPtr[m]);
     }
 
     for (i = iBegin; i < iEnd; ++i) {
