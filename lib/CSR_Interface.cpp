@@ -104,7 +104,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     assert(j != j1);    
     assert(v != v1);
     
-    CSR *A = new CSR(numRows, numCols, i, j, v);
+    CSR *A = new CSR(numRows, numCols, i, j, v, oneBasedOutput ? 1 : 0);
     if (oneBasedInput) {
         // The library assumes arrays are all 0-based indexing
         A->make0BasedIndexing();
