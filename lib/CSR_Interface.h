@@ -33,8 +33,18 @@ void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, in
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput);
                  
+// vector routines
 void reorderVector(double *v, double *tmp, const int *perm, int len);
 void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len);
+
+// w = alpha*x + beta*w
+void waxpby(int n, double *w, double alpha, const double *x, double beta, const double *y);
+// return dot(x*y)
+double dot(int n, const double *x, const double *y);
+// w = x/.y
+void pointwiseDivide(int n, double *w, const double *x, const double *y);
+// w = alpha*x + beta
+void waxpb(int n, double *w, double alpha, const double *x, double beta);
 
 // A temporary workaround.
 void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y);
