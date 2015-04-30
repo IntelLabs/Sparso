@@ -456,6 +456,61 @@ function SpMV!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Numbe
   y
 end
 
+const LIB_PATH = "../lib/libcsr.so"
+
+function WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
+  assert(length(x) == length(y))
+
+  w = Array(Cdouble, length(x))
+  if DEFAULT_LIBRARY == PCL_LIB
+    ccall((:waxpby, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
+          length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
+  else
+    w = alpha*x + beta*y
+  end
+  w
+end
+
+function Dot(x::Vector, y::Vector)
+  assert(length(x) == length(y))
+
+  if DEFAULT_LIBRARY == PCL_LIB
+    ccall((:dot, LIB_PATH), Cdouble,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), pointer(x), pointer(y))
+  else
+    dot(x, y)
+  end
+end
+
+function PointwiseDivide(x::Vector, y::Vector)
+  assert(length(x) == length(y))
+
+  w = Array(Cdouble, length(x))
+  if DEFAULT_LIBRARY == PCL_LIB
+    ccall((:pointwiseDivide, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), pointer(w), pointer(x), pointer(y))
+  else
+    w = x./y
+  end
+
+  w
+end
+
+function WAXPB(alpha::Number, x::Vector, beta::Number)
+  w = Array(Cdouble, length(x))
+  if DEFAULT_LIBRARY == PCL_LIB
+    ccall((:waxpb, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
+          length(x), pointer(w), alpha, pointer(x), beta)
+  else
+    w = alpha*x + beta
+  end
+  w
+end
+
 end   # end of module
 
 #function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
