@@ -17,23 +17,28 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
   spmv_time = 0.0
   time1 = time()
-  for i = 1:100
-    q = p./d
+  repeat = 100
+  for i = 1:repeat
+    #q = p./d
+    q = SparseAccelerator.PointwiseDivide(p, d) # manual
 
     time3 = time()
     #Aq = A*q
-    Aq = SparseAccelerator.SpMV(A, q)
+    Aq = SparseAccelerator.SpMV(A, q) # manual
     spmv_time += time() - time3
 
-    p2 = r + (1-r)*Aq
-#    println("$i: $(norm(p - p2)/norm(p))") # print out convergence
+    #p2 = r + (1-r)*Aq
+    p2 = SparseAccelerator.WAXPB(1 - r, Aq, r) # manual
+    if i == repeat
+      println("Error = $(norm(p - p2)/norm(p))") # print out convergence
+    end
 
     p = p2
   end
   time2 = time()
   original_loop_exec_time = time2 - time1
   println("Time of original loop= ", time2 - time1, " seconds")  
-  println("SpMV BW (GB/s) = ", nnz(A)*12.*100/spmv_time/1e9)
+  println("SpMV time = $spmv_time, BW (GB/s) = ", nnz(A)*12.*100/spmv_time/1e9)
   toc()
   original_loop_exec_time
 end
@@ -94,11 +99,11 @@ p = repmat([1/m], m)
 r = 0.15
 
 
-tests = 1
+tests = 8
 times = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 idx = 1
 
-for lib in [SparseAccelerator.JULIA_LIB, SparseAccelerator.MKL_LIB, SparseAccelerator.PCL_LIB]
+for lib in [SparseAccelerator.PCL_LIB]
     SparseAccelerator.use_lib(lib)
     
     original_time = 0.0
