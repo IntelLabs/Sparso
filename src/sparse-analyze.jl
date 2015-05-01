@@ -284,7 +284,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
           (is_mul1, scalar1, vec1) = isMul(arg1)
           (is_mul2, scalar2, vec2) = isMul(arg2)
           dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
-          if is_mul1 || is_mul2
+          if is_mul1 || is_mul2 || true
             orig_args = ast.args
             ast.args = Array(Any,5)
             dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
@@ -319,7 +319,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
           (is_mul1, scalar1, vec1) = isMul(arg1)
           (is_mul2, scalar2, vec2) = isMul(arg2)
           dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
-          if is_mul1 || is_mul2
+          if is_mul1 || is_mul2 || true
             orig_args = ast.args
             ast.args = Array(Any,5)
             dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
