@@ -911,7 +911,7 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
 
   if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
      func == :(/)  || func == :(*)  || func == :(+)  || func == :(-)
-    addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
+    addUnmodifiedParams(func, arg_type_tuple, ones(Int32, length(args))) 
   elseif func == :SpMV
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
   else
