@@ -529,8 +529,10 @@ private :
   const int *rowPtr_;
 };
 
-void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
+void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
 {
+  assert(isSymmetric());
+
   int oldBase = base;
   make0BasedIndexing();
 

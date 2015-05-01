@@ -346,33 +346,33 @@ int CSR::getBandwidth() const
   }
 }
 
-void printInDense(const CSR *A)
+void CSR::printInDense() const
 {
   // Raw format
   printf("RowPtr: ");
-  for (int i = 0; i <= A->m; i++) {
-    printf("%d ", A->rowPtr[i]);
+  for (int i = 0; i <= m; i++) {
+    printf("%d ", rowPtr[i]);
   }
   printf("\nColIdx: ");
-  for (int i = 0; i < A->rowPtr[A->m] - base; i++) {
-    printf("%d ", A->colIdx[i]);
+  for (int i = 0; i < rowPtr[m] - base; i++) {
+    printf("%d ", colIdx[i]);
   }
   printf("\nValues: ");
-  for (int i = 0; i < A->rowPtr[A->m] - base; i++) {
-    printf("%f ", A->values[i]);
+  for (int i = 0; i < rowPtr[m] - base; i++) {
+    printf("%f ", values[i]);
   }
   printf("\n\n");
 
-  for (int i = 0; i < A->m; ++i) {
+  for (int i = 0; i < m; ++i) {
     int jj = 0;
     printf("%d: ", i);
-    for (int j = A->rowPtr[i] - base; j < A->rowPtr[i + 1] - base; ++j) {
-      int c = A->colIdx[j] - base;
+    for (int j = rowPtr[i] - base; j < rowPtr[i + 1] - base; ++j) {
+      int c = colIdx[j] - base;
       for ( ; jj < c; ++jj) printf("0 ");
-      printf("%g ", A->values[j]);
+      printf("%g ", values[j]);
       ++jj;
     }
-    for ( ; jj < A->m; ++jj) printf("0 ");
+    for ( ; jj < m; ++jj) printf("0 ");
     printf("\n");
   }
 }
@@ -582,4 +582,37 @@ void CSR::make1BasedIndexing()
 
     base = 1;
   }
+}
+
+bool CSR::isSymmetric(bool checkValues /*=true*/, bool printFirstAsymmetry /*=false*/) const
+{
+  for (int i = 0; i < m; ++i) {
+    for (int j = rowPtr[i] - base; j < rowPtr[i + 1] - base; ++j) {
+      int c = colIdx[j] - base;
+      if (c <= i) continue; // only check upper triangular
+
+      bool hasPair = false;
+      for (int k = rowPtr[c] - base; k < rowPtr[c + 1] - base; ++k) {
+        if (colIdx[k] - base == i) {
+          hasPair = true;
+          if (checkValues && values[j] != values[k]) {
+            if (printFirstAsymmetry) {
+              printf(
+                "%g at (%d, %d) != %g at (%d, %d)\n",
+                i + 1, c + 1, values[j], c + 1, i + 1, values[k]);
+            }
+            return false;
+          }
+          break;
+        }
+      }
+      if (!hasPair) {
+        if (printFirstAsymmetry) {
+          printf(
+            "(%d, %d) exists but (%d, %d) doesn't\n",
+            i + 1, c + 1, c + 1, i + 1);
+        }
+      }
+    } // for each non-zero
+  } // for each row
 }

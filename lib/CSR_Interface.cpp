@@ -76,8 +76,8 @@ void CSR_PrintInDense(CSR_Handle *A)
 
 void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance, bool is_1_based)
 {
-  CSR *A = new CSR(numRows, numCols, i, j, v);
-  A->printSomeValues(distance, is_1_based);
+  CSR *A = new CSR(numRows, numCols, i, j, v, is_1_based ? 1 : 0);
+  A->printSomeValues(distance);
 }
 
 void CSR_Destroy(CSR_Handle *A)
