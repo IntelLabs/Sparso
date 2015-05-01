@@ -21,10 +21,12 @@ function dprintln(level,msgs...)
     end 
 end
 
+const LIB_PATH = "../lib/libcsr.so"
+
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
 function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
-  ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
+  ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
@@ -34,26 +36,26 @@ function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector,
 end
 
 function CSR_Bandwidth(A::SparseMatrixCSC)
-   A2 = ccall((:CSR_Create, "../lib/libcsr.so"), Ptr{Void},
+   A2 = ccall((:CSR_Create, LIB_PATH), Ptr{Void},
          (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
          A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
-   bw = ccall((:CSR_GetBandwidth, "../lib/libcsr.so"), Cint,
+   bw = ccall((:CSR_GetBandwidth, LIB_PATH), Cint,
          (Ptr{Void},),
          A2)
-   ccall((:CSR_Destroy, "../lib/libcsr.so"), Void,
+   ccall((:CSR_Destroy, LIB_PATH), Void,
          (Ptr{Void},),
          A2)
    bw
 end
 
 function reorderVector(V::Vector, newV::Vector, P::Vector)
-   ccall((:reorderVector, "../lib/libcsr.so"), Void,
+   ccall((:reorderVector, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end
 
 function reverseReorderVector(V::Vector, newV::Vector, P::Vector)
-   ccall((:reorderVectorWithInversePerm, "../lib/libcsr.so"), Void,
+   ccall((:reorderVectorWithInversePerm, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(newV), pointer(P), length(V))
 end

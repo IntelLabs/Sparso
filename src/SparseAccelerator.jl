@@ -408,7 +408,7 @@ function SpMV(A::SparseMatrixCSC, x::Vector)
     if DEFAULT_LIBRARY == MKL_LIB
       SpMV!(y, A, x)
     elseif DEFAULT_LIBRARY == PCL_LIB
-      ccall((:CSR_MultiplyWithVector_1Based, "../lib/libcsr.so"), Void,
+      ccall((:CSR_MultiplyWithVector_1Based, LIB_PATH), Void,
               (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
                A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(x), pointer(y))
@@ -455,8 +455,6 @@ function SpMV!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Numbe
   end
   y
 end
-
-const LIB_PATH = "../lib/libcsr.so"
 
 function WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
   assert(length(x) == length(y))
