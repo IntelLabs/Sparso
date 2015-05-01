@@ -113,11 +113,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     assert(j != j1);    
     assert(v != v1);
     
-    CSR *A = new CSR(numRows, numCols, i, j, v, oneBasedOutput ? 1 : 0);
-    if (oneBasedInput) {
-        // The library assumes arrays are all 0-based indexing
-        A->make0BasedIndexing();
-    }
+    CSR *A = new CSR(numRows, numCols, i, j, v, oneBasedInput ? 1 : 0);
 
 #ifdef PERF_TUNE
     t2 = omp_get_wtime();
@@ -131,7 +127,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     t3 = omp_get_wtime();
 #endif
 
-    CSR *newA = new CSR(numRows, numCols, i1, j1, v1);
+    CSR *newA = new CSR(numRows, numCols, i1, j1, v1, oneBasedInput ? 1 : 0);
     A->permute(newA, perm, inversePerm);
     
 #ifdef PERF_TUNE
@@ -141,9 +137,8 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     if (oneBasedOutput) {
         newA->make1BasedIndexing();
     }
-    if (oneBasedInput) {
-        // Recover the inpt from 0-based to 1-based indexing
-        A->make1BasedIndexing();
+    else {
+        newA->make0BasedIndexing();
     }
     delete newA;
     delete A;

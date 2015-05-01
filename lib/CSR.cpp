@@ -346,8 +346,7 @@ int CSR::getBandwidth() const
   }
 }
 
-template<int BASE = 0>
-void printInDense_(const CSR *A)
+void printInDense(const CSR *A)
 {
   // Raw format
   printf("RowPtr: ");
@@ -355,11 +354,11 @@ void printInDense_(const CSR *A)
     printf("%d ", A->rowPtr[i]);
   }
   printf("\nColIdx: ");
-  for (int i = 0; i < A->rowPtr[A->m] - BASE; i++) {
+  for (int i = 0; i < A->rowPtr[A->m] - base; i++) {
     printf("%d ", A->colIdx[i]);
   }
   printf("\nValues: ");
-  for (int i = 0; i < A->rowPtr[A->m] - BASE; i++) {
+  for (int i = 0; i < A->rowPtr[A->m] - base; i++) {
     printf("%f ", A->values[i]);
   }
   printf("\n\n");
@@ -367,8 +366,8 @@ void printInDense_(const CSR *A)
   for (int i = 0; i < A->m; ++i) {
     int jj = 0;
     printf("%d: ", i);
-    for (int j = A->rowPtr[i] - BASE; j < A->rowPtr[i + 1] - BASE; ++j) {
-      int c = A->colIdx[j] - BASE;
+    for (int j = A->rowPtr[i] - base; j < A->rowPtr[i + 1] - base; ++j) {
+      int c = A->colIdx[j] - base;
       for ( ; jj < c; ++jj) printf("0 ");
       printf("%g ", A->values[j]);
       ++jj;
@@ -378,29 +377,17 @@ void printInDense_(const CSR *A)
   }
 }
 
-void CSR::printInDense() const
-{
-  if (0 == base) {
-    printInDense_<0>(this);
-  }
-  else {
-    assert(1 == base);
-    printInDense_<1>(this);
-  }
-}
-
 // print the CSR matrix every distance elements, as well as the first and 
 // the last 10 elements
-void CSR::printSomeValues(int distance, bool is_1_based) const
+void CSR::printSomeValues(int distance) const
 {
   fflush(stdout);
   printf("CSR values:\n");
   int count = 0;
-  int decrement = is_1_based ? 1 : 0;
-  int nnz = rowPtr[m] - decrement;
+  int nnz = rowPtr[m] - base;
   for (int i = 0; i < m; ++i) {
-    for (int j = rowPtr[i] - decrement; j < rowPtr[i + 1] - decrement; ++j) {
-      int c = colIdx[j] - decrement;
+    for (int j = rowPtr[i] - base; j < rowPtr[i + 1] - base; ++j) {
+      int c = colIdx[j] - base;
       if ((count % distance) == 0 || count < 10 || nnz - count < 10) {
           printf("%d %d %g\n", i + 1, c + 1, values[j]);
           // always print in 1-based for easier compare with .mtx file
