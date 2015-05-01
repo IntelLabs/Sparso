@@ -23,9 +23,11 @@ public :
   /**
    * get reverse Cuthill Mckee permutation that tends to reduce the bandwidth
    *
+   * @note only works for a symmetric matrix
+   *
    * @param source starting vertex (-1 to use pseudo diameter heuristic)
    */
-  void getRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
+  void getRCMPermutation(int *perm, int *inversePerm, int source = -1);
 
 #ifdef USE_BOOST
   void boostGetRCMPermutation(int *perm, int *inversePerm, int source = -1) const;
@@ -38,11 +40,13 @@ public :
 
   int getBandwidth() const;
 
+  bool isSymmetric(bool checkValues = true, bool printFirstAsymmetry = false) const;
+
   void make0BasedIndexing(); // assume it's originally in 1-based indexing. This function is not idempotent
   void make1BasedIndexing(); // assume it's originally in 0-based indexing.
 
   void printInDense() const;
-  void printSomeValues(int distance, bool is_1_based) const;
+  void printSomeValues(int distance) const;
 
   int m, n;
   int *rowPtr; // rowptr. rowPtr[0] = 0, rowPtr[m] = nnz

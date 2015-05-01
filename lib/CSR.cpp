@@ -346,61 +346,48 @@ int CSR::getBandwidth() const
   }
 }
 
-template<int BASE = 0>
-void printInDense_(const CSR *A)
+void CSR::printInDense() const
 {
   // Raw format
   printf("RowPtr: ");
-  for (int i = 0; i <= A->m; i++) {
-    printf("%d ", A->rowPtr[i]);
+  for (int i = 0; i <= m; i++) {
+    printf("%d ", rowPtr[i]);
   }
   printf("\nColIdx: ");
-  for (int i = 0; i < A->rowPtr[A->m] - BASE; i++) {
-    printf("%d ", A->colIdx[i]);
+  for (int i = 0; i < rowPtr[m] - base; i++) {
+    printf("%d ", colIdx[i]);
   }
   printf("\nValues: ");
-  for (int i = 0; i < A->rowPtr[A->m] - BASE; i++) {
-    printf("%f ", A->values[i]);
+  for (int i = 0; i < rowPtr[m] - base; i++) {
+    printf("%f ", values[i]);
   }
   printf("\n\n");
 
-  for (int i = 0; i < A->m; ++i) {
+  for (int i = 0; i < m; ++i) {
     int jj = 0;
     printf("%d: ", i);
-    for (int j = A->rowPtr[i] - BASE; j < A->rowPtr[i + 1] - BASE; ++j) {
-      int c = A->colIdx[j] - BASE;
+    for (int j = rowPtr[i] - base; j < rowPtr[i + 1] - base; ++j) {
+      int c = colIdx[j] - base;
       for ( ; jj < c; ++jj) printf("0 ");
-      printf("%g ", A->values[j]);
+      printf("%g ", values[j]);
       ++jj;
     }
-    for ( ; jj < A->m; ++jj) printf("0 ");
+    for ( ; jj < m; ++jj) printf("0 ");
     printf("\n");
-  }
-}
-
-void CSR::printInDense() const
-{
-  if (0 == base) {
-    printInDense_<0>(this);
-  }
-  else {
-    assert(1 == base);
-    printInDense_<1>(this);
   }
 }
 
 // print the CSR matrix every distance elements, as well as the first and 
 // the last 10 elements
-void CSR::printSomeValues(int distance, bool is_1_based) const
+void CSR::printSomeValues(int distance) const
 {
   fflush(stdout);
   printf("CSR values:\n");
   int count = 0;
-  int decrement = is_1_based ? 1 : 0;
-  int nnz = rowPtr[m] - decrement;
+  int nnz = rowPtr[m] - base;
   for (int i = 0; i < m; ++i) {
-    for (int j = rowPtr[i] - decrement; j < rowPtr[i + 1] - decrement; ++j) {
-      int c = colIdx[j] - decrement;
+    for (int j = rowPtr[i] - base; j < rowPtr[i + 1] - base; ++j) {
+      int c = colIdx[j] - base;
       if ((count % distance) == 0 || count < 10 || nnz - count < 10) {
           printf("%d %d %g\n", i + 1, c + 1, values[j]);
           // always print in 1-based for easier compare with .mtx file
@@ -595,4 +582,37 @@ void CSR::make1BasedIndexing()
 
     base = 1;
   }
+}
+
+bool CSR::isSymmetric(bool checkValues /*=true*/, bool printFirstAsymmetry /*=false*/) const
+{
+  for (int i = 0; i < m; ++i) {
+    for (int j = rowPtr[i] - base; j < rowPtr[i + 1] - base; ++j) {
+      int c = colIdx[j] - base;
+      if (c <= i) continue; // only check upper triangular
+
+      bool hasPair = false;
+      for (int k = rowPtr[c] - base; k < rowPtr[c + 1] - base; ++k) {
+        if (colIdx[k] - base == i) {
+          hasPair = true;
+          if (checkValues && values[j] != values[k]) {
+            if (printFirstAsymmetry) {
+              printf(
+                "%g at (%d, %d) != %g at (%d, %d)\n",
+                i + 1, c + 1, values[j], c + 1, i + 1, values[k]);
+            }
+            return false;
+          }
+          break;
+        }
+      }
+      if (!hasPair) {
+        if (printFirstAsymmetry) {
+          printf(
+            "(%d, %d) exists but (%d, %d) doesn't\n",
+            i + 1, c + 1, c + 1, i + 1);
+        }
+      }
+    } // for each non-zero
+  } // for each row
 }

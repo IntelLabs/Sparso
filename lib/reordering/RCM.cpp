@@ -529,8 +529,13 @@ private :
   const int *rowPtr_;
 };
 
-void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) const
+void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
 {
+  assert(isSymmetric());
+
+  int oldBase = base;
+  make0BasedIndexing();
+
   // 1. Start vertex
   double t;
   double sourceSelectionTime = 0, bfsTime = 0, prefixTime = 0, placeTime = 0;
@@ -733,4 +738,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/) con
   printf("bfsTime = %f\n", bfsTime);
   printf("prefixTime = %f\n", prefixTime);
   printf("placeTime = %f\n", placeTime);
+
+  if (1 == oldBase) {
+    make1BasedIndexing();
+  }
 }

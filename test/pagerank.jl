@@ -100,8 +100,7 @@ r = 0.15
 
 
 tests = 8
-times = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-idx = 1
+times = Float64[]
 
 for lib in [SparseAccelerator.PCL_LIB]
     SparseAccelerator.use_lib(lib)
@@ -114,6 +113,8 @@ for lib in [SparseAccelerator.PCL_LIB]
     end
     
     accelerated_time = 0.0
+    reorder_matrix_stats = Float64[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    ccall((:CSR_Statistics, "../lib/libcsr.so"), Void, (Ptr{Cdouble},), pointer(reorder_matrix_stats))
     for i = 1 : tests
         p = repmat([1/m], m)
         @acc original_loop_exec_time = pagerank(A, p, r)
@@ -121,9 +122,11 @@ for lib in [SparseAccelerator.PCL_LIB]
         accelerated_time += original_loop_exec_time
     end
         
-    times[idx] = original_time / tests
-    times[idx + 1] = accelerated_time / tests
-    idx += 2
+    push!(times, original_time / tests)
+    push!(times, accelerated_time / tests)
+    for i = 1 : 9
+        push!(times, reorder_matrix_stats[i]/tests)
+    end
 end
 
 file = open("pagerank.timing", "a")
