@@ -30,8 +30,8 @@ function cg(x, A, b, tol, maxiter)
         alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
         #x += alpha * p
         x = SparseAccelerator.WAXPBY(alpha, p, 1, x) # manual
-        r -= alpha * Ap
-        #r = SparseAccelerator.WAXPBY(-alpha, Ap, 1, r) # manual - FIXME: an error during acceleration
+        #r -= alpha * Ap
+        r = SparseAccelerator.WAXPBY(-alpha, Ap, 1, r) # manual - FIXME: an error during acceleration
         #rz = dot(r, r)
         rz = SparseAccelerator.Dot(r, r) # manual
         rel_err = sqrt(rz)/normr0
