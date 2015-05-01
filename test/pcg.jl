@@ -273,7 +273,7 @@ SparseAccelerator.use_lib(SparseAccelerator.PCL_LIB)
   b   = ones(Float64, N)
 
   tests = 8
-  times = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  times = Float64[]
 
   println("\n\n**** original cg perf")
   loop_exec_time = 0.0
@@ -286,10 +286,12 @@ SparseAccelerator.use_lib(SparseAccelerator.PCL_LIB)
       loop_exec_time += original_loop_exec_time
       println("Identity preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
-  times[1] = loop_exec_time / tests
+  push!(times, loop_exec_time / tests)
 
   println("\n\n**** accelerated cg perf")
   loop_exec_time = 0.0
+  reorder_matrix_stats = Float64[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  ccall((:CSR_Statistics, "../lib/libcsr.so"), Void, (Ptr{Cdouble},), pointer(reorder_matrix_stats))
   for i = 1:tests
       x   = zeros(Float64, N)
       @acc result = cg(x, A, b, tol, maxiter)
@@ -300,7 +302,10 @@ SparseAccelerator.use_lib(SparseAccelerator.PCL_LIB)
       loop_exec_time += original_loop_exec_time
       println("Identity preconditioner: $k iterations $err error $original_loop_exec_time sec.")
   end
-  times[2] = loop_exec_time / tests
+  push!(times, loop_exec_time / tests)
+  for i = 1 : size(reorder_matrix_stats, 1)
+    push!(times, reorder_matrix_stats[i] / tests)
+  end
 
   #println("\n\n**** original pcg_jacobi perf")
   #loop_exec_time = 0.0

@@ -85,6 +85,14 @@ void CSR_Destroy(CSR_Handle *A)
   delete (CSR *)A;
 }
 
+#ifdef PERF_TUNE
+static double* stats = NULL;
+void CSR_Statistics(double *_stats)
+{
+    stats = _stats;
+}
+#endif
+
 // The first few parameters (numRows to v) represent the source matrix to be reordered. The next few
 // parameters (i1~v1) are the spaces that have been allocated to store the results. 
 // Perm and inversePerm are the spaces that have been allocated for permutation and inverse permutation
@@ -95,8 +103,9 @@ void CSR_Destroy(CSR_Handle *A)
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput)
 {
+    double t1, t2, t3, t4, t5;
 #ifdef PERF_TUNE
-    double t1 = omp_get_wtime();
+    t1 = omp_get_wtime();
 #endif
 
     // The original and the result array space must be different
@@ -111,7 +120,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     }
 
 #ifdef PERF_TUNE
-    double t2 = omp_get_wtime();
+    t2 = omp_get_wtime();
 #endif
 
     if (getPermutation) {
@@ -119,14 +128,14 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     }
 
 #ifdef PERF_TUNE
-    double t3 = omp_get_wtime();
+    t3 = omp_get_wtime();
 #endif
 
     CSR *newA = new CSR(numRows, numCols, i1, j1, v1);
     A->permute(newA, perm, inversePerm);
     
 #ifdef PERF_TUNE
-    double t4 = omp_get_wtime();
+    t4 = omp_get_wtime();
 #endif
 
     if (oneBasedOutput) {
@@ -140,16 +149,27 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     delete A;
 
 #ifdef PERF_TUNE
-    double t5 = omp_get_wtime();
-    double bytes = (double)i[numRows]*12;
-
-    printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
-    printf("\tmake 0 based: %f sec (%f GB/s)\n", t2 - t1, bytes/(t2 - t1)/1e9);
-    printf("\tCSR_GetRCMPemutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
-    printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
-    printf("\tmake 1 based: %f sec (%f GB/s)\n", t5 - t4, bytes/(t5 - t4)/1e9);
-    fflush(stdout);
+        t5 = omp_get_wtime();
+        double bytes = (double)i[numRows]*12;
+        stats[0] += t5 - t1;
+        stats[1] += t2 - t1;
+        stats[2] += bytes/(t2 - t1)/1e9;
+        stats[3] += t3 - t2;
+        stats[4] += bytes/(t3 - t2)/1e9;
+        stats[5] += t4 - t3;
+        stats[6] += bytes/(t4 - t3)/1e9;
+        stats[7] += t5 - t4;
+        stats[8] += bytes/(t5 - t4)/1e9;
+    
+#if 0
+        printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
+        printf("\tmake 0 based: %f sec (%f GB/s)\n", t2 - t1, bytes/(t2 - t1)/1e9);
+        printf("\tCSR_GetRCMPemutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
+        printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
+        printf("\tmake 1 based: %f sec (%f GB/s)\n", t5 - t4, bytes/(t5 - t4)/1e9);
+        fflush(stdout);
 #endif
-}
 
+#endif
+    }
 }
