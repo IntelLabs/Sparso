@@ -1,0 +1,6 @@
+# This file tells what the data in the *.timing files represent
+# Use this for calculating speedup, or debugging
+# RM means "CSR_ReorderMatrix".
+# all the data are about "time" in seconds, except "BW(bandwidth)" in GB/s
+
+original_loop accelerated_loop RM_total make_0_based make_0_based_BW RCM RCM_BW permute permute_BW make_1_based maek_1_based_BW 
