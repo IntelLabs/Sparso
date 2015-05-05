@@ -470,6 +470,19 @@ function WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
   w
 end
 
+function WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
+  assert(length(x) == length(y))
+  assert(length(x) == length(w))
+
+  if DEFAULT_LIBRARY == PCL_LIB
+    ccall((:waxpby, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
+          length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
+  else
+    w = alpha*x + beta*y
+  end
+end
+
 function Dot(x::Vector, y::Vector)
   assert(length(x) == length(y))
 
