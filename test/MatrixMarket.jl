@@ -48,9 +48,9 @@ function mmread(filename, infoonly::Bool)
     assert(m ==n)
     nnz::Cint = sizes[4]  #Note: if symmetric, nnz includes elements in both upper and lower triangle 
     
-    v::Vector{Cdouble} = Vector{Cdouble}(nnz)
-    i::Vector{Cint} = Vector{Cint}(nnz)
-    j::Vector{Cint} = Vector{Cint}(n + 1)
+    v = Array(Cdouble, nnz)
+    i = Array(Cint, nnz)
+    j = Array(Cint, n + 1)
     
     A = SparseMatrixCSC{Cdouble, Cint}(m, n, j, i, v)
 
