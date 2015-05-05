@@ -9,6 +9,8 @@ using Base.Test
 
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
+#SparseAccelerator.LivenessAnalysis.set_debug_level(3)
+#SparseAccelerator.set_debug_level(3)
 
 function cg(x, A, b, tol, maxiter)
     tic()
@@ -23,25 +25,25 @@ function cg(x, A, b, tol, maxiter)
     while k <= maxiter
         old_rz = rz
         time3 = time()
-        #Ap = A*p
-        Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
+        Ap = A*p
+        #Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
         spmv_time += time() - time3
-        #alpha = old_rz / dot(p, Ap)
-        alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
-        #x += alpha * p
-        x = SparseAccelerator.WAXPBY(alpha, p, 1, x) # manual
-        #r -= alpha * Ap
-        r = SparseAccelerator.WAXPBY(-alpha, Ap, 1, r) # manual - FIXME: an error during acceleration
-        #rz = dot(r, r)
-        rz = SparseAccelerator.Dot(r, r) # manual
+        alpha = old_rz / dot(p, Ap)
+        #alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
+        x += alpha * p
+        #x = SparseAccelerator.WAXPBY(alpha, p, 1, x) # manual
+        r -= alpha * Ap
+        #r = SparseAccelerator.WAXPBY(-alpha, Ap, 1, r) # manual - FIXME: an error during acceleration
+        rz = dot(r, r)
+        #rz = SparseAccelerator.Dot(r, r) # manual
         rel_err = sqrt(rz)/normr0
         #println(rel_err)
         if rel_err < tol 
             break
         end
         beta = rz/old_rz
-        #p = r + beta * p
-        p = SparseAccelerator.WAXPBY(1, r, beta, p) # manual
+        p = r + beta * p
+        #p = SparseAccelerator.WAXPBY(1, r, beta, p) # manual
         k += 1
     end
     time2 = time()
@@ -66,8 +68,8 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-#        Ap = A*p
-        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = A*p
+#        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -188,8 +190,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-#        Ap = A*p
-        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = A*p
+#        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
@@ -229,8 +231,8 @@ function pcg(x, A, b, M, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-#        Ap = A*p
-        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = A*p
+#        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap

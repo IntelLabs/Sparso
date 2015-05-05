@@ -61,7 +61,12 @@ Inverse is reorderable in theory, but not for some implementation with assumptio
 For example, inverse of triangular matrix is not reorderable, since that breaks the assumption of
 the triangular solver.
 
-Also, print of a matrix cannot be reordered, because that breaks the expectation of the users.
+Also, read/write/print of a matrix cannot be reordered, because that breaks the expectation of the users.
+If we must do so, we need to reverse reorder before the read/write/printing. In general, before acessing
+any array element, we must reverse reorder.
+
+Reverse reorder a vector is cheap, since it changes A[i] to A[permute[i]]. So if reverse reordering involves only
+a vector, we can make it happen, and then read/write/print it is not an issue any more.
 
 If user requires "bitwise reproducibility", we cannot do reordering either, since floating-point 
 operations are not associable.
@@ -101,3 +106,54 @@ After IAs are found for all statements in a loop, we can decide the following se
 Then 
     reorderedBeforeL = intersect(reordered, headBlock.live_in)
             
+
+***** Initial thoughts about memoizing a reordered matrix into a file, and reusing it from the file:
+Optimize a region. A region has a single entry, 1 or more exits. It may have internal
+control flow, and thus not necessarily a superblock. At the entry of the region, there
+must be a sparse matrix live, which is the initial matrix to reorder. 
+
+Interface is still @acc func()
+A typical func() is written in this style, but not necessarily so:
+    # Read data from file
+    M = MartrixMarket.mm_read(file name)
+    
+    # Compute 
+    .....
+    
+    # Output
+    println(....)
+    
+For func(), compiler does the following: 
+(1) Identify a region. 
+
+First, find the sparse matrix that results in the biggest speedup if reordered. This requires
+us to enumerate all sparse matrices, and for each, calculate the benefit from all the operations that 
+are directly or indirectly affected by it, and the cost from reordering and reverse reordering 
+of all the matrices (including itself), and finally the benifit-cost.
+
+For now, we can simply take the first sparse matrix read from a file, as long as it dominates all exits of the function.
+If there is no such a matrix, take the first sparse matrix in the function argument.
+
+Second, find a program point where this sparse matrix is live. We will insert reordering of this matrix,
+and may be others, here. Our previous analysis discussed above actually assumes that
+a loop entry is such a point.
+
+Third, region formation: grow from the program point to form a region. Our previous analysis discussed above actually assumes
+that a loop is a region.
+
+For now, we take only two kinds of program points: (a) the point right after reading a matrix
+from a file (to be simple, we further require the point dominates all the exits of the function),
+or if there is no such a point, (b) the entry point of the function.
+
+(2) check all statements inside the region is distributive. 
+This step can be ignored, if during region formation, every statement has been ensured to be
+distributive.
+
+(3) insert reordering  at the region entry, and reverse reordering at each region exit.
+
+If the region entry is right after reading a matrix from a file, then this matrix is the initial 
+matrix to be reordered. We can merge the reordering of it with that matrix reading: if a companion 
+reordered matrix file exists, read from that file secretely.
+
+The reordered matrix file is already in CSC representation. Thus we can directly construct its
+Julia memory representation. Also it contains permutation vector P and P'. All are 1-based.  

@@ -1,25 +1,25 @@
 export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
-DEBUG_LVL=0
+#DEBUG_LVL=0
 
-function set_debug_level(x)
-    global DEBUG_LVL = x
-end
-
-# A debug print routine.
-function dprint(level,msgs...)
-    if(DEBUG_LVL >= level)
-        print(msgs...)
-    end 
-end
+#function set_debug_level(x)
+#    global DEBUG_LVL = x
+#end
 
 # A debug print routine.
-function dprintln(level,msgs...)
-    if(DEBUG_LVL >= level)
-        println(msgs...)
-    end 
-end
+#function dprint(level,msgs...)
+#    if(DEBUG_LVL >= level)
+#        print(msgs...)
+#    end 
+#end
+
+# A debug print routine.
+#function dprintln(level,msgs...)
+#    if(DEBUG_LVL >= level)
+#        println(msgs...)
+#    end 
+#end
 
 const LIB_PATH = "../lib/libcsr.so"
 
@@ -213,6 +213,29 @@ function findIA(currentNode, IA, seeds, symbolInfo, i)
     end
 end
 
+function deepType(x)
+    if typeof(x) == SymbolNode
+        return x.typ
+    elseif typeof(x) == Expr
+        return x.typ
+    else
+        return typeof(x)
+    end
+end
+
+function isMul(x)
+  if typeof(x) == Expr && x.head == :call && x.args[1] == :(*)
+    lhs = x.args[2]
+    rhs = x.args[3]
+    if deepType(lhs) <: Number && deepType(rhs) <: Vector
+      return (true,lhs,rhs)
+    elseif deepType(rhs) <: Number && deepType(lhs) <: Vector
+      return (true,rhs,lhs)
+    end
+  end
+  return (false,nothing,nothing)
+end
+
 function optimize_calls(ast, state, top_level_number, is_top_level, read)
   asttyp = typeof(ast)
   if asttyp == Expr && ast.head == :call
@@ -238,15 +261,101 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
           return ast
         end
       end
-    elseif ast.args[1] == :(*)
-      dprintln(3,"optimize_calls found *")
-      A = ast.args[2]
-      x = ast.args[3]
-      if A.typ <: SparseMatrixCSC && x.typ <: Vector
-        dprintln(3,"optimize_calls converting to SpMV")
-        ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV))
+    elseif ast.args[1] == :dot
+      dprintln(3,"optimize_calls found :dot ", ast)
+      assert(length(ast.args) == 3)
+      ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+      ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+      arg1 = ast.args[2]
+      arg2 = ast.args[3]
+      dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
+      if deepType(arg1) <: Vector && deepType(arg2) <: Vector
+        dprintln(3,"optimize_calls converting to SparseAccelerator.Dot")
+        ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:Dot))
+      end
+      return ast
+    elseif ast.args[1] == :(+)
+      if length(ast.args) == 3
+        dprintln(3,"optimize_calls found +")
+        ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+        ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+        arg1 = ast.args[2]
+        arg2 = ast.args[3]
+        dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
+        if deepType(arg1) <: Vector && deepType(arg2) <: Vector 
+          (is_mul1, scalar1, vec1) = isMul(arg1)
+          (is_mul2, scalar2, vec2) = isMul(arg2)
+          dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
+          if is_mul1 || is_mul2 || true
+            orig_args = ast.args
+            ast.args = Array(Any,5)
+            dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
+            ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
+            if is_mul1
+              ast.args[2] = scalar1
+              ast.args[3] = vec1
+            else
+              ast.args[2] = 1
+              ast.args[3] = arg1
+            end
+            if is_mul2
+              ast.args[4] = scalar2
+              ast.args[5] = vec2
+            else
+              ast.args[4] = 1
+              ast.args[5] = arg2
+            end
+          end
+        end
         return ast
       end
+    elseif ast.args[1] == :(-)
+      if length(ast.args) == 3
+        dprintln(3,"optimize_calls found -")
+        ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+        ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+        arg1 = ast.args[2]
+        arg2 = ast.args[3]
+        dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
+        if deepType(arg1) <: Vector && deepType(arg2) <: Vector 
+          (is_mul1, scalar1, vec1) = isMul(arg1)
+          (is_mul2, scalar2, vec2) = isMul(arg2)
+          dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
+          if is_mul1 || is_mul2 || true
+            orig_args = ast.args
+            ast.args = Array(Any,5)
+            dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
+            ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
+            if is_mul1
+              ast.args[2] = scalar1
+              ast.args[3] = vec1
+            else
+              ast.args[2] = 1
+              ast.args[3] = arg1
+            end
+            if is_mul2
+              ast.args[4] = LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
+              ast.args[5] = vec2
+            else
+              ast.args[4] = -1
+              ast.args[5] = arg2
+            end
+          end
+        end
+        return ast
+      end
+    elseif ast.args[1] == :(*)
+      dprintln(3,"optimize_calls found *")
+      ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+      ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+      arg1 = ast.args[2]
+      arg2 = ast.args[3]
+      dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
+      if deepType(arg1) <: SparseMatrixCSC && deepType(arg2) <: Vector
+        dprintln(3,"optimize_calls converting to SparseAccelerator.SpMV")
+        ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV))
+      end
+      return ast
     end
   end
   return nothing
@@ -292,7 +401,7 @@ function reorderLoop(L, M, lives, symbolInfo)
     IAs = Dict{Any, Set}()    
     for bbnum in L.members
         for stmt_index = 1:length(bbs[bbnum].statements)
-            # Replace calls to A_mul_B! with calls to SpMV!
+            # Replace calls to optimized versions provided in SparseAccelerator module.
             bbs[bbnum].statements[stmt_index].expr = AstWalker.get_one(AstWalker.AstWalk(bbs[bbnum].statements[stmt_index].expr, optimize_calls, nothing))
             stmt = bbs[bbnum].statements[stmt_index]
             IAs[stmt] = Set{Any}()
