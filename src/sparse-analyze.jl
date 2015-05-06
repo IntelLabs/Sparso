@@ -236,6 +236,32 @@ function isMul(x)
   return (false,nothing,nothing)
 end
 
+function isWaxpby(node)
+  if typeof(node)         == Expr && node.head         == :call && 
+     typeof(node.args[1]) == Expr && node.args[1].head == :call && 
+     node.args[1].args[1] == TopNode(:getfield) && node.args[1].args[2] == :SparseAccelerator && node.args[1].args[3] == QuoteNode(:WAXPBY)
+    return (true, getSName(node.args[3]), getSName(node.args[5]))
+  end
+  return (false, nothing, nothing)
+end
+
+function getSName(ssn)
+  stype = typeof(ssn)
+  if stype == Symbol
+    return ssn
+  elseif stype == SymbolNode
+    return ssn.name
+  elseif stype == Expr && ssn.head == :(::)
+    return ssn.args[1]
+  end
+
+  dprintln(0, "getSName ssn = ", ssn, " stype = ", stype)
+  if stype == Expr
+    dprintln(0, "ssn.head = ", ssn.head)
+  end
+  throw(string("getSName called with something of type ", stype))
+end
+
 function optimize_calls(ast, state, top_level_number, is_top_level, read)
   asttyp = typeof(ast)
   if asttyp == Expr && ast.head == :call
@@ -357,6 +383,20 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
       end
       return ast
     end
+  elseif asttyp == Expr && ast.head == :(=)
+    dprintln(3,"optimize_calls found = ", ast)
+    ast.args[1] = AstWalker.get_one(AstWalker.AstWalk(ast.args[1], optimize_calls, nothing))
+    ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+    dprintln(3,"after recursive optimization ", ast)
+    (rhs_waxpby, rhs_x, rhs_y) = isWaxpby(ast.args[2])
+    dprintln(3, "rhs_waxpby = ", rhs_waxpby, " ", rhs_x, " ", rhs_y)
+    if rhs_waxpby && (ast.args[1] == rhs_x || ast.args[1] == rhs_y)
+      dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY!")
+      ast.args[2].args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!))
+      splice!(ast.args[2].args, 2:5, [ast.args[1]; ast.args[2].args[2:5]])
+      ast = ast.args[2]
+    end
+    return ast
   end
   return nothing
 end
