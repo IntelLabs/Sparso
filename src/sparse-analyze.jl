@@ -36,15 +36,11 @@ function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector,
 end
 
 function CSR_Bandwidth(A::SparseMatrixCSC)
-   A2 = ccall((:CSR_Create, LIB_PATH), Ptr{Void},
-         (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-         A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+   A2 = CreateCSR(A)
    bw = ccall((:CSR_GetBandwidth, LIB_PATH), Cint,
          (Ptr{Void},),
          A2)
-   ccall((:CSR_Destroy, LIB_PATH), Void,
-         (Ptr{Void},),
-         A2)
+   DestroyCSR(A2)
    bw
 end
 
