@@ -67,6 +67,15 @@ void pointwiseDivide_(int n, T *w, const T *x, const T *y)
   }
 }
 
+template<class T>
+void pointwiseMultiply_(int n, T *w, const T *x, const T *y)
+{
+#pragma omp parallel for
+  for (int i = 0; i < n; ++i) {
+    w[i] = x[i]*y[i];
+  }
+}
+
 extern "C" {
 
 void reorderVector(double *v, double *tmp, const int *perm, int len)
@@ -112,6 +121,11 @@ double dot(int n, const double *x, const double *y)
 void pointwiseDivide(int n, double *w, const double *x, const double *y)
 {
   pointwiseDivide_(n, w, x, y);
+}
+
+void pointwiseMultiply(int n, double *w, const double *x, const double *y)
+{
+  pointwiseMultiply_(n, w, x, y);
 }
 
 void waxpb(int n, double *w, double alpha, const double *x, double beta)
