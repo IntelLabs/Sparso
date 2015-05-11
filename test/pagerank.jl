@@ -10,36 +10,26 @@ sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
 
 function pagerank(A, p, r) # p: initial rank, r: damping factor
-  tic()
-  # The following convert is needed so Julia doesn't give the result of "vec" to be of type Array{T,N}.
-  # We are smarter here and convert to exactly the right type.  Without this convert, d and q will be
-  # of a union type and SpMV using q won't be recognized as distributive.
-  d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
-  spmv_time = 0.0
-  time1 = time()
   repeat = 100
+  Ap = copy(p)
+
+  time1 = time()
   for i = 1:repeat
-    #q = p./d
-    q = SparseAccelerator.PointwiseDivide(p, d) # manual
+    SparseAccelerator.SpMV!(Ap, 1 - r, A, p, 0, p, r) # manual
 
-    time3 = time()
-    #Aq = A*q
-    Aq = SparseAccelerator.SpMV(A, q) # manual
-    spmv_time += time() - time3
-
-    #p2 = r + (1-r)*Aq
-    p2 = SparseAccelerator.WAXPB(1 - r, Aq, r) # manual
     if i == repeat
-      println("Error = $(norm(p - p2)/norm(p))") # print out convergence
+      println("Error = $(norm(p - Ap)/norm(p))") # print out convergence
     end
 
-    p = p2
+    temp = p
+    p = Ap
+    Ap = temp
   end
   time2 = time()
+
   original_loop_exec_time = time2 - time1
   println("Time of original loop= ", time2 - time1, " seconds")  
-  println("SpMV time = $spmv_time, BW (GB/s) = ", nnz(A)*12.*100/spmv_time/1e9)
-  toc()
+  println("SpMV BW (GB/s) = $(nnz(A)*12.*100/(time2 - time1)/1e9)\n")
   original_loop_exec_time
 end
 
@@ -98,6 +88,8 @@ m = size(A, 1)
 p = repmat([1/m], m)
 r = 0.15
 
+d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
+A = scale(A,1./d)
 
 tests = 8
 times = Float64[]
@@ -113,7 +105,7 @@ for lib in [SparseAccelerator.PCL_LIB]
     end
     
     accelerated_time = 0.0
-    reorder_matrix_stats = Float64[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    reorder_matrix_stats = Float64[0.0, 0.0, 0.0]
     ccall((:CSR_Statistics, "../lib/libcsr.so"), Void, (Ptr{Cdouble},), pointer(reorder_matrix_stats))
     for i = 1 : tests
         p = repmat([1/m], m)
