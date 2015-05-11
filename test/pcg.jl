@@ -13,8 +13,10 @@ OptFramework.setOptPasses([sparse_pass])
 #SparseAccelerator.set_debug_level(3)
 
 function cg(x, A, b, tol, maxiter)
-    tic()
     spmv_time = 0.0
+    dot_time = 0.0
+    waxpby_time = 0.0
+
     r = b - A * x
     rel_err = 1
     p = copy(r) #NOTE: do not write "p=r"! That would make p and r aliased (the same variable)
@@ -24,38 +26,58 @@ function cg(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-        time3 = time()
-        Ap = A*p
-        #Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
-        spmv_time += time() - time3
-        alpha = old_rz / dot(p, Ap)
-        #alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
-        x += alpha * p
-        #x = SparseAccelerator.WAXPBY(alpha, p, 1, x) # manual
-        r -= alpha * Ap
-        #r = SparseAccelerator.WAXPBY(-alpha, Ap, 1, r) # manual - FIXME: an error during acceleration
-        rz = dot(r, r)
-        #rz = SparseAccelerator.Dot(r, r) # manual
+
+        spmv_time -= time()
+        #Ap = A*p
+        Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
+        spmv_time += time()
+
+        dot_time -= time()
+        #alpha = old_rz / dot(p, Ap)
+        alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
+        dot_time += time()
+
+        waxpby_time -= time()
+        #x += alpha * p
+        SparseAccelerator.WAXPBY!(x, alpha, p, 1, x) # manual
+        #r -= alpha * Ap
+        SparseAccelerator.WAXPBY!(r, -alpha, Ap, 1, r) # manual
+        waxpby_time += time()
+
+        dot_time -= time()
+        #rz = dot(r, r)
+        rz = SparseAccelerator.Dot(r, r) # manual
+        dot_time += time()
+
         rel_err = sqrt(rz)/normr0
         #println(rel_err)
         if rel_err < tol 
             break
         end
         beta = rz/old_rz
-        p = r + beta * p
-        #p = SparseAccelerator.WAXPBY(1, r, beta, p) # manual
+
+        waxpby_time -= time()
+        #p = r + beta * p
+        SparseAccelerator.WAXPBY!(p, 1, r, beta, p) # manual
+        waxpby_time += time()
+
         k += 1
     end
     time2 = time()
     original_loop_exec_time = time2 - time1
     println("Time of original loop= ", time2 - time1, " seconds")
     println("SpMV time = $spmv_time, BW (GB/s) = ", nnz(A)*12.*(k - 1)/spmv_time/1e9)
-    toc()
+    println("WAXPBY time = $waxpby_time, BW (GB/s) = ", (k-1)*3.*2*8*length(p)/waxpby_time/1e9)
+    println("dot time = $dot_time, BW (GB/s) = ", (k-1)*2.*2*8*length(p)/dot_time/1e9)
     return x, k, rel_err, original_loop_exec_time
 end
 
 function pcg_jacobi(x, A, b, tol, maxiter)
-    tic()
+    spmv_time = 0.
+    dot_time = 0.
+    waxpby_time = 0.
+    jacobi_time = 0.
+
     inv_d = 1./diag(A)
 
     r = b - A * x
@@ -68,26 +90,61 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     time1 = time()
     while k <= maxiter
         old_rz = rz
-        Ap = A*p
-#        Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
-        alpha = old_rz / dot(p, Ap)
-        x += alpha * p
-        r -= alpha * Ap
-        rel_err = norm(r)/normr0
+
+        spmv_time -= time()
+        #Ap = A*p
+        Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
+        spmv_time += time()
+
+        dot_time -= time()
+        #alpha = old_rz / dot(p, Ap)
+        alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
+        dot_time += time()
+
+        waxpby_time -= time()
+        #x += alpha * p
+        SparseAccelerator.WAXPBY!(x, alpha, p, 1, x) # manual
+        #r -= alpha * Ap
+        SparseAccelerator.WAXPBY!(r, -alpha, Ap, 1, r) # manual
+        waxpby_time += time()
+
+        dot_time -= time()
+        #rel_err = sqrt(dot(r, r))/normr0
+        rel_err = sqrt(SparseAccelerator.Dot(r, r))/normr0 # manual
+        dot_time += time()
+
         #println(rel_err)
         if rel_err < tol 
             break
         end
-        z = inv_d .* r  
-        rz = dot(r, z)
+
+        jacobi_time -= time()
+        #z = inv_d .* r  
+        #SparseAccelerator.PointwiseMultiply!(z, inv_d, r)
+        z = SparseAccelerator.PointwiseMultiply(inv_d, r) # manual
+        jacobi_time += time()
+
+        dot_time -= time()
+        #rz = dot(r, z)
+        rz = SparseAccelerator.Dot(r, z) # manual
+        dot_time += time()
+
         beta = rz/old_rz
-        p = z + beta * p
+
+        waxpby_time -= time()
+        #p = z + beta * p
+        SparseAccelerator.WAXPBY!(p, 1, z, beta, p) # manual
+        waxpby_time += time()
+
         k += 1
     end
     time2 = time()
     original_loop_exec_time = time2 - time1
     println("Time of original loop= ", time2 - time1, " seconds")
-    toc()
+    println("SpMV time = $spmv_time, BW (GB/s) = ", nnz(A)*12.*(k - 1)/spmv_time/1e9)
+    println("WAXPBY time = $waxpby_time, BW (GB/s) = ", (k-1)*3.*3*8*length(p)/waxpby_time/1e9)
+    println("dot time = $dot_time, BW (GB/s) = ", (k-1)*3.*2*8*length(p)/dot_time/1e9)
+    println("Jacobi time = $jacobi_time, BW (GB/s) = ", (k-1)*3.*8*length(p)/jacobi_time/1e9)
     return x, k, rel_err, original_loop_exec_time
 end
 
@@ -277,7 +334,7 @@ SparseAccelerator.use_lib(SparseAccelerator.PCL_LIB)
   tests = 8
   times = Float64[]
 
-  println("\n\n**** original cg perf")
+  println("\n**** original cg perf")
   loop_exec_time = 0.0
   for i = 1:tests
       x   = zeros(Float64, N)
@@ -290,9 +347,9 @@ SparseAccelerator.use_lib(SparseAccelerator.PCL_LIB)
   end
   push!(times, loop_exec_time / tests)
 
-  println("\n\n**** accelerated cg perf")
+  println("\n**** accelerated cg perf")
   loop_exec_time = 0.0
-  reorder_matrix_stats = Float64[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  reorder_matrix_stats = Float64[0.0, 0.0, 0.0]
   ccall((:CSR_Statistics, "../lib/libcsr.so"), Void, (Ptr{Cdouble},), pointer(reorder_matrix_stats))
   for i = 1:tests
       x   = zeros(Float64, N)
@@ -309,28 +366,28 @@ SparseAccelerator.use_lib(SparseAccelerator.PCL_LIB)
     push!(times, reorder_matrix_stats[i] / tests)
   end
 
-  #println("\n\n**** original pcg_jacobi perf")
-  #loop_exec_time = 0.0
-  #for i = 1:tests
-      #x   = zeros(Float64, N)
-      #x, k, err, original_loop_exec_time = pcg_jacobi(x, A, b, tol, maxiter)
-      ##@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
-      #loop_exec_time += original_loop_exec_time
-      #println("Jacobi preconditioner: $k iterations $err error $original_loop_exec_time sec.")
-  #end
-  #times[3] = loop_exec_time / tests
+  println("\n**** original pcg_jacobi perf")
+  loop_exec_time = 0.0
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      x, k, err, original_loop_exec_time = pcg_jacobi(x, A, b, tol, maxiter)
+      #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
+      loop_exec_time += original_loop_exec_time
+      println("Jacobi preconditioner: $k iterations $err error $original_loop_exec_time sec.")
+  end
+  push!(times, loop_exec_time / tests)
 
-  #println("\n\n**** accelerated pcg_jacobi perf")
-  #loop_exec_time = 0.0
-  #for i = 1:tests
-      #x   = zeros(Float64, N)
-      #@acc result = pcg_jacobi(x, A, b, tol, maxiter)
-      #x, k, err, original_loop_exec_time = result
-      ##@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
-      #loop_exec_time += original_loop_exec_time
-      #println("Jacobi preconditioner: $k iterations $err error $original_loop_exec_time sec.")
-  #end
-  #times[4] = loop_exec_time / tests
+  println("\n**** accelerated pcg_jacobi perf")
+  loop_exec_time = 0.0
+  for i = 1:tests
+      x   = zeros(Float64, N)
+      @acc result = pcg_jacobi(x, A, b, tol, maxiter)
+      x, k, err, original_loop_exec_time = result
+      #@time x, k, err = pcg(x, A, b, spdiagm(diag(A)), tol, maxiter)
+      loop_exec_time += original_loop_exec_time
+      println("Jacobi preconditioner: $k iterations $err error $original_loop_exec_time sec.")
+  end
+  push!(times, loop_exec_time / tests)
 
   #println("\n\n**** original pcg_symgs perf")
   #loop_exec_time = 0.0
