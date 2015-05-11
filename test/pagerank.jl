@@ -13,9 +13,13 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
   repeat = 100
   Ap = copy(p)
 
+  spmv_time = 0.0
+
   time1 = time()
   for i = 1:repeat
+    spmv_time -= time()
     SparseAccelerator.SpMV!(Ap, 1 - r, A, p, 0, p, r) # manual
+    spmv_time += time()
 
     if i == repeat
       println("Error = $(norm(p - Ap)/norm(p))") # print out convergence
@@ -29,7 +33,7 @@ function pagerank(A, p, r) # p: initial rank, r: damping factor
 
   original_loop_exec_time = time2 - time1
   println("Time of original loop= ", time2 - time1, " seconds")  
-  println("SpMV BW (GB/s) = $(nnz(A)*12.*100/(time2 - time1)/1e9)\n")
+  println("SpMV time = $spmv_time, BW (GB/s) = $(nnz(A)*12.*100/spmv_time/1e9)\n")
   original_loop_exec_time
 end
 
