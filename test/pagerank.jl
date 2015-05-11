@@ -116,7 +116,7 @@ for lib in [SparseAccelerator.PCL_LIB]
         
     push!(times, original_time / tests)
     push!(times, accelerated_time / tests)
-    for i = 1 : 9
+    for i = 1 : 3
         push!(times, reorder_matrix_stats[i]/tests)
     end
 end
