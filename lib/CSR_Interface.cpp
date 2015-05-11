@@ -154,7 +154,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
         double bytes = (double)i[numRows]*12;
         stats[0] += t5 - t1;
         stats[1] += t3 - t2;
-        stats[3] += t4 - t3;
+        stats[2] += t4 - t3;
     
 #if 0
         printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
