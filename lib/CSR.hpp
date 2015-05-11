@@ -17,6 +17,14 @@ public :
    * Compute y = A*x
    */
   void multiplyWithVector(double *y, const double *x) const;
+  /**
+   * Compute w = alpha*A*x + beta*Y + gamma
+   */
+  void multiplyWithVector(
+    double *w,
+    double alpha, const double *x,
+    double beta, const double *y,
+    double gamma) const;
 
   //void transpose(CSR *out) const;
 

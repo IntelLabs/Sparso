@@ -16,7 +16,13 @@ int CSR_GetNumRows(CSR_Handle *A);
 int CSR_GetNumCols(CSR_Handle *A);
 int CSR_GetNumNonZeros(CSR_Handle *A);
 
-void CSR_MultiplyWithVector(const CSR_Handle *A, double *y, const double *x);
+// w = alpha*A*x + beta*y + gamma
+void CSR_MultiplyWithVector(
+  double *w,
+  double alpha, const CSR_Handle *A, const double *x,
+  double beta, const double *y,
+  double gamma);
+
 void CSR_GetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
 #ifdef USE_BOOST
@@ -41,13 +47,12 @@ void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm
 void waxpby(int n, double *w, double alpha, const double *x, double beta, const double *y);
 // return dot(x*y)
 double dot(int n, const double *x, const double *y);
-// w = x/.y
+// w = x./y
 void pointwiseDivide(int n, double *w, const double *x, const double *y);
+// w = x.*y
+void pointwiseMultiply(int n, double *w, const double *x, const double *y);
 // w = alpha*x + beta
 void waxpb(int n, double *w, double alpha, const double *x, double beta);
-
-// A temporary workaround.
-void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y);
 
 #ifdef __cplusplus
 }

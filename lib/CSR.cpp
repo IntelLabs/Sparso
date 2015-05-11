@@ -133,14 +133,23 @@ void permuteRowPtr_(CSR* out, const CSR *in, const int *inversePerm)
   } // omp parallel
 }
 
-  /**
-   * Compute y = A*x
-   */
+/**
+ * Compute w = alpha*A*x + beta*y + gamma
+ */
+
 // TODO: remove this once MKL libray call is fine, or when reusing 
 // works so that we can convert 0 to 1 based only once in the loop
 // This is a temporary workaround. To remove in future.
-template<int BASE = 0>
-void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, const double* values, const double *x, double *y)
+template<class T, int BASE = 0>
+void CSR_MultiplyWithVector_(
+  int num_rows,
+  T *w,
+  T alpha,
+  const int *rowPtr, const int *colIdx, const T* values,
+  const T *x,
+  T beta,
+  const T *y,
+  T gamma)
 {
 //#define MEASURE_LOAD_BALANCE
 #ifdef MEASURE_LOAD_BALANCE
@@ -168,12 +177,23 @@ void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, 
     assert(iBegin >= 0 && iBegin <= num_rows);
     assert(iEnd >= 0 && iEnd <= num_rows);
 
-    for (int i = iBegin; i < iEnd; ++i) {
-      double sum = 0;
-      for (int j = rowPtr[i] - BASE; j < rowPtr[i + 1] - BASE; ++j) {
-        sum += values[j]*x[colIdx[j] - BASE];
+    if (1 == alpha && 0 == beta) {
+      for (int i = iBegin; i < iEnd; ++i) {
+        T sum = 0;
+        for (int j = rowPtr[i] - BASE; j < rowPtr[i + 1] - BASE; ++j) {
+          sum += values[j]*x[colIdx[j] - BASE];
+        }
+        w[i] = sum;
       }
-      y[i] = sum;
+    }
+    else {
+      for (int i = iBegin; i < iEnd; ++i) {
+        T sum = 0;
+        for (int j = rowPtr[i] - BASE; j < rowPtr[i + 1] - BASE; ++j) {
+          sum += values[j]*x[colIdx[j] - BASE];
+        }
+        w[i] = alpha*sum + beta*y[i] + gamma;
+      }
     }
 #ifdef MEASURE_LOAD_BALANCE
     double t = omp_get_wtime();
@@ -202,14 +222,30 @@ void CSR_MultiplyWithVector(int num_rows, const int *rowPtr, const int *colIdx, 
 #endif
 }
 
-extern "C" void CSR_MultiplyWithVector_1Based(int num_rows, int *rowPtr, int *colIdx, double* values, double *x, double *y)
-{
-  return CSR_MultiplyWithVector<1>(num_rows, rowPtr, colIdx, values, x, y);
-}
-
 void CSR::multiplyWithVector(double *y, const double *x) const
 {
-  return CSR_MultiplyWithVector<0>(m, rowPtr, colIdx, values, x, y);
+  if (0 == base) {
+    return CSR_MultiplyWithVector_<double, 0>(m, y, 1, rowPtr, colIdx, values, x, 0, y, 0);
+  }
+  else {
+    assert(1 == base);
+    return CSR_MultiplyWithVector_<double, 1>(m, y, 1, rowPtr, colIdx, values, x, 0, y, 0);
+  }
+}
+
+void CSR::multiplyWithVector(
+  double *w,
+  double alpha, const double *x,
+  double beta, const double *y,
+  double gamma) const
+{
+  if (0 == base) {
+    return CSR_MultiplyWithVector_<double, 0>(m, w, alpha, rowPtr, colIdx, values, x, beta, y, gamma);
+  }
+  else {
+    assert(1 == base);
+    return CSR_MultiplyWithVector_<double, 1>(m, w, alpha, rowPtr, colIdx, values, x, beta, y, gamma);
+  }
 }
 
 template<int BASE = 0, bool SORT = false>

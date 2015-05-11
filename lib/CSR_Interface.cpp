@@ -32,9 +32,13 @@ int CSR_GetNumNonZeros(CSR_Handle *A)
   return ((CSR *)A)->rowPtr[((CSR *)A)->m];
 }
 
-void CSR_MultiplyWithVector(const CSR_Handle *A, double *y, const double *x)
+void CSR_MultiplyWithVector(
+  double *w,
+  double alpha, const CSR_Handle *A, const double *x,
+  double beta, const double *y,
+  double gamma)
 {
-  ((CSR *)A)->multiplyWithVector(y, x);
+  ((CSR *)A)->multiplyWithVector(w, alpha, x, beta, y, gamma);
 }
 
 #ifdef USE_BOOST
@@ -116,6 +120,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     CSR *A = new CSR(numRows, numCols, i, j, v, oneBasedInput ? 1 : 0);
 
 #ifdef PERF_TUNE
+    int orig_bw = A->getBandwidth();
     t2 = omp_get_wtime();
 #endif
 
@@ -131,6 +136,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     A->permute(newA, perm, inversePerm);
     
 #ifdef PERF_TUNE
+    int rcm_bw = newA->getBandwidth();
     t4 = omp_get_wtime();
 #endif
 
@@ -147,21 +153,14 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
         t5 = omp_get_wtime();
         double bytes = (double)i[numRows]*12;
         stats[0] += t5 - t1;
-        stats[1] += t2 - t1;
-        stats[2] += bytes/(t2 - t1)/1e9;
-        stats[3] += t3 - t2;
-        stats[4] += bytes/(t3 - t2)/1e9;
-        stats[5] += t4 - t3;
-        stats[6] += bytes/(t4 - t3)/1e9;
-        stats[7] += t5 - t4;
-        stats[8] += bytes/(t5 - t4)/1e9;
+        stats[1] += t3 - t2;
+        stats[3] += t4 - t3;
     
 #if 0
         printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
-        printf("\tmake 0 based: %f sec (%f GB/s)\n", t2 - t1, bytes/(t2 - t1)/1e9);
         printf("\tCSR_GetRCMPemutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
         printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
-        printf("\tmake 1 based: %f sec (%f GB/s)\n", t5 - t4, bytes/(t5 - t4)/1e9);
+        printf("\tBW changed: %d -> %d\n", orig_bw, rcm_bw);
         fflush(stdout);
 #endif
 

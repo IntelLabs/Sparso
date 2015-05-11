@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
 
     double t = -omp_get_wtime();
     for (int i = 0; i < REPEAT; ++i) {
-      CSR_MultiplyWithVector(A, y, x);
+      CSR_MultiplyWithVector(y, 1, A, x, 0, y, 0);
     }
     t += omp_get_wtime();
 
@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
 
     t = -omp_get_wtime();
     for (int i = 0; i < REPEAT; ++i) {
-      CSR_MultiplyWithVector(A2, y, x);
+      CSR_MultiplyWithVector(y, 1, A2, x, 0, y, 0);
     }
     t += omp_get_wtime();
 
