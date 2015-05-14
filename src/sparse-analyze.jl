@@ -25,14 +25,14 @@ const LIB_PATH = "../lib/libcsr.so"
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
-function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermuation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
+function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermutation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
   ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
-               pointer(P), pointer(Pprime), getPermuation, oneBasedInput, oneBasedOutput)
+               pointer(P), pointer(Pprime), getPermutation, oneBasedInput, oneBasedOutput)
 end
 
 function CSR_Bandwidth(A::SparseMatrixCSC)
