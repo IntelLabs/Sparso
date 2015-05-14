@@ -30,6 +30,10 @@ void CSR_BoostGetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm)
 void CSR_BoostGetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
 #endif
 
+void CSR_FindConnectedComponents(
+  const CSR_Handle *A,
+  int *numOfComponents, int **compToRoot, int **compSizes);
+
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm);
 
 int CSR_GetBandwidth(CSR_Handle *A);

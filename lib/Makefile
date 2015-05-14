@@ -16,7 +16,7 @@ ifeq (yes, $(SEP))
   CFLAGS += -DSEP -I$(SEP_BASE_DIR)/../include $(SEP_BASE_DIR)/libprog_api.so
 endif
 
-test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp reordering/RCM.cpp
+test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp reordering/RCM.cpp reordering/ConnectedComponents.cpp
 	$(CXX) -o $@ $^ $(CFLAGS)
 
 # 0 based CSR library
