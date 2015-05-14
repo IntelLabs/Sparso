@@ -651,4 +651,6 @@ bool CSR::isSymmetric(bool checkValues /*=true*/, bool printFirstAsymmetry /*=fa
       }
     } // for each non-zero
   } // for each row
+
+  return true;
 }
