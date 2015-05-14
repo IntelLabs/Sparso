@@ -33,7 +33,7 @@ int main()
 
     printf("RCM permutation\n");
     int perm[m], inversePerm[m];
-    CSR_GetRCMPemutation(A, perm, inversePerm);
+    CSR_GetRCMPermutation(A, perm, inversePerm);
     for (int i = 0; i < m; ++i) {
       printf("%d ", inversePerm[i]);
     }
@@ -67,7 +67,7 @@ int main()
 
     printf("RCM permutation\n");
     int perm[m], inversePerm[m];
-    CSR_GetRCMPemutation(A, perm, inversePerm);
+    CSR_GetRCMPermutation(A, perm, inversePerm);
     for (int i = 0; i < m; ++i) {
       printf("%d ", inversePerm[i]);
     }

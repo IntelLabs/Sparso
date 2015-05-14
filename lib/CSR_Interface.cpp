@@ -42,23 +42,23 @@ void CSR_MultiplyWithVector(
 }
 
 #ifdef USE_BOOST
-void CSR_BoostGetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm)
+void CSR_BoostGetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
 {
   ((CSR *)A)->boostGetRCMPermutation(perm, inversePerm);
 }
 
-void CSR_BoostGetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source)
+void CSR_BoostGetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source)
 {
   ((CSR *)A)->boostGetRCMPermutation(perm, inversePerm, source);
 }
 #endif
 
-void CSR_GetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm)
+void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
 {
   ((CSR *)A)->getRCMPermutation(perm, inversePerm);
 }
 
-void CSR_GetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source)
+void CSR_GetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source)
 {
   ((CSR *)A)->getRCMPermutation(perm, inversePerm, source);
 }
@@ -152,13 +152,15 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 #ifdef PERF_TUNE
         t5 = omp_get_wtime();
         double bytes = (double)i[numRows]*12;
-        stats[0] += t5 - t1;
-        stats[1] += t3 - t2;
-        stats[2] += t4 - t3;
+        if (stats) {
+          stats[0] += t5 - t1;
+          stats[1] += t3 - t2;
+          stats[2] += t4 - t3;
+        }
     
 #if 0
         printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
-        printf("\tCSR_GetRCMPemutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
+        printf("\tCSR_GetRCMPermutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
         printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
         printf("\tBW changed: %d -> %d\n", orig_bw, rcm_bw);
         fflush(stdout);
