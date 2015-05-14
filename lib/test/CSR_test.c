@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
     printf("My RCM permuted bandwidth with source %d: %d\n\n", source, CSR_GetBandwidth(A2));*/
 
     t = -omp_get_wtime();
-    CSR_GetRCMPemutation(A, perm, inversePerm);
+    CSR_GetRCMPermutation(A, perm, inversePerm);
     t += omp_get_wtime();
 
     isPerm(perm, m);
