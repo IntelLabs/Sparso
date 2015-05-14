@@ -23,16 +23,16 @@ void CSR_MultiplyWithVector(
   double beta, const double *y,
   double gamma);
 
-void CSR_GetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm);
-void CSR_GetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
+void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
+void CSR_GetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
 #ifdef USE_BOOST
-void CSR_BoostGetRCMPemutation(const CSR_Handle *A, int *perm, int *inversePerm);
-void CSR_BoostGetRCMPemutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
+void CSR_BoostGetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
+void CSR_BoostGetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
 #endif
 
 void CSR_FindConnectedComponents(
   const CSR_Handle *A,
-  int *numOfComponents, int **compToRoot, int **compSizes);
+  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum);
 
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm);
 

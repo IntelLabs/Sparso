@@ -11,7 +11,7 @@ using namespace std;
 template<int BASE = 0>
 void findConnectedComponents_(
   const CSR *A,
-  int *numOfComponents, int **compToRoot, int **compSizes)
+  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum)
 {
   volatile int *p = new int[A->m];
 
@@ -87,7 +87,6 @@ void findConnectedComponents_(
     }
     p[i] = r;
     if (r == i) ++compId;
-    //__sync_fetch_and_add(&sizes[r], 1);
   }
 
   cnts[tid + 1] = compId;
@@ -102,6 +101,7 @@ void findConnectedComponents_(
     *numOfComponents = cnts[nthreads];
     *compToRoot = new int[*numOfComponents];
     *compSizes = new int[*numOfComponents*nthreads];
+    *compSizePrefixSum = new int[*numOfComponents];
   }
 #pragma omp barrier
 
@@ -129,12 +129,35 @@ void findConnectedComponents_(
 
 #pragma omp barrier
 
+  int cPerThread = (*numOfComponents + nthreads - 1)/nthreads;
+  int cBegin = min(cPerThread*tid, *numOfComponents);
+  int cEnd = min(cBegin + cPerThread, *numOfComponents);
+
   // reduce component sizes
-#pragma omp for
-  for (int c = 0; c < (*numOfComponents); ++c) {
+  int localCnt = 0;
+  for (int c = cBegin; c < cEnd; ++c) {
+    int sum = (*compSizes)[c];
     for (int t = 1; t < nthreads; ++t) {
-      (*compSizes)[c] += (*compSizes)[c + t*(*numOfComponents)];
+      sum += (*compSizes)[c + t*(*numOfComponents)];
     }
+    (*compSizes)[c] = sum;
+    localCnt += sum;
+  }
+  cnts[tid + 1] = localCnt;
+
+#pragma omp barrier
+#pragma omp master
+  {
+    for (int i = 1; i < nthreads - 1; ++i) {
+      cnts[i + 1] += cnts[i];
+    }
+  }
+#pragma omp barrier
+
+  localCnt = cnts[tid];
+  for (int c = cBegin; c < cEnd; ++c) {
+    (*compSizePrefixSum)[c] = localCnt;
+    localCnt += (*compSizes)[c];
   }
   } // omp parallel
 
@@ -155,14 +178,14 @@ extern "C" {
 
 void CSR_FindConnectedComponents(
   const CSR_Handle *A,
-  int *numOfComponents, int **compToRoot, int **compSizes)
+  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum)
 {
   if (0 == ((CSR *)A)->base) {
-    findConnectedComponents_<0>((const CSR *)A, numOfComponents, compToRoot, compSizes);
+    findConnectedComponents_<0>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum);
   }
   else {
     assert(1 == ((CSR *)A)->base);
-    findConnectedComponents_<1>((const CSR *)A, numOfComponents, compToRoot, compSizes);
+    findConnectedComponents_<1>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum);
   }
 }
 
