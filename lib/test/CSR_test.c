@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
 
 #ifdef USE_BOOST
     t = -omp_get_wtime();
-    CSR_BoostGetRCMPemutation(A, perm, inversePerm);
+    CSR_BoostGetRCMPermutation(A, perm, inversePerm);
     t += omp_get_wtime();
     isPerm(perm, m);
     isPerm(inversePerm, m);
@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 #endif
 
     /*t = -omp_get_wtime();
-    CSR_GetRCMPemutationWithSource(A, perm, inversePerm, source);
+    CSR_GetRCMPermutationWithSource(A, perm, inversePerm, source);
     t += omp_get_wtime();
     isPerm(perm, m);
     isPerm(inversePerm, m);
@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
     printf("RCM permuted bandwidth with source %d: %d\n\n", source, CSR_GetBandwidth(A2));
 
     t = -omp_get_wtime();
-    CSR_GetRCMPemutationNewWithSource(A, perm, inversePerm, source);
+    CSR_GetRCMPermutationNewWithSource(A, perm, inversePerm, source);
     t += omp_get_wtime();
     isPerm(perm, m);
     isPerm(inversePerm, m);
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
 
     printf("RCM permutation\n");
     int perm[m], inversePerm[m];
-    CSR_GetRCMPemutation(A, perm, inversePerm);
+    CSR_GetRCMPermutation(A, perm, inversePerm);
     for (int i = 0; i < m; ++i) {
       printf("%d ", inversePerm[i]);
     }
@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
 
     printf("RCM permutation\n");
     int perm[m], inversePerm[m];
-    CSR_GetRCMPemutation(A, perm, inversePerm);
+    CSR_GetRCMPermutation(A, perm, inversePerm);
     for (int i = 0; i < m; ++i) {
       printf("%d ", inversePerm[i]);
     }
