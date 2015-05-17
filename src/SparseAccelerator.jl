@@ -415,8 +415,7 @@ end
 
 # w = alpha*A*x + beta*y + gamma
 function SpMV!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector, gamma::Number)
-    assert(length(x) == length(y))
-    assert(length(x) == length(w))
+    assert(length(w) == length(y))
 
     if DEFAULT_LIBRARY == PCL_LIB
         A2 = CreateCSR(A)
