@@ -4,6 +4,7 @@
 # include <ctype.h>
 # include <time.h>
 # include <assert.h>
+#include <omp.h>
 
 # include "mm_io.h"
 
@@ -820,6 +821,7 @@ static void coo2csr(int n, int nz, T *a, int *i_idx, int *j_idx,
 {
   int i, l;
 
+#pragma omp parallel for
   for (i=0; i<=n; i++) row_start[i] = 0;
 
   /* determine row lengths */
@@ -842,10 +844,10 @@ static void coo2csr(int n, int nz, T *a, int *i_idx, int *j_idx,
 
   row_start[0] = 0;
 
-  for (i=0; i<n; i++){
+#pragma omp parallel for
+  for (int i=0; i<n; i++){
     sort (col_idx, csr_a, row_start[i], row_start[i+1]);
   }
-
 }
 
 void set_1based_ind(int *rowptr, int *colidx, int n, int nnz)
