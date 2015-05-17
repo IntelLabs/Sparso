@@ -58,11 +58,6 @@ void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
   ((CSR *)A)->getRCMPermutation(perm, inversePerm);
 }
 
-void CSR_GetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source)
-{
-  ((CSR *)A)->getRCMPermutation(perm, inversePerm, source);
-}
-
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm)
 {
   ((CSR *)A)->permute((CSR *)out, columnPerm, rowInversePerm);

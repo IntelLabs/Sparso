@@ -8,10 +8,21 @@
 
 using namespace std;
 
+/**
+ * idx = idx2*dim1 + idx1
+ * -> ret = idx1*dim2 + idx2
+ *        = (idx%dim1)*dim2 + idx/dim1
+ */
+static inline int transpose_idx(int idx, int dim1, int dim2)
+{
+  return idx%dim1*dim2 + idx/dim1;
+}
+
 template<int BASE = 0>
 void findConnectedComponents_(
   const CSR *A,
-  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum)
+  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum,
+  int **nodesSortedByComp)
 {
   volatile int *p = new int[A->m];
 
@@ -22,6 +33,8 @@ void findConnectedComponents_(
   int *rootToComp = new int[A->m];
   *compSizes = NULL;
   *numOfComponents = 0;
+  int nComp;
+  *nodesSortedByComp = new int[A->m];
 
   double t = omp_get_wtime();
 
@@ -98,10 +111,10 @@ void findConnectedComponents_(
     for (int i = 1; i < nthreads; ++i) {
       cnts[i + 1] += cnts[i];
     }
-    *numOfComponents = cnts[nthreads];
-    *compToRoot = new int[*numOfComponents];
-    *compSizes = new int[*numOfComponents*nthreads];
-    *compSizePrefixSum = new int[*numOfComponents];
+    *numOfComponents = nComp = cnts[nthreads];
+    *compToRoot = new int[nComp];
+    *compSizes = new int[nComp];
+    *compSizePrefixSum = new int[(nComp + 1)*nthreads];
   }
 #pragma omp barrier
 
@@ -119,21 +132,72 @@ void findConnectedComponents_(
 #pragma omp barrier
 
   // count thread-private component sizes
-  for (int c = 0; c < *numOfComponents; ++c) {
-    (*compSizes)[c + tid*(*numOfComponents)] = 0;
+  int *localPrefixSum = (*compSizePrefixSum) + nComp*tid;
+  for (int c = 0; c < nComp; ++c) {
+    localPrefixSum[c] = 0;
   }
 
   for (int i = iBegin; i < iEnd; ++i) {
-    (*compSizes)[rootToComp[p[i]] + tid*(*numOfComponents)]++;
+    int c = rootToComp[p[i]];
+    ++localPrefixSum[c];
   }
 
 #pragma omp barrier
 
-  int cPerThread = (*numOfComponents + nthreads - 1)/nthreads;
-  int cBegin = min(cPerThread*tid, *numOfComponents);
-  int cEnd = min(cBegin + cPerThread, *numOfComponents);
+  for (int i = nComp*tid + 1; i < nComp*(tid + 1); ++i) {
+    int transpose_i = transpose_idx(i, nthreads, nComp);
+    int transpose_i_minus_1 = transpose_idx(i - 1, nthreads, nComp);
 
-  // reduce component sizes
+    (*compSizePrefixSum)[transpose_i] += (*compSizePrefixSum)[transpose_i_minus_1];
+  }
+
+#pragma omp barrier
+#pragma omp master
+  {
+    for (int i = 1; i < nthreads; ++i) {
+      int j0 = nComp*i - 1, j1 = nComp*(i + 1) - 1;
+      int transpose_j0 = transpose_idx(j0, nthreads, nComp);
+      int transpose_j1 = transpose_idx(j1, nthreads, nComp);
+
+      (*compSizePrefixSum)[transpose_j1] += (*compSizePrefixSum)[transpose_j0];
+    }
+  }
+#pragma omp barrier
+
+  if (tid > 0) {
+    int transpose_i0 = transpose_idx(nComp*tid - 1, nthreads, nComp);
+    
+    for (int i = nComp*tid; i < nComp*(tid + 1) - 1; ++i) {
+      int transpose_i = transpose_idx(i, nthreads, nComp);
+
+      (*compSizePrefixSum)[transpose_i] += (*compSizePrefixSum)[transpose_i0];
+    }
+  }
+
+#pragma omp barrier
+
+  int cPerThread = (nComp + nthreads - 1)/nthreads;
+  int cBegin = max(min(cPerThread*tid, nComp), 1);
+  int cEnd = min(cBegin + cPerThread, nComp);
+  if (0 == tid) {
+    (*compSizes)[0] = (*compSizePrefixSum)[nComp*(nthreads - 1)];
+  }
+  for (int c = cBegin; c < cEnd; ++c) {
+    (*compSizes)[c] =
+      (*compSizePrefixSum)[c + nComp*(nthreads - 1)] -
+      (*compSizePrefixSum)[c - 1 + nComp*(nthreads - 1)];
+  }
+
+#pragma omp barrier
+  
+  for (int i = iEnd - 1; i >= iBegin; --i) {
+    int c = rootToComp[p[i]];
+    --(*compSizePrefixSum)[c + nComp*tid];
+    int offset = (*compSizePrefixSum)[c + nComp*tid];
+    (*nodesSortedByComp)[offset] = i;
+  }
+
+  /*// reduce component sizes
   int localCnt = 0;
   for (int c = cBegin; c < cEnd; ++c) {
     int sum = (*compSizes)[c];
@@ -158,34 +222,49 @@ void findConnectedComponents_(
   for (int c = cBegin; c < cEnd; ++c) {
     (*compSizePrefixSum)[c] = localCnt;
     localCnt += (*compSizes)[c];
-  }
+  }*/
   } // omp parallel
 
-  printf("finding connected components takes %f\n", omp_get_wtime() - t);
+  //printf("finding connected components takes %f\n", omp_get_wtime() - t);
 
 #ifndef NDEBUG
   int cnt = 0;
-  for (int i = 0; i < (*numOfComponents); ++i) {
+  for (int i = 0; i < nComp; ++i) {
     cnt += (*compSizes)[i];
   }
   assert(cnt == A->m);
+
+  for (int i = 0; i < nComp; ++i) {
+    if (i < nComp - 1)
+      assert((*compSizePrefixSum)[i + 1] - (*compSizePrefixSum)[i] == (*compSizes)[i]);
+
+    for (int j = (*compSizePrefixSum)[i]; j < (*compSizePrefixSum)[i] + (*compSizes)[i]; ++j) {
+      assert(p[(*nodesSortedByComp)[j]] == (*compToRoot)[i]);
+      if (j < (*compSizePrefixSum)[i + 1] - 1) {
+        assert((*nodesSortedByComp)[j] < (*nodesSortedByComp)[j + 1]);
+      }
+    }
+  }
 #endif
 
-  printf("num of connected components = %d\n", (*numOfComponents));
+  //printf("num of connected components = %d\n", (*numOfComponents));
+
+  delete[] rootToComp;
 }
 
 extern "C" {
 
 void CSR_FindConnectedComponents(
   const CSR_Handle *A,
-  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum)
+  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum,
+  int **nodesSortedByComp)
 {
   if (0 == ((CSR *)A)->base) {
-    findConnectedComponents_<0>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum);
+    findConnectedComponents_<0>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum, nodesSortedByComp);
   }
   else {
     assert(1 == ((CSR *)A)->base);
-    findConnectedComponents_<1>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum);
+    findConnectedComponents_<1>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum, nodesSortedByComp);
   }
 }
 

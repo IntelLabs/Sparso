@@ -13,6 +13,8 @@
 
 using namespace std;
 
+const int PAR_THR = 65536;
+
 void getInversePerm(int *inversePerm, const int *perm, int n);
 
 // compute prefix sum of levels
@@ -135,7 +137,7 @@ bfsAuxData::bfsAuxData(int m)
   rowPtrs = new int[omp_get_max_threads()*m];
   nnzPrefixSum = new int[omp_get_max_threads() + 1];
 
-  candidates = new int[omp_get_max_threads()*m];
+  candidates = new int[m];
 }
 
 bfsAuxData::~bfsAuxData()
@@ -168,11 +170,6 @@ public :
 
   void set(int i) {
     bv_[getIndexOf_(i)] |= getMaskOf_(i);
-  }
-
-  void atomicSet(int i) {
-    BitVectorType mask = getMaskOf_(i);
-    __sync_fetch_and_or(bv_ + getIndexOf_(i), mask);
   }
 
   bool get(int i) const {
@@ -209,18 +206,12 @@ private :
  *
  * pre-condition: levels should be initialized to -1
  */
-template<bool SET_LEVEL = true, bool OUTPUT_VISITED = false>
-int bfs_serial(
-  const CSR *A, int source, int *levels, BitVector *bv,
-  bfsAuxData *aux,
-  int *visited = NULL, int *numOfVisited = NULL,
-  int *width = NULL, int *shortCircuitWidth = NULL) {
+int bfs_serial(const CSR *A, int source, int *levels, bfsAuxData *aux) {
 
   int tid = omp_get_thread_num();
 
   int numLevels = 0;
-  if (SET_LEVEL) levels[source] = numLevels;
-  bv->atomicSet(source);
+  levels[source] = numLevels;
 
   int **q = aux->q;
   q[0][tid*A->m] = source;
@@ -228,41 +219,21 @@ int bfs_serial(
   int *qTail[2] = { aux->qTail[0], aux->qTail[1] };
   qTail[0][tid] = 1;
 
-  if (OUTPUT_VISITED) *numOfVisited = 0;
-
   while (true) {
-    if (width) {
-      *width = max(*width, qTail[numLevels%2][tid]);
-    }
-    if (shortCircuitWidth) {
-      if (qTail[numLevels%2][tid] > *shortCircuitWidth) {
-        numLevels = -1;
-      }
-    }
-    if (OUTPUT_VISITED) *numOfVisited += qTail[numLevels%2][tid];
-
     ++numLevels;
 
     if (qTail[1 - numLevels%2][tid] == 0 || numLevels == -1) break;
-
-    if (OUTPUT_VISITED) {
-      memcpy(
-        visited + *numOfVisited - qTail[1 - numLevels%2][tid],
-        q[1 - numLevels%2] + tid*A->m,
-        sizeof(int)*qTail[1 - numLevels%2][tid]);
-    }
 
     int *tailPtr = q[numLevels%2] + tid*A->m;
 
     for (int i = 0; i < qTail[1 - numLevels%2][tid]; ++i) {
       int u = q[1 - numLevels%2][i + tid*A->m];
-      assert(!SET_LEVEL || levels[u] == numLevels - 1);
+      assert(levels[u] == numLevels - 1);
 
       for (int j = A->rowPtr[u]; j < A->rowPtr[u + 1]; ++j) {
         int v = A->colIdx[j];
-        if (!bv->get(v)) {
-          bv->atomicSet(v);
-          if (SET_LEVEL) levels[v] = numLevels;
+        if (-1 == levels[v]) {
+          levels[v] = numLevels;
 
           *tailPtr = v;
           ++tailPtr;
@@ -272,23 +243,6 @@ int bfs_serial(
 
     qTail[numLevels%2][tid] = tailPtr - (q[numLevels%2] + tid*A->m);
   } // while true
-
-#ifndef NDEBUG
-  if (OUTPUT_VISITED) {
-    int *temp = new int[*numOfVisited];
-    copy(visited, visited + *numOfVisited, temp);
-    sort(temp, temp + *numOfVisited);
-    for (int i = 0; i < *numOfVisited; ++i) {
-      assert(temp[i] >= 0 && temp[i] < A->m);
-      if (i > 0 && temp[i] == temp[i - 1]) {
-        printf("%d duplicated\n", temp[i]);
-        assert(false);
-      }
-    }
-
-    delete[] temp;
-  }
-#endif
 
   return numLevels;
 }
@@ -542,22 +496,13 @@ static int getMinDegreeNode(const CSR *A, const int *nodes, int numOfNodes, bool
 }
 
 static void initializeBitVector(
-  BitVector *bv, int m, const int *nodes, int numOfNodes, bool parallel = true)
+  BitVector *bv, int m, const int *nodes, int numOfNodes)
 {
-  if (parallel) {
 #pragma omp parallel for
-    for (int i = 0; i < numOfNodes; ++i) {
-      int u = nodes[i];
-      assert(u >= 0 && u < m);
-      bv->atomicClear(u);
-    }
-  }
-  else {
-    for (int i = 0; i < numOfNodes; ++i) {
-      int u = nodes[i];
-      assert(u >= 0 && u < m);
-      bv->atomicClear(u);
-    }
+  for (int i = 0; i < numOfNodes; ++i) {
+    int u = nodes[i];
+    assert(u >= 0 && u < m);
+    bv->atomicClear(u);
   }
 }
 
@@ -575,8 +520,10 @@ int selectSourcesWithPseudoDiameter(
   int tid = omp_get_thread_num();
   int *candidates = aux->candidates;
 
+  bool first = true;
   while (e == -1) {
-    initializeBitVector(bv, A->m, components, sizeOfComponents);
+    if (!first) initializeBitVector(bv, A->m, components, sizeOfComponents);
+    first = false;
     int diameter = bfs<false>(A, s, NULL, bv, aux);
 
 #ifdef PRINT_DBG
@@ -677,7 +624,7 @@ private :
   const int *rowPtr_;
 };
 
-void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
+void CSR::getRCMPermutation(int *perm, int *inversePerm)
 {
   assert(isSymmetric(false)); // check structural symmetry
 
@@ -685,8 +632,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
   make0BasedIndexing();
 
   // 1. Start vertex
-  double t;
-  double sourceSelectionTime1 = 0, bfsTime1 = 0, prefixTime1 = 0, placeTime1 = 0;
+  double bfsTime1 = 0, prefixTime1 = 0, placeTime1 = 0;
   double sourceSelectionTime2 = 0, bfsTime2 = 0, prefixTime2 = 0, placeTime2 = 0;
 
   int *levels = new int[m];
@@ -701,40 +647,38 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
 
   BitVector *bv = new BitVector(m);
 
-  int *children_array = new int[omp_get_max_threads()*maxDegree];
+  int *children_array = new int[omp_get_max_threads()*max(PAR_THR, maxDegree)];
 
-  int *components_array = new int[omp_get_max_threads()*m];
   int singletonCnt = 0, twinCnt = 0;
 
   bfsAuxData aux(m);
   volatile int *write_offset = new int[(m + 1)*16];
-  int *prefixSum_array = new int[omp_get_max_threads()*(m + 1)];
+  int *prefixSum_array = new int[max(omp_get_max_threads()*PAR_THR, m) + 1];
 
   DegreeComparator comparator(rowPtr);
 
   int numOfComponents;
   int *compToRoot, *compSizes, *compSizePrefixSum;
+  int *nodesSortedByComp;
 
   CSR_FindConnectedComponents(
     (const CSR_Handle *)this,
-    &numOfComponents, &compToRoot, &compSizes, &compSizePrefixSum);
+    &numOfComponents, &compToRoot, &compSizes, &compSizePrefixSum,
+    &nodesSortedByComp);
 
-  const int PAR_THR = 16;
-
-#define MEASURE_LOAD_BALANCE
+//#define MEASURE_LOAD_BALANCE
+  double tBegin = omp_get_wtime();
 #ifdef MEASURE_LOAD_BALANCE
   double barrierTimes[omp_get_max_threads()];
-  double tBegin = omp_get_wtime();
   double barrierTimeSum = 0;
 #endif
 
-#pragma omp parallel reduction(+:singletonCnt,twinCnt,sourceSelectionTime1,bfsTime1,prefixTime1,placeTime1)
+#pragma omp parallel reduction(+:singletonCnt,twinCnt,bfsTime1,prefixTime1,placeTime1)
   {
     int tid = omp_get_thread_num();
 
-    int *children = children_array + tid*maxDegree;
-    int *components = components_array + tid*m;
-    int *prefixSum = prefixSum_array + tid*(m + 1);
+    int *children = children_array + tid*PAR_THR;
+    int *prefixSum = prefixSum_array + tid*(PAR_THR + 1);
 
   // for each connected component
 #pragma omp for
@@ -742,9 +686,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
     int i = compToRoot[c];
     int offset = compSizePrefixSum[c];
 
-    // 1. Automatic selection of source
-    int sizeOfComponents;
-
+    // 1. Short circuiting
     if (compSizes[c] >= PAR_THR) continue;
 
     // short circuit for a singleton or a twin
@@ -761,7 +703,6 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
         inversePerm[m - (offset + 1) - 1] = u;
         perm[i] = m - offset - 1;
         perm[u] = m - (offset + 1) - 1;
-        bv->atomicSet(u);
         ++twinCnt;
         continue;
       }
@@ -782,33 +723,20 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
         inversePerm[m - (offset + 1) - 1] = u;
         perm[i] = m - offset - 1;
         perm[u] = m - (offset + 1) - 1;
-        bv->atomicSet(u);
         ++twinCnt;
         continue;
       }
     }
 
-    double t = omp_get_wtime();
-
     // collect nodes of this connected component
-    bfs_serial<false, true>(this, i, NULL, bv, &aux, components, &sizeOfComponents);
-    assert(sizeOfComponents == compSizes[c]);
-    if (sizeOfComponents != compSizes[c])
-    {
-      printf("sizeOfComponent %d expected %d actual\n", compSizes[c], sizeOfComponents);
-    }
-#ifdef PRINT_DBG
-    printf("sizeOfComponents = %d\n", sizeOfComponents);
-#endif
-
-    // select source
-    int source = i;
-    sourceSelectionTime1 += omp_get_wtime() - t;
+    int *components = nodesSortedByComp + compSizePrefixSum[c];
 
     // 2. BFS
-    t = omp_get_wtime();
-    initializeBitVector(bv, m, components, sizeOfComponents, false);
-    int numLevels = bfs_serial(this, source, levels, bv, &aux);
+    double t = omp_get_wtime();
+    for (int i = 0; i < compSizes[c]; ++i) {
+      levels[components[i]] = -1;
+    }
+    int numLevels = bfs_serial(this, i, levels, &aux);
 #ifdef PRINT_DBG
     printf("numLevels = %d\n", numLevels);
     printf("bfs takes %f\n", omp_get_wtime() - t);
@@ -818,15 +746,15 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
     // 3. Reorder
     t = omp_get_wtime();
     prefixSumOfLevels(
-      prefixSum, this, levels, numLevels, components, sizeOfComponents, false);
+      prefixSum, this, levels, numLevels, components, compSizes[c], false);
 #ifdef PRINT_DBG
     printf("prefix sum takes %f\n", omp_get_wtime() - t);
 #endif
     prefixTime1 += omp_get_wtime() - t;
 
     t = omp_get_wtime();
-    inversePerm[m - offset - 1] = source;
-    perm[source] = m - offset - 1;
+    inversePerm[m - offset - 1] = i;
+    perm[i] = m - offset - 1;
 
     for (int l = 0; l < numLevels; ++l) {
       int r = prefixSum[l] + offset;
@@ -882,35 +810,25 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
   double timeFirstPhase = omp_get_wtime() - tBegin;
   tBegin = omp_get_wtime();
 
-  int *components = components_array;
   int *prefixSum = prefixSum_array;
 
   // for each connected component
+  int largeCompCnt = 0;
   for (int c = 0; c < numOfComponents; ++c) {
     int i = compToRoot[c];
     int offset = compSizePrefixSum[c];
 
     // 1. Automatic selection of source
-    int sizeOfComponents;
-
     if (compSizes[c] < PAR_THR) continue;
+    largeCompCnt++;
 
-    t = omp_get_wtime();
+    double t = omp_get_wtime();
 
-    // collect nodes of this connected component
-    bfs<false, true>(this, i, NULL, bv, &aux, components, &sizeOfComponents);
-    assert(sizeOfComponents == compSizes[c]);
-    if (sizeOfComponents != compSizes[c])
-    {
-      printf("sizeOfComponent %d expected %d actual\n", compSizes[c], sizeOfComponents);
-    }
-#ifdef PRINT_DBG
-    printf("sizeOfComponents = %d\n", sizeOfComponents);
-#endif
+    int *components = nodesSortedByComp + compSizePrefixSum[c];
 
     // select source
-    source = selectSourcesWithPseudoDiameter(
-      this, bv, components, sizeOfComponents, &aux);
+    int source = selectSourcesWithPseudoDiameter(
+      this, bv, components, compSizes[c], &aux);
 #ifdef PRINT_DBG
     printf("source selection takes %f\n", omp_get_wtime() - t);
     printf("source = %d\n", source);
@@ -921,7 +839,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
 
     // 2. BFS
     t = omp_get_wtime();
-    initializeBitVector(bv, m, components, sizeOfComponents);
+    initializeBitVector(bv, m, components, compSizes[c]);
     int numLevels = bfs(this, source, levels, bv, &aux);
 #ifdef PRINT_DBG
     printf("numLevels = %d\n", numLevels);
@@ -932,7 +850,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
     // 3. Reorder
     t = omp_get_wtime();
     prefixSumOfLevels(
-      prefixSum, this, levels, numLevels, components, sizeOfComponents);
+      prefixSum, this, levels, numLevels, components, compSizes[c]);
 #ifdef PRINT_DBG
     printf("prefix sum takes %f\n", omp_get_wtime() - t);
 #endif
@@ -999,13 +917,12 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
   delete[] levels;
   delete bv;
   delete[] children_array;
-  delete[] components;
   delete[] write_offset;
-  delete[] prefixSum;
+  delete[] prefixSum_array;
 
-  printf("num of connected components = %d (singleton = %d, twin = %d)\n", numOfComponents, singletonCnt, twinCnt);
+#if 0
+  printf("num of connected components = %d (singleton = %d, twin = %d, large (>=%d) = %d)\n", numOfComponents, singletonCnt, twinCnt, PAR_THR, largeCompCnt);
   printf("firstPhaseTime (parallel over components) = %f\n", timeFirstPhase);
-  printf("\tsourceSelectionTime = %f\n", sourceSelectionTime1/omp_get_max_threads());
   printf("\tbfsTime = %f\n", bfsTime1/omp_get_max_threads());
   printf("\tprefixTime = %f\n", prefixTime1/omp_get_max_threads());
   printf("\tplaceTime = %f\n", placeTime1/omp_get_max_threads());
@@ -1015,6 +932,7 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, int source /*=-1*/)
   printf("\tbfsTime = %f\n", bfsTime2);
   printf("\tprefixTime = %f\n", prefixTime2);
   printf("\tplaceTime = %f\n", placeTime2);
+#endif
 
   if (1 == oldBase) {
     make1BasedIndexing();
