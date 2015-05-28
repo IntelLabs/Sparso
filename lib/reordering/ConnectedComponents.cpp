@@ -1,10 +1,12 @@
 #include <cassert>
+#include <cstring>
 #include <algorithm>
 
 #include <omp.h>
 
-#include <CSR.hpp>
-#include <CSR_Interface.h>
+#include "../CSR.hpp"
+#include "../CSR_Interface.h"
+#include "BitVector.hpp"
 
 using namespace std;
 
@@ -18,11 +20,12 @@ static inline int transpose_idx(int idx, int dim1, int dim2)
   return idx%dim1*dim2 + idx/dim1;
 }
 
-template<int BASE = 0>
+template<int BASE = 0, bool WITH_BIT_VECTOR = false>
 void findConnectedComponents_(
   const CSR *A,
   int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum,
-  int **nodesSortedByComp)
+  int **nodesSortedByComp,
+  const BitVector *bv = NULL) // find component only if bv is false
 {
   volatile int *p = new int[A->m];
 
@@ -38,35 +41,88 @@ void findConnectedComponents_(
 
   double t = omp_get_wtime();
 
+  int *nodesToFind = NULL;
+  int m = A->m;
+  if (WITH_BIT_VECTOR) {
+    int *nodesToFindArray = new int[A->m*omp_get_max_threads()];
+    int nodesToFindCnt[omp_get_max_threads() + 1];
+    nodesToFindCnt[0] = 0;
+
+#pragma omp parallel
+    {
+    int tid = omp_get_thread_num();
+    int nthreads = omp_get_num_threads();
+
+    int iPerThread = (A->m + nthreads - 1)/nthreads;
+    int iBegin = min(iPerThread*tid, A->m);
+    int iEnd = min(iBegin + iPerThread, A->m);
+
+    int localCnt = 0;
+    for (int i = iBegin; i < iEnd; ++i) {
+      if (!bv->get(i)) {
+        nodesToFindArray[A->m*tid + localCnt] = i;
+        ++localCnt;
+      }
+    }
+    nodesToFindCnt[tid + 1] = localCnt;
+
+#pragma omp barrier
+#pragma omp master
+    {
+      for (int i = 1; i < nthreads; ++i) {
+        nodesToFindCnt[i + 1] += nodesToFindCnt[i];
+      }
+      m = nodesToFindCnt[nthreads];
+      nodesToFind = new int[m];
+    }
+#pragma omp barrier
+
+    memcpy(
+      nodesToFind + nodesToFindCnt[tid], nodesToFindArray + A->m*tid,
+      localCnt*sizeof(int));
+    } // omp parallel
+
+    delete[] nodesToFindArray;
+  } // WITH_BIT_VECTOR
+
 #pragma omp parallel
   {
   int tid = omp_get_thread_num();
   int nthreads = omp_get_num_threads();
 
-  int iPerThread = (A->m + nthreads - 1)/nthreads;
-  int iBegin = min(iPerThread*tid, A->m);
-  int iEnd = min(iBegin + iPerThread, A->m);
+  int iPerThread = (m + nthreads - 1)/nthreads;
+  int iBegin = min(iPerThread*tid, m);
+  int iEnd = min(iBegin + iPerThread, m);
 
   for (int i = iBegin; i< iEnd; ++i) {
-    p[i] = i;
+    int ii = WITH_BIT_VECTOR ? nodesToFind[i] : i;
+    p[ii] = ii;
   }
 
 #pragma omp barrier
 
   int nnz = A->rowPtr[A->m] - BASE;
   int nnzPerThread = (nnz + nthreads - 1)/nthreads;
-  int xBegin = lower_bound(A->rowPtr, A->rowPtr + A->m, nnzPerThread*tid + BASE) - A->rowPtr;
-  int xEnd = lower_bound(A->rowPtr, A->rowPtr + A->m, nnzPerThread*(tid + 1) + BASE) - A->rowPtr;
+  int xBegin, xEnd;
+  if (WITH_BIT_VECTOR) {
+    xBegin = iBegin;
+    xEnd = iEnd;
+  }
+  else {
+    xBegin = lower_bound(A->rowPtr, A->rowPtr + A->m, nnzPerThread*tid + BASE) - A->rowPtr;
+    xEnd = lower_bound(A->rowPtr, A->rowPtr + A->m, nnzPerThread*(tid + 1) + BASE) - A->rowPtr;
+  }
   assert(xBegin <= xEnd);
   assert(xBegin >= 0 && xBegin <= A->m);
   assert(xEnd >= 0 && xEnd <= A->m);
 
   for (int x = xBegin; x < xEnd; ++x) {
-    for (int j = A->rowPtr[x] - BASE; j < A->rowPtr[x + 1] - BASE; ++j) {
+    int xx = WITH_BIT_VECTOR ? nodesToFind[x] : x;
+    for (int j = A->rowPtr[xx] - BASE; j < A->rowPtr[xx + 1] - BASE; ++j) {
       int y = A->colIdx[j];
-      if (p[x] != p[y]) {
+      if (p[xx] != p[y]) {
         // union
-        int r_x = x, r_y = y;
+        int r_x = xx, r_y = y;
         while (true) {
           int old_p_r_x = p[r_x]; int old_p_r_y = p[r_y];
           if (old_p_r_x == old_p_r_y) break;
@@ -84,7 +140,7 @@ void findConnectedComponents_(
           p[r_x] = p_r_y;
           r_x = p_r_x;
         } // while
-      } // p[x] != p[y]
+      } // p[xx] != p[y]
     }
   } // for each row x
 
@@ -94,12 +150,13 @@ void findConnectedComponents_(
   // and count # of components
   int compId = 0;
   for (int i = iBegin; i < iEnd; ++i) {
-    int r = i;
+    int ii = WITH_BIT_VECTOR ? nodesToFind[i] : i;
+    int r = ii;
     while (p[r] != r) {
       r = p[r];
     }
-    p[i] = r;
-    if (r == i) ++compId;
+    p[ii] = r;
+    if (r == ii) ++compId;
   }
 
   cnts[tid + 1] = compId;
@@ -121,8 +178,9 @@ void findConnectedComponents_(
   // compId <-> root map
   compId = cnts[tid];
   for (int i = iBegin; i < iEnd; ++i) {
-    int r = p[i];
-    if (r == i) {
+    int ii = WITH_BIT_VECTOR ? nodesToFind[i] : i;
+    int r = p[ii];
+    if (r == ii) {
       (*compToRoot)[compId] = r;
       rootToComp[r] = compId;
       ++compId;
@@ -138,7 +196,8 @@ void findConnectedComponents_(
   }
 
   for (int i = iBegin; i < iEnd; ++i) {
-    int c = rootToComp[p[i]];
+    int ii = WITH_BIT_VECTOR ? nodesToFind[i] : i;
+    int c = rootToComp[p[ii]];
     ++localPrefixSum[c];
   }
 
@@ -191,38 +250,12 @@ void findConnectedComponents_(
 #pragma omp barrier
   
   for (int i = iEnd - 1; i >= iBegin; --i) {
-    int c = rootToComp[p[i]];
+    int ii = WITH_BIT_VECTOR ? nodesToFind[i] : i;
+    int c = rootToComp[p[ii]];
     --(*compSizePrefixSum)[c + nComp*tid];
     int offset = (*compSizePrefixSum)[c + nComp*tid];
-    (*nodesSortedByComp)[offset] = i;
+    (*nodesSortedByComp)[offset] = ii;
   }
-
-  /*// reduce component sizes
-  int localCnt = 0;
-  for (int c = cBegin; c < cEnd; ++c) {
-    int sum = (*compSizes)[c];
-    for (int t = 1; t < nthreads; ++t) {
-      sum += (*compSizes)[c + t*(*numOfComponents)];
-    }
-    (*compSizes)[c] = sum;
-    localCnt += sum;
-  }
-  cnts[tid + 1] = localCnt;
-
-#pragma omp barrier
-#pragma omp master
-  {
-    for (int i = 1; i < nthreads - 1; ++i) {
-      cnts[i + 1] += cnts[i];
-    }
-  }
-#pragma omp barrier
-
-  localCnt = cnts[tid];
-  for (int c = cBegin; c < cEnd; ++c) {
-    (*compSizePrefixSum)[c] = localCnt;
-    localCnt += (*compSizes)[c];
-  }*/
   } // omp parallel
 
   //printf("finding connected components takes %f\n", omp_get_wtime() - t);
@@ -232,11 +265,16 @@ void findConnectedComponents_(
   for (int i = 0; i < nComp; ++i) {
     cnt += (*compSizes)[i];
   }
-  assert(cnt == A->m);
+  assert(cnt == m);
 
   for (int i = 0; i < nComp; ++i) {
     if (i < nComp - 1)
       assert((*compSizePrefixSum)[i + 1] - (*compSizePrefixSum)[i] == (*compSizes)[i]);
+
+    if ((*compSizes)[i] > 0) {
+      // root of each component has the smallest id
+      assert((*compToRoot)[i] == (*nodesSortedByComp)[(*compSizePrefixSum)[i]]);
+    }
 
     for (int j = (*compSizePrefixSum)[i]; j < (*compSizePrefixSum)[i] + (*compSizes)[i]; ++j) {
       assert(p[(*nodesSortedByComp)[j]] == (*compToRoot)[i]);
@@ -250,6 +288,7 @@ void findConnectedComponents_(
   //printf("num of connected components = %d\n", (*numOfComponents));
 
   delete[] rootToComp;
+  if (nodesToFind) delete[] nodesToFind;
 }
 
 extern "C" {
@@ -265,6 +304,21 @@ void CSR_FindConnectedComponents(
   else {
     assert(1 == ((CSR *)A)->base);
     findConnectedComponents_<1>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum, nodesSortedByComp);
+  }
+}
+
+void CSR_FindConnectedComponentsWithBitVector(
+  const CSR_Handle *A,
+  int *numOfComponents, int **compToRoot, int **compSizes, int **compSizePrefixSum,
+  int **nodesSortedByComp,
+  const BitVector *bv)
+{
+  if (0 == ((CSR *)A)->base) {
+    findConnectedComponents_<0, true>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum, nodesSortedByComp, bv);
+  }
+  else {
+    assert(1 == ((CSR *)A)->base);
+    findConnectedComponents_<1, true>((const CSR *)A, numOfComponents, compToRoot, compSizes, compSizePrefixSum, nodesSortedByComp, bv);
   }
 }
 

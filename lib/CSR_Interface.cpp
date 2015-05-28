@@ -58,6 +58,16 @@ void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
   ((CSR *)A)->getRCMPermutation(perm, inversePerm);
 }
 
+void CSR_GetRCMPermutationWithoutPseudoDiameterSourceSelection(const CSR_Handle *A, int *perm, int *inversePerm)
+{
+  ((CSR *)A)->getRCMPermutation(perm, inversePerm, false);
+}
+
+void CSR_GetBFSPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
+{
+  ((CSR *)A)->getBFSPermutation(perm, inversePerm);
+}
+
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm)
 {
   ((CSR *)A)->permute((CSR *)out, columnPerm, rowInversePerm);
@@ -120,7 +130,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 #endif
 
     if (getPermutation) {
-        A->getRCMPermutation(perm, inversePerm);
+        A->getBFSPermutation(perm, inversePerm);
     }
 
 #ifdef PERF_TUNE

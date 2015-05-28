@@ -33,9 +33,13 @@ public :
    *
    * @note only works for a symmetric matrix
    *
-   * @param source starting vertex (-1 to use pseudo diameter heuristic)
+   * @param pseudoDiameterSourceSelection true to use heurstic of using a source
+   *                                      in a pseudo diameter.
+   *                                      Further reduce diameter at the expense
+   *                                      of more time on finding permutation.
    */
-  void getRCMPermutation(int *perm, int *inversePerm);
+  void getRCMPermutation(int *perm, int *inversePerm, bool pseudoDiameterSourceSelection = true);
+  void getBFSPermutation(int *perm, int *inversePerm);
 
 #ifdef USE_BOOST
   void boostGetRCMPermutation(int *perm, int *inversePerm, int source = -1) const;

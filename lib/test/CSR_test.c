@@ -21,7 +21,7 @@ bool isPerm(int *perm, int n)
 
     for (int i = 0; i < n; ++i) {
       if (temp[i] == i - 1) {
-        printf("%d duplicated\n", i);
+        printf("%d duplicated\n", i - 1);
         assert(false);
         return false;
       }
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
     bool one_based_CSR = false;
     load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz, one_based_CSR);
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
-    double bytes = (double)nnz*12;
+    double bytes = (double)nnz*4;
 
     CSR_Handle *A = CSR_Create(m, n, ai, aj, a, one_based_CSR ? 1 : 0);
     printf("CSR matrix content:\n");
@@ -91,73 +91,48 @@ int main(int argc, char *argv[])
     double *a2 = (double *)malloc(sizeof(double)*nnz);
     int *aj2 = (int *)malloc(sizeof(int)*nnz);
     int *ai2 = (int *)malloc(sizeof(int)*(m + 1));
-    CSR_Handle *A2 = NULL;
+    CSR_Handle *A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
 
-    printf("RCM permutation\n");
+    for (int permuteType = 0; permuteType < 3; ++permuteType) {
+      if (2 == permuteType) {
+        printf("RCM permutation\n");
+      }
+      else if (1 == permuteType) {
+        printf("RCM permutation w/o source selection\n");
+      }
+      else {
+        printf("BFS permutation\n");
+      }
 
-#ifdef USE_BOOST
-    t = -omp_get_wtime();
-    CSR_BoostGetRCMPermutation(A, perm, inversePerm);
-    t += omp_get_wtime();
-    isPerm(perm, m);
-    isPerm(inversePerm, m);
+      t = -omp_get_wtime();
+      if (2 == permuteType) {
+        CSR_GetRCMPermutation(A, perm, inversePerm);
+      }
+      else if (1 == permuteType) {
+        CSR_GetRCMPermutationWithoutPseudoDiameterSourceSelection(A, perm, inversePerm);
+      }
+      else {
+        CSR_GetBFSPermutation(A, perm, inversePerm);
+      }
+      t += omp_get_wtime();
+      printf("Constructing permutation takes %f (%f GB/s)\n", t, bytes/t/1e9);
 
-    printf("Boost RCM takes %f (%f GB/s)\n", t, bytes/t/1e9);
+      isPerm(perm, m);
+      isPerm(inversePerm, m);
 
-    A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
+      t = -omp_get_wtime();
+      CSR_Permute(A, A2, perm, inversePerm);
+      t += omp_get_wtime();
+      printf("Permute takes %f (%f GB/s)\n", t, bytes/t/1e9);
+      printf("Permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
 
-    CSR_Permute(A, A2, perm, inversePerm);
-    printf("Boost RCM permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
-#endif
-
-    /*t = -omp_get_wtime();
-    CSR_GetRCMPermutationWithSource(A, perm, inversePerm, source);
-    t += omp_get_wtime();
-    isPerm(perm, m);
-    isPerm(inversePerm, m);
-    
-    printf("Boost RCM with source %d takes %f (%f GB/s)\n", t, source, bytes/t/1e9);
-
-    CSR_Permute(A, A2, perm, inversePerm);
-    printf("RCM permuted bandwidth with source %d: %d\n\n", source, CSR_GetBandwidth(A2));
-
-    t = -omp_get_wtime();
-    CSR_GetRCMPermutationNewWithSource(A, perm, inversePerm, source);
-    t += omp_get_wtime();
-    isPerm(perm, m);
-    isPerm(inversePerm, m);
-    
-    printf("My RCM with source %d takes %f (%f GB/s)\n", source, t, bytes/t/1e9);
-
-    CSR_Permute(A, A2, perm, inversePerm);
-    printf("My RCM permuted bandwidth with source %d: %d\n\n", source, CSR_GetBandwidth(A2));*/
-
-    t = -omp_get_wtime();
-    CSR_GetRCMPermutation(A, perm, inversePerm);
-    t += omp_get_wtime();
-
-    isPerm(perm, m);
-    isPerm(inversePerm, m);
-    
-    printf("My RCM takes %f (%f GB/s)\n", t, bytes/t/1e9);
-
-    A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
-
-    t = -omp_get_wtime();
-    CSR_Permute(A, A2, perm, inversePerm);
-    t += omp_get_wtime();
-
-    printf("Permute takes %f (%f GB/s)\n", t, bytes/t/1e9);
-
-    printf("My permuted bandwidth: %d\n\n", CSR_GetBandwidth(A2));
-
-    t = -omp_get_wtime();
-    for (int i = 0; i < REPEAT; ++i) {
-      CSR_MultiplyWithVector(y, 1, A2, x, 0, y, 0);
+      t = -omp_get_wtime();
+      for (int i = 0; i < REPEAT; ++i) {
+        CSR_MultiplyWithVector(y, 1, A2, x, 0, y, 0);
+      }
+      t += omp_get_wtime();
+      printf("SpMV BW = %g GB/s\n", ((double)nnz*12 + (m + n)*8)/(t/REPEAT)/1e9);
     }
-    t += omp_get_wtime();
-
-    printf("SpMV BW = %g GB/s\n", ((double)nnz*12 + (m + n)*8)/(t/REPEAT)/1e9);
 
     CSR_Destroy(A2);
     CSR_Destroy(A);

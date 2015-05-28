@@ -24,6 +24,8 @@ void CSR_MultiplyWithVector(
   double gamma);
 
 void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
+void CSR_GetRCMPermutationWithoutPseudoDiameterSourceSelection(const CSR_Handle *A, int *perm, int *inversePerm);
+void CSR_GetBFSPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
 #ifdef USE_BOOST
 void CSR_BoostGetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_BoostGetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
