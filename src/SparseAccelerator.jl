@@ -432,6 +432,22 @@ end
 # y = A*x
 SpMV!(y::AbstractVector, A::SparseMatrixCSC, x::AbstractVector) = SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)))
 
+function PageRank!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector, gamma::Number, z::AbstractVector)
+    assert(length(w) == length(y))
+    assert(length(w) == length(z))
+
+    if DEFAULT_LIBRARY == PCL_LIB
+        A2 = CreateCSR(A)
+        ccall((:PageRank, LIB_PATH), Void,
+              (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
+              length(w), pointer(w), alpha, pointer(A.colptr), pointer(A.rowval), pointer(x), beta, pointer(y), gamma, pointer(z))
+        DestroyCSR(A2)
+    else
+        # use Julia implementation
+        w = (alpha * A * x + beta * x + gamma).*z
+    end
+end
+
 # alpha*A*x + beta*y + gamma
 function SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector, gamma::Number)
   w = Array(Cdouble, length(x))
