@@ -901,10 +901,28 @@ function addUnmodifiedParams(func, signature, unmodifieds)
   params_not_modified[(func, signature)] = unmodifieds
 end
 
+function isSpMV(node)
+  if node == :SpMV
+    return true
+  end
+  if typeof(node) == Expr &&
+     node.head == :call &&
+     typeof(node.args[1]) == TopNode   &&
+     node.args[1].name    == :getfield &&
+     node.args[2] == :SparseAccelerator &&
+     node.args[3].value == :SpMV
+    return true
+  end
+  return false
+end
+
 function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
   fs = (func, arg_type_tuple)
+  dprintln(2,"getUnmodifiedArgs ", fs)
+
   if haskey(params_not_modified, fs)
     res = params_not_modified[fs]
+    dprintln(2,"getUnmodifiedArgs cached ", res)
     assert(length(res) == length(args))
     return res
   end 
@@ -912,12 +930,13 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
   if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
      func == :(/)  || func == :(*)  || func == :(+)  || func == :(-)
     addUnmodifiedParams(func, arg_type_tuple, ones(Int32, length(args))) 
-  elseif func == :SpMV
+  elseif isSpMV(func)
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
   else
     addUnmodifiedParams(func, arg_type_tuple, zeros(Int32, length(args))) 
   end
 
+  dprintln(2,"getUnmodifiedArgs not-cached ", params_not_modified[fs])
   return params_not_modified[fs]
 end
 
