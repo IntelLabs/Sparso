@@ -67,6 +67,102 @@ function mmread(filename, infoonly::Bool)
     A
 end
 
+function mmread_reorder(filename)
+    mtx_file = open(filename, "r")
+    modification_time::Float64 = mtime(mtx_file)
+    close(mtx_file)
+    
+    reordered_filename = string(filename, ".reordered")
+    if isfile(reordered_filename)
+        # The file format is as follows:
+        #   last modification time of the original mtx file
+        #   m n #non_zeros Ti_num Tv_num colptr rowval nzval
+        #   PermutationVector ReversePermutationVector
+        reordered_file = open(reordered_filename, "r")
+        modification_time1 = read(reordered_file, Float64)
+        if (modification_time == modification_time1)
+            # The reordered file has the up to date info
+            m = read(reordered_file, Int)
+            n = read(reordered_file, Int)
+            nnz = read(reordered_file, Int64)
+            
+            Ti_num = read(reordered_file, Int)
+            Tv_num = read(reordered_file, Int)
+            dict = Dict{Int, Any}(0 => Int, 1 => Int32, 2 => Int64, 3 => Float64)
+            Ti = dict[Ti_num]
+            Tv = dict[Tv_num]
+            
+            colptr = read(reordered_file, Ti, n + 1)
+            println("colptr is ", colptr)
+            rowval = read(reordered_file, Ti, nnz)
+            println("rowval is ", rowval)
+            nzval  = read(reordered_file, Tv, nnz)
+            println("nzval is ", nzval)
+            A = SparseMatrixCSC(m, n, colptr, rowval, nzval)
+            println("A is ", A)
+            
+            P      = read(reordered_file, Cint, n)
+            println("P is ", P)
+            
+            Pprime = read(reordered_file, Cint, n)
+            println("Pprime is ", Pprime)
+            close(reordered_file)
+            
+            return A, P, Pprime
+        else
+            # The reordered file is out of date
+            close(reordered_file)
+            rm(reordered_filename)
+        end
+    end
+    
+    # Read the file to build a CSC array, and reorder it
+    A          = mmread(filename)
+    m::Int     = A.m
+    n::Int     = A.n
+    nnz::Int64 = size(A.nzval, 1)
+    Tv         = eltype(A.nzval)
+    Ti         = eltype(A.colptr)
+    colptr     = Array(Ti, n + 1)
+    rowval     = Array(Ti, nnz)
+    nzval      = Array(Tv, nnz)
+    newA       = SparseMatrixCSC{Tv, Ti}(m, n, colptr, rowval, nzval)
+    
+    P          = Array(Cint, n)
+    Pprime     = Array(Cint, n)
+    
+    ccall((:CSR_ReorderMatrix, "../lib/libcsr.so"), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
+               pointer(P), pointer(Pprime), true, true, true)
+
+            println("colptr is ", newA.colptr)
+            println("rowval is ", newA.rowval)
+            println("nzval is ", newA.nzval)
+
+    # Store the reordered A and P, PPrime into a file
+    reordered_file = open(reordered_filename, "w")
+    
+    dict = Dict{Any, Int}(Int => 0, Int32 => 1, Int64 => 2, Float64 => 3)
+    write(reordered_file, modification_time)
+    write(reordered_file, m)
+    write(reordered_file, n)
+    write(reordered_file, nnz)
+    write(reordered_file, dict[Ti])
+    write(reordered_file, dict[Tv])
+    write(reordered_file, newA.colptr)
+    write(reordered_file, newA.rowval)
+    write(reordered_file, newA.nzval)
+    write(reordered_file, P)
+    write(reordered_file, Pprime)
+    close(reordered_file)
+
+    return newA, P, Pprime
+end
+
 mmread(filename) = mmread(filename, false)
 
 end # module
