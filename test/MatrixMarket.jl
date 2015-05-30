@@ -93,19 +93,12 @@ function mmread_reorder(filename)
             Tv = dict[Tv_num]
             
             colptr = read(reordered_file, Ti, n + 1)
-            println("colptr is ", colptr)
             rowval = read(reordered_file, Ti, nnz)
-            println("rowval is ", rowval)
             nzval  = read(reordered_file, Tv, nnz)
-            println("nzval is ", nzval)
             A = SparseMatrixCSC(m, n, colptr, rowval, nzval)
-            println("A is ", A)
             
             P      = read(reordered_file, Cint, n)
-            println("P is ", P)
-            
             Pprime = read(reordered_file, Cint, n)
-            println("Pprime is ", Pprime)
             close(reordered_file)
             
             return A, P, Pprime
@@ -138,10 +131,6 @@ function mmread_reorder(filename)
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
                pointer(P), pointer(Pprime), true, true, true)
-
-            println("colptr is ", newA.colptr)
-            println("rowval is ", newA.rowval)
-            println("nzval is ", newA.nzval)
 
     # Store the reordered A and P, PPrime into a file
     reordered_file = open(reordered_filename, "w")
