@@ -582,15 +582,368 @@ function reorderLoop(L, M, lives, symbolInfo)
     end 
 end
 
+# Map each BB to a boolean: true if the BB in any loop 
+function BBsInLoop(lives, loop_info)
+    in_loop = Dict{Int, Bool}()
+    for (j,bb) in lives.basic_blocks
+        in_loop[bb.label] = false
+    end
+
+    for L in loop_info.loops
+        for bbnum in L.members
+            in_loop[bbnum] = true
+        end
+    end
+    return in_loop
+end
+
+function findMmread(lives, in_loop)
+    # Look for such a statement outside any loop: e.g. A = ((top(getfield))(MatrixMarket,:mmread))("b.mtx")
+    for (j,bb) in lives.basic_blocks
+        if in_loop[bb.label] 
+            continue
+        end
+        for stmt_idx = 1 : length(bb.statements)
+            expr = bb.statements[stmt_idx].expr
+            if expr.head == :(=) 
+                lhs  = expr.args[1]
+                if typeof(lhs) != Symbol && typeof(lhs) != GenSym
+                    return nothing, 0
+                end
+                rhs  = expr.args[2]
+                if rhs.head == :call
+                    func = rhs.args[1] #:((top(getfield))(MatrixMarket,:mmread))
+                    if func.head == :call && size(func.args, 1) == 3
+                        if func.args[1] == TopNode(:getfield) &&  
+                            func.args[2] == :MatrixMarket && 
+                            func.args[3] == :(:mmread)
+                            return bb, stmt_idx
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nothing, 0
+end 
+
+type ExitEdge
+    from_BB       :: BasicBlock
+    from_stmt_idx :: Int
+    to_BB         :: BasicBlock
+    to_stmt_idx   :: Int
+end
+
+# One part of a region: an interval in a BB
+type RegionInterval
+    BB            :: BasicBlock
+    from_stmt_idx :: Int  # included in the region
+    to_stmt_idx   :: Int  # included in the region
+end
+
+type Region
+    mmread_BB       :: BasicBlock
+    mmread_stmt_idx :: Int
+    exits           :: Set{ExitEdge}
+    intervals       :: Set{RegionInterval}
+end
+
+function DFSGrowRegion(mmread_BB, mmread_stmt_idx, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, exits, intervals)
+    visited[current_BB.label] = true
+    last_stmt_idx = length(current_BB.statements)
+    for stmt_idx = start_stmt_idx : last_stmt_idx
+        expr = bb.statements[stmt_idx].expr
+        if expr.head == :return
+            if !has_loop
+                return false
+            end
+            exit = ExitEdge(current_BB, stmt_idx - 1, current_BB, stmt_idx)
+            union!(exits, exit)
+            interval = RegionInterval(current_BB, start_stmt_idx, current_BB, stmt_idx - 1)
+            union!(intervals, interval)
+            return true
+        end
+        if expr.head == :throw
+            throw("DFSGrowRegion: throw not handled")
+            return false
+        end
+        distributive = checkDistributivity(expr, symbolInfo, true)
+        if !distributive
+            if !has_loop
+                return false
+            end
+            exit = ExitEdge(current_BB, stmt_idx - 1, current_BB, stmt_idx)
+            union!(exits, exit)
+            interval = RegionInterval(current_BB, start_stmt_idx, current_BB, stmt_idx - 1)
+            union!(intervals, interval)
+            return true
+        end
+    end
+    interval = RegionInterval(current_BB, start_stmt_idx, current_BB, last_stmt_idx) 
+    union!(intervals, interval)
+    
+    # Current BB's statements have been scanned. Now successors
+    for succ_BB in current_BB.succs
+        if succ_BB.label == -2 # the pseudo exit of the function
+            if !has_loop
+                return false
+            end
+            exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
+            union!(exits, exit)
+            continue
+        end            
+        
+        if (visited[succ_BB.label]) 
+            continue
+        end
+        
+        if !in(succ_BB.label, loop_info.dom_dict[mmread_BB.label])
+            exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
+            union!(exits, exit)
+            continue
+        end
+        
+        has_loop_below = DFSGrowRegion(mmread_BB, mmread_stmt_idx, succ_BB, 1, lives, in_loop, visited, has_loop, exits, intervals)
+        if (!has_loop && !has_loop_below)
+            return false
+        end
+    end
+end
+
+function growRegion(mmread_BB, mmread_stmt_idx, lives, symbolInfo, in_loop)
+    has_loop = false
+    visited = Dict{Int, Bool}()
+    for (j,bb) in lives.basic_blocks 
+        visited[bb.label] = false
+    end
+    
+    # Imagine there are always two invisible statements in any BB, whose statement indices are 0 and last_stmt_idx+1
+    # So any real statement always has a statement before and after it. That is why we can do mmread_stmt_idx + 1 here
+    # Similary, we can do any stmt_indx -1 in future.
+    success = DFSGrowRegion(mmread_BB, mmread_stmt_idx, mmread_BB, mmread_stmt_idx + 1, lives, symbolInfo, in_loop, visited, has_loop, region.exits, region.intervals)
+    if success
+        return region
+    else
+        return nothing
+    end
+end
+
+function regionFormationBasedOnMmread(funcAST, lives, loop_info, symbolInfo)
+    in_loop = BBsInLoop(lives, loop_info)
+    mmread_BB, mmread_stmt_idx = findMmread(lives, in_loop)
+    if mmread_BB == nothing
+        return nothing
+    end
+    return growRegion(mmread_BB, mmread_stmt_idx, lives, symbolInfo, in_loop)
+end
+
+function findIAs(region::Region)
+    # Build inter-dependent arrays
+    IAs = Dict{Any, Set}()
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = bbs[bbnum].statements[stmt_index]
+            IAs[stmt] = Set{Any}()
+            seeds = Set{Any} ()
+            push!(seeds, stmt.expr)
+            while !isempty(seeds)
+                seed = pop!(seeds)
+                IA = Set{Any}()
+                findIA(seed, IA, seeds, symbolInfo, 1)
+                if !isempty(IA)
+                    push!(IAs[stmt], IA)
+                end
+            end
+#            println("###Stmt: ", stmt.expr)
+#            println("  IAs:", IAs[stmt])        
+        end
+    end
+    return IAs
+end
+
+function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
+    M = gensym("M")
+    reordered = Set{Symbol}()
+    push!(reordered, M)
+    
+    changed = true
+    while changed
+        changed = false
+        for bbnum in L.members
+            for stmt in bbs[bbnum].statements
+                for IA in IAs[stmt]
+                    if ⊈(IA, reordered)
+                        if !isempty(intersect(IA, reordered))
+                            union!(reordered, IA)
+                            changed = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    dprintln(2, "Reordered:", reordered)
+    
+    
+    stmt = Expr(:(=), newV,
+                Expr(:call, :Array, :Cdouble, 
+                    Expr(:call, TopNode(:arraylen), V)))
+    push!(new_stmts, stmt)
+    
+    # Do the actual reordering in the C library
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverseReorderVector),
+                V, newV, P)
+    push!(new_stmts, stmt)
+    
+    # Update the original vector with the new data
+    stmt = Expr(:(=), V, newV )
+    push!(new_stmts, stmt)
+
+    # The symbols that should be reordered before L are the reorderedUses live into L
+    headBlock = region.mmread_BB
+    reorderedBeforeRegion = intersect(reordered, headBlock.live_in)
+    
+    dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
+
+    if isempty(reorderedBeforeRegion)
+        return
+    end
+    
+    #TODO: benefit-cost analysis
+
+    # Only those arrays that are updated in the region need to be reverse reordered afterwards
+    # Limitation: the region must be linear (except with some loop back edges) in order for the
+    # analysis to be correct: if there is any control flow, we might be wrong: some arrays in 
+    # the if/else block might never execute, but we assume they do, and propagate their "reordered"
+    # info to other arrays. 
+    # TODO: minimal instrument to control flow graph to record which arrays are actually updated dynamically
+    # if there is control flow. Then insert code to reverse reorder those actually updated.
+    updatedInRegion = Set{Symbol}()
+    for bbnum in L.members
+        union!(updatedInRegion, bbs[bbnum].def)
+    end
+    dprintln(2, "updatedInLoop: ", updatedInLoop)
+
+
+ 
+      
+    # New a vector to hold the new reordering statements R(LiveIn) before the loop. 
+    # We do not insert them into the CFG at this moment, since that will change the
+    # pred-succ and live info, leading to some subtle errors. We need CFG not changed
+    # until all new statements are ready.
+    new_stmts_before_L = Expr[]
+
+    # Allocate space to store the permutation and inverse permutation info
+    (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
+
+    # Compute P and Pprime, and reorder M
+    reorderMatrix(M, P, Pprime, new_stmts_before_L, true, true, true)
+    
+    # Now reorder other arrays
+    for sym in reorderedBeforeL
+        if sym != M
+            if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                reorderMatrix(sym, P, Pprime, new_stmts_before_L, false, true, true)
+            else
+                reorderVector(sym, P, new_stmts_before_L)
+            end
+        end
+    end
+    
+    # For perf measurement only. 
+    # TODO: add a switch here
+#    t1 = insertTimerBeforeLoop(new_stmts_before_L)
+             
+    # At the exit of the loop, we need to reverse reorder those that live out of the loop,
+    # to recover their original order before they are getting used outside of the loop
+    # We remember those in an array. Each element is a tuple 
+    # (bb label, succ label, the new statements to be inserted on the edge from bb to succ)
+    new_stmts_after_L =  Any[]
+    reorderedAndUpdated = intersect(reordered, updatedInLoop)
+    for bbnum in L.members
+        bb = bbs[bbnum]
+        for succ in bb.succs
+            if !in(succ.label, L.members)
+                # For perf measurement only
+                # TODO: add a switch here
+                new_stmts = (bbnum, succ.label,  Expr[])
+                push!(new_stmts_after_L, new_stmts)
+#                insertTimerAfterLoop(t1, new_stmts[3])
+
+                reverseReordered = intersect(reorderedAndUpdated, succ.live_in)
+                if isempty(reverseReordered)
+                    continue
+                end
+                dprintln(2, "ReverseReorder on edge ", bbnum, " --> ", succ.label)
+                
+                for sym in reverseReordered
+                    if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                        reverseReorderMatrix(sym, P, Pprime, new_stmts[3], false, true, true)
+                    else
+                        reverseReorderVector(sym, P, new_stmts[3])
+                    end
+                end
+            end
+        end
+    end
+
+    # Now actually change the CFG.
+    (new_bb, new_goto_stmt) = LivenessAnalysis.insertBefore(lives, L.head, true, L.back_edge)
+    for stmt in new_stmts_before_L
+        LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+    end
+    if new_goto_stmt != nothing
+      push!(new_bb.statements, new_goto_stmt)
+    end
+    
+    for (pred, succ, new_stmts) in new_stmts_after_L
+        (new_bb, new_goto_stmt) = LivenessAnalysis.insertBetween(lives, pred, succ)
+        for stmt in new_stmts
+            LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+        end
+        if new_goto_stmt != nothing
+          push!(new_bb.statements, new_goto_stmt)
+        end
+    end
+
+    if(DEBUG_LVL >= 2)
+        println("******** CFG after reordering: ********")
+        show(lives);
+    end 
+end
+
+function reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
+    region = regionFormationBasedOnMmread(funcAST, lives, loop_info, symbolInfo)
+    if region == nothing
+        return false
+    end
+    
+    IAs = findIAs(region)
+    regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
+end
+
 function reorder(funcAST, lives, loop_info, symbolInfo)
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)
-    local param = args[1]
 
-    # Select a sparse matrix from the function AST's arguments. 
+    # First, see if there is a mmread() in the first basic block.
+    # If not, select a sparse matrix from the function AST's arguments. 
     # So far, choose the first sparse matrix in the arguments.
-    # TODO: have a heuristic to choose the best candidate?
+    # TODO: have a heuristic to choose the best candidate? Or explicitly
+    # point out the candidate with user annotation?
+    # TODO: it really does not matter whether the sparse matrix is from
+    # a mmread or from an argument -- from the perspective of region formation,
+    # identifying IAs, and region transformation. So should unify the two cases.
+    if (reorderDuringMmread(funcAST, lives, loop_info, symbolInfo))
+        body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+        funcAST.args[3] = body_reconstructed
+        return funcAST
+    end
+
+    local param = args[1]
     found = false
     M = nothing
     for i = 1:length(param)
