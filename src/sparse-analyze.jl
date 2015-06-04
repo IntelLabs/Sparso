@@ -763,15 +763,20 @@ function findIAs(region::Region)
 end
 
 function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
-    M = gensym("M")
+    mm_read_expr = region.mmread_BB.statements[mmread_stmt_idx].expr 
+    lhs = mm_read_expr.args[1]
+    rhs = mm_read_expr.args[2]
+
     reordered = Set{Symbol}()
-    push!(reordered, M)
+    push!(reordered, lhs)
     
     changed = true
     while changed
         changed = false
-        for bbnum in L.members
-            for stmt in bbs[bbnum].statements
+        for interval in region.intervals
+            BB = interval.BB
+            for stmt_idx in interval.start_stmt_idx : interval.last_stmt_idx
+                stmt = BB.statements[stmt_idx]
                 for IA in IAs[stmt]
                     if ⊈(IA, reordered)
                         if !isempty(intersect(IA, reordered))
@@ -786,21 +791,6 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     
     dprintln(2, "Reordered:", reordered)
     
-    
-    stmt = Expr(:(=), newV,
-                Expr(:call, :Array, :Cdouble, 
-                    Expr(:call, TopNode(:arraylen), V)))
-    push!(new_stmts, stmt)
-    
-    # Do the actual reordering in the C library
-    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverseReorderVector),
-                V, newV, P)
-    push!(new_stmts, stmt)
-    
-    # Update the original vector with the new data
-    stmt = Expr(:(=), V, newV )
-    push!(new_stmts, stmt)
-
     # The symbols that should be reordered before L are the reorderedUses live into L
     headBlock = region.mmread_BB
     reorderedBeforeRegion = intersect(reordered, headBlock.live_in)
@@ -821,90 +811,123 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     # TODO: minimal instrument to control flow graph to record which arrays are actually updated dynamically
     # if there is control flow. Then insert code to reverse reorder those actually updated.
     updatedInRegion = Set{Symbol}()
-    for bbnum in L.members
-        union!(updatedInRegion, bbs[bbnum].def)
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_idx in interval.start_stmt_idx : interval.last_stmt_idx
+            stmt = BB.statements[stmt_idx]
+            union!(updatedInRegion, stmt.def)
+        end
     end
-    dprintln(2, "updatedInLoop: ", updatedInLoop)
-
-
- 
+    dprintln(2, "updatedInRegion: ", updatedInRegion)
       
     # New a vector to hold the new reordering statements R(LiveIn) before the loop. 
     # We do not insert them into the CFG at this moment, since that will change the
     # pred-succ and live info, leading to some subtle errors. We need CFG not changed
     # until all new statements are ready.
-    new_stmts_before_L = Expr[]
+    new_stmts_before_region = Expr[]
 
-    # Allocate space to store the permutation and inverse permutation info
-    (P, Pprime) = allocateForPermutation(M, new_stmts_before_L)
+    # Replace the original "lhs=mmread()" with
+    #   T   = mmread() // T is a tuple
+    #   lhs = (top(tupleref))(T, 1)
+    #   P   = (top(tupleref))(T, 2)
+    #   P'  = (top(tupleref))(T, 3)
+    T = gensym("T")
+    P = gensym("M")
+    Pprime = gensym("Pprime")
 
-    # Compute P and Pprime, and reorder M
-    reorderMatrix(M, P, Pprime, new_stmts_before_L, true, true, true)
+    stmt = Expr(:(=), T, rhs)
+    push!(new_stmts_before_region, stmt)
+
+    stmt = Expr(:(=), lhs, Expr(:call, TopNode(:tupleref), T, 1))
+    push!(new_stmts_before_region, stmt)
     
+    stmt = Expr(:(=), P, Expr(:call, TopNode(:tupleref), T, 2))
+    push!(new_stmts_before_region, stmt)
+    
+    stmt = Expr(:(=), Pprime, Expr(:call, TopNode(:tupleref), T, 3))
+    push!(new_stmts_before_region, stmt)
+
     # Now reorder other arrays
-    for sym in reorderedBeforeL
-        if sym != M
+    for sym in reorderedBeforeRegion
+        if sym != lhs
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                reorderMatrix(sym, P, Pprime, new_stmts_before_L, false, true, true)
+                reorderMatrix(sym, P, Pprime, new_stmts_before_region, false, true, true)
             else
-                reorderVector(sym, P, new_stmts_before_L)
+                reorderVector(sym, P, new_stmts_before_region)
             end
         end
     end
-    
-    # For perf measurement only. 
-    # TODO: add a switch here
-#    t1 = insertTimerBeforeLoop(new_stmts_before_L)
-             
-    # At the exit of the loop, we need to reverse reorder those that live out of the loop,
+                 
+    # At each exit edge, we need to reverse reorder those that live out.
     # to recover their original order before they are getting used outside of the loop
     # We remember those in an array. Each element is a tuple 
     # (bb label, succ label, the new statements to be inserted on the edge from bb to succ)
-    new_stmts_after_L =  Any[]
-    reorderedAndUpdated = intersect(reordered, updatedInLoop)
-    for bbnum in L.members
-        bb = bbs[bbnum]
-        for succ in bb.succs
-            if !in(succ.label, L.members)
-                # For perf measurement only
-                # TODO: add a switch here
-                new_stmts = (bbnum, succ.label,  Expr[])
-                push!(new_stmts_after_L, new_stmts)
-#                insertTimerAfterLoop(t1, new_stmts[3])
-
-                reverseReordered = intersect(reorderedAndUpdated, succ.live_in)
-                if isempty(reverseReordered)
-                    continue
-                end
-                dprintln(2, "ReverseReorder on edge ", bbnum, " --> ", succ.label)
+    new_stmts_after_region =  Any[]
+    reorderedAndUpdated = intersect(reordered, updatedInRegion)
+    for exit in region.exits
+        if exit.from_BB == exit.to_BB
+            BB = exit.from_BB
+            # insert statements inside a block. At least one of the
+            # from/to stmt_idx is a real statement's index
+            last_stmt_idx = length(BB.statements)
+            assert((1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx) ||
+                (1 <= exit.to_stmt_idx && exit.to_stmt_idx <= last_stmt_idx))
+            if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
+                stmt = BB.statements[exit.from_stmt_idx]
+                reverseReordered = intersect(reorderedAndUpdated, stmt.live_out)
+            else 
+                stmt = BB.statements[exit.to_stmt_idx]
+                reverseReordered = intersect(reorderedAndUpdated, stmt.live_in)
+            end
+            if isempty(reverseReordered)
+                continue
+            end
+            dprintln(2, "ReverseReorder inside BB ", BB.label, " ", exit.from_stmt_idx, "--> ", exit.to_stmt_idx)
                 
-                for sym in reverseReordered
-                    if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                        reverseReorderMatrix(sym, P, Pprime, new_stmts[3], false, true, true)
-                    else
-                        reverseReorderVector(sym, P, new_stmts[3])
-                    end
+            new_stmts = Expr[]
+            for sym in reverseReordered
+                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                    reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
+                else
+                    reverseReorderVector(sym, P, new_stmts)
                 end
             end
-        end
-    end
 
-    # Now actually change the CFG.
-    (new_bb, new_goto_stmt) = LivenessAnalysis.insertBefore(lives, L.head, true, L.back_edge)
-    for stmt in new_stmts_before_L
-        LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
-    end
-    if new_goto_stmt != nothing
-      push!(new_bb.statements, new_goto_stmt)
-    end
-    
-    for (pred, succ, new_stmts) in new_stmts_after_L
-        (new_bb, new_goto_stmt) = LivenessAnalysis.insertBetween(lives, pred, succ)
-        for stmt in new_stmts
-            LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
-        end
-        if new_goto_stmt != nothing
-          push!(new_bb.statements, new_goto_stmt)
+            if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
+                for new_stmt in new_stmts
+                    LivenessAnalysis.InsertStatementAfter(lives, BB, exit.from_stmt_idx, new_stmt)
+                end
+            else
+                for new_stmt in new_stmts
+                    LivenessAnalysis.InsertStatementBefore(lives, BB, exit.to_stmt_idx, new_stmt)
+                end
+            end                
+        else
+            # insert reverse reordering between two blocks.
+            reverseReordered = intersect(reorderedAndUpdated, succ.live_in)
+            if isempty(reverseReordered)
+                continue
+            end
+            dprintln(2, "ReverseReorder on edge ", exit.from_BB.label, " --> ", exit.to_BB.label)
+                
+            new_stmts = Expr[]
+
+            for sym in reverseReordered
+                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                    reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
+                else
+                    reverseReorderVector(sym, P, new_stmts)
+                end
+            end
+            
+            # Now actually change the CFG.
+            (new_bb, new_goto_stmt) = LivenessAnalysis.insertBetween(lives, exit.from_BB.label, exit.to_BB.label)
+            for new_stmt in new_stmts
+                LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+            end
+            if new_goto_stmt != nothing
+                push!(new_bb.statements, new_goto_stmt)
+            end
         end
     end
 
