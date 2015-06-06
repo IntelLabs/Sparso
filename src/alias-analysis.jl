@@ -13,7 +13,7 @@
 
 module AliasAnalysis
 
-using ..LivenessAnalysis
+using CompilerTools
 
 DEBUG_LVL=0
 
@@ -45,7 +45,7 @@ type State
   revmap :: Dict{Int, Set{Symbol}}
   nest_level :: Int
   top_level_idx :: Int
-  liveness :: LivenessAnalysis.BlockLiveness
+  liveness :: CompilerTools.LivenessAnalysis.BlockLiveness
 end
 
 init_state(liveness) = State(0, Dict{Symbol,Int}(), Dict{Int, Set{Symbol}}(), 0, 0, liveness)

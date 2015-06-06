@@ -1,16 +1,17 @@
 #TODO: remove this include once the package is ready
-include("../src/OptFramework.jl")
+using CompilerTools
 include("../src/SparseAccelerator.jl")
 include("../src/sparse-analyze.jl")
 
-using OptFramework
+using CompilerTools.OptFramework
 using MatrixMarket
 using Base.Test
 
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
-#SparseAccelerator.LivenessAnalysis.set_debug_level(3)
+#CompilerTools.LivenessAnalysis.set_debug_level(3)
 #SparseAccelerator.set_debug_level(3)
+#OptFramework.set_debug_level(3)
 
 function cg(x, A, b, tol, maxiter)
     spmv_time = 0.0

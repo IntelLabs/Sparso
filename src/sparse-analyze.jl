@@ -269,7 +269,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         A = ast.args[3]
         x = ast.args[4]
         if A.typ <: SparseMatrixCSC && x.typ <: Vector
-          ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
+          ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
           return ast
         end
       elseif length(ast.args) == 6
@@ -279,28 +279,28 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         beta = ast.args[5]
         y = ast.args[6]
         if A.typ <: SparseMatrixCSC && x.typ <: Vector
-          ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
+          ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
           return ast
         end
       end
     elseif ast.args[1] == :dot
       dprintln(3,"optimize_calls found :dot ", ast)
       assert(length(ast.args) == 3)
-      ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-      ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+      ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+      ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
       arg1 = ast.args[2]
       arg2 = ast.args[3]
       dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
       if deepType(arg1) <: Vector && deepType(arg2) <: Vector
         dprintln(3,"optimize_calls converting to SparseAccelerator.Dot")
-        ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:Dot))
+        ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:Dot))
       end
       return ast
     elseif ast.args[1] == :(+)
       if length(ast.args) == 3
         dprintln(3,"optimize_calls found +")
-        ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-        ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+        ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+        ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
         arg1 = ast.args[2]
         arg2 = ast.args[3]
         dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
@@ -312,7 +312,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
             orig_args = ast.args
             ast.args = Array(Any,5)
             dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
-            ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
+            ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
             if is_mul1
               ast.args[2] = scalar1
               ast.args[3] = vec1
@@ -334,8 +334,8 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
     elseif ast.args[1] == :(-)
       if length(ast.args) == 3
         dprintln(3,"optimize_calls found -")
-        ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-        ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+        ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+        ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
         arg1 = ast.args[2]
         arg2 = ast.args[3]
         dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
@@ -347,7 +347,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
             orig_args = ast.args
             ast.args = Array(Any,5)
             dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
-            ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
+            ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
             if is_mul1
               ast.args[2] = scalar1
               ast.args[3] = vec1
@@ -356,7 +356,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
               ast.args[3] = arg1
             end
             if is_mul2
-              ast.args[4] = LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
+              ast.args[4] = CompilerTools.LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
               ast.args[5] = vec2
             else
               ast.args[4] = -1
@@ -368,27 +368,27 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
       end
     elseif ast.args[1] == :(*)
       dprintln(3,"optimize_calls found *")
-      ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-      ast.args[3] = AstWalker.get_one(AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
+      ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+      ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
       arg1 = ast.args[2]
       arg2 = ast.args[3]
       dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
       if deepType(arg1) <: SparseMatrixCSC && deepType(arg2) <: Vector
         dprintln(3,"optimize_calls converting to SparseAccelerator.SpMV")
-        ast.args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV))
+        ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV))
       end
       return ast
     end
   elseif asttyp == Expr && ast.head == :(=)
     dprintln(3,"optimize_calls found = ", ast)
-    ast.args[1] = AstWalker.get_one(AstWalker.AstWalk(ast.args[1], optimize_calls, nothing))
-    ast.args[2] = AstWalker.get_one(AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
+    ast.args[1] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[1], optimize_calls, nothing))
+    ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
     dprintln(3,"after recursive optimization ", ast)
     (rhs_waxpby, rhs_x, rhs_y) = isWaxpby(ast.args[2])
     dprintln(3, "rhs_waxpby = ", rhs_waxpby, " ", rhs_x, " ", rhs_y)
     if rhs_waxpby && (ast.args[1] == rhs_x || ast.args[1] == rhs_y)
       dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY!")
-      ast.args[2].args[1] = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!))
+      ast.args[2].args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!))
       splice!(ast.args[2].args, 2:5, [ast.args[1]; ast.args[2].args[2:5]])
       ast = ast.args[2]
     end
@@ -438,7 +438,7 @@ function reorderLoop(L, M, lives, symbolInfo)
     for bbnum in L.members
         for stmt_index = 1:length(bbs[bbnum].statements)
             # Replace calls to optimized versions provided in SparseAccelerator module.
-            bbs[bbnum].statements[stmt_index].expr = AstWalker.get_one(AstWalker.AstWalk(bbs[bbnum].statements[stmt_index].expr, optimize_calls, nothing))
+            bbs[bbnum].statements[stmt_index].expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(bbs[bbnum].statements[stmt_index].expr, optimize_calls, nothing))
             stmt = bbs[bbnum].statements[stmt_index]
             IAs[stmt] = Set{Any}()
             seeds = Set{Any} ()
@@ -558,18 +558,18 @@ function reorderLoop(L, M, lives, symbolInfo)
     end
 
     # Now actually change the CFG.
-    (new_bb, new_goto_stmt) = LivenessAnalysis.insertBefore(lives, L.head, true, L.back_edge)
+    (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBefore(lives, L.head, true, L.back_edge)
     for stmt in new_stmts_before_L
-        LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+        CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
     end
     if new_goto_stmt != nothing
       push!(new_bb.statements, new_goto_stmt)
     end
     
     for (pred, succ, new_stmts) in new_stmts_after_L
-        (new_bb, new_goto_stmt) = LivenessAnalysis.insertBetween(lives, pred, succ)
+        (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, pred, succ)
         for stmt in new_stmts
-            LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+            CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
         end
         if new_goto_stmt != nothing
           push!(new_bb.statements, new_goto_stmt)
@@ -1049,8 +1049,8 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
         end
     end
     
-    body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
-    funcAST.args[3] = body_reconstructed
+    body_reconstructed   = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
+    funcAST.args[3].args = body_reconstructed
     
     funcAST
 end
