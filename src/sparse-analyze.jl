@@ -576,7 +576,7 @@ function reorderLoop(L, M, lives, symbolInfo)
         end
     end
 
-    if true #(DEBUG_LVL >= 2)
+    if(DEBUG_LVL >= 2)
         println("******** CFG after reordering: ********")
         show(lives);
     end 
@@ -663,10 +663,12 @@ end
 # For now, give up with the requirement of having a loop.
 # TODO: enforce the requirement after some analysis like DCE is implemented
 function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, exits, intervals, symbolInfo, loop_info)
-println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx, "(", 
-         1 <= start_stmt_idx && start_stmt_idx <= length(current_BB.statements) ? 
-         current_BB.statements[start_stmt_idx].index : "", ")");
-
+    if (DEBUG_LVL >= 2)
+        println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx, "(", 
+            1 <= start_stmt_idx && start_stmt_idx <= length(current_BB.statements) ? 
+            current_BB.statements[start_stmt_idx].index : "", ")");
+    end
+    
     # Disable the requirement of having a loop.
     # TODO: enable it in future
     loop_expected_on_every_path = false
@@ -707,17 +709,16 @@ println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx
     
     # Current BB's statements have been scanned. Now successors
     for succ_BB in current_BB.succs
-                println("looking at succ BB ", succ_BB.label)
-                println("its dominators are ", loop_info.dom_dict[succ_BB.label])
-
+        if (DEBUG_LVL >= 2)
+            println("looking at succ BB ", succ_BB.label, " whose dominators are ", loop_info.dom_dict[succ_BB.label])
+        end
+        
         if succ_BB.label == -2 # the pseudo exit of the function
             if loop_expected_on_every_path && !has_loop[current_BB.label]
-            println("case 1")
                 return false
             end
             exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
             push!(exits, exit)
-            println("case 2")
             continue
         end            
         
@@ -734,12 +735,10 @@ println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx
             
             exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
             push!(exits, exit)
-                        println("case 4")
             continue
         end
         
         if (visited[succ_BB.label])
-                    println("case 3")
             has_loop[current_BB.label] = has_loop[current_BB.label] || has_loop[succ_BB.label]
             continue
         end
@@ -748,15 +747,13 @@ println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx
         if !success
             return false
         end
-                    println("case 6")
-
     end
     return true
 end
 
 function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
     visited  = Dict{Int, Bool}() # BB has been visited?
-    has_loop = Dict{Int, Bool}() # Has loop on every path starting from the BB?
+    has_loop = Dict{Int, Bool}() # Every path starting from the BB crosses a loop?
     for (j,bb) in lives.basic_blocks 
         visited[bb.label]  = false
         has_loop[bb.label] = false  
@@ -768,16 +765,18 @@ function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop
     region = Region(mmread_BB, mmread_stmt_idx, Set{ExitEdge}(), Set{RegionInterval}())
     success = DFSGrowRegion(mmread_BB, mmread_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, region.exits, region.intervals, symbolInfo, loop_info)
 
-println("DFSGrowRegion successful?: ", success)
-println("Intervals of region found:")
-for interval in region.intervals
-    println("\n\nBB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
-         1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
-          interval.BB.statements[interval.from_stmt_idx].index : "", "):", 
-         1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
-          interval.BB.statements[interval.to_stmt_idx].index : "", ")")
-end
-
+    if (DEBUG_LVL >= 2)
+        println("DFSGrowRegion successful?: ", success)
+        println("Intervals of region found:")
+        for interval in region.intervals
+            println("\n\nBB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
+                1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
+                interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
+                1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
+                interval.BB.statements[interval.to_stmt_idx].index : "", ")")
+        end
+    end
+    
     if success
         return region
     else
@@ -847,7 +846,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     
     dprintln(2, "Reordered:", reordered)
     
-    # The symbols that should be reordered before L are the reorderedUses live into L
+    # The symbols that should be reordered before the region are the reordered uses live into the region
     reorderedBeforeRegion = intersect(reordered, mmread_stmt.live_out)
     
     dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
@@ -875,7 +874,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     end
     dprintln(2, "updatedInRegion: ", updatedInRegion)
       
-    # New a vector to hold the new reordering statements R(LiveIn) before the loop. 
+    # New a vector to hold the new reordering statements R(LiveIn) before the region. 
     new_stmts_before_region = Expr[]
 
     # Replace the original "lhs=mmread(filename)" with
@@ -917,9 +916,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     end
                  
     # At each exit edge, we need to reverse reorder those that live out.
-    # to recover their original order before they are getting used outside of the loop
-    # We remember those in an array. Each element is a tuple 
-    # (bb label, succ label, the new statements to be inserted on the edge from bb to succ)
+    # to recover their original order before they are getting used outside of the region
     reorderedAndUpdated = intersect(reordered, updatedInRegion)
     for exit in region.exits
         if exit.from_BB == exit.to_BB
@@ -952,12 +949,10 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
 
             if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
                 for new_stmt in new_stmts
-#                    LivenessAnalysis.InsertStatementAfter(lives, BB, exit.from_stmt_idx, new_stmt)
                     insert!(BB.statements, exit.from_stmt_idx + 1, LivenessAnalysis.TopLevelStatement(0, new_stmt))
                 end
             else
                 for new_stmt in new_stmts
-#                    LivenessAnalysis.InsertStatementBefore(lives, BB, exit.to_stmt_idx, new_stmt)
                     insert!(BB.statements, exit.to_stmt_idx, LivenessAnalysis.TopLevelStatement(0, new_stmt))
                 end
             end                
@@ -989,16 +984,18 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
         end
     end
 
-    if true #(DEBUG_LVL >= 2)
-        println("******** CFG after reordering: ********")
+    if (DEBUG_LVL >= 2)
+        println("******** CFG after mmread_reorder: ********")
         show(lives);
     end 
 end
 
 function reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
+    if (DEBUG_LVL >= 2)
         println("******** CFG before mmread_reorder: ********")
         show(lives);
-
+    end 
+    
     region = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     if region == nothing
         return false
