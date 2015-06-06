@@ -31,7 +31,7 @@ function TypedExpr(typ, rest...)
     res
 end
 
-export from_exprs, set_debug_level, BlockLiveness, DomLoops, Loop, find_bb_for_statement
+export from_exprs, set_debug_level, BlockLiveness, DomLoops, Loop, find_bb_for_statement, BasicBlock
 
 type Access
     sym

@@ -236,7 +236,11 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
   # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
   # write all kinds of functions tediously.
   # TODO: a general mechanism to handle functions
-   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println
+   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println ||
+      head == :spones ||  # spones,Any[:(A::Union((Int64,Int64,Int64,Any,Any,Any),Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))]
+      head == :size || # size,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),1]
+      head == :repmat || # repmat,Any[:((top(vect))(1 / m::Int64::Float64)::Array{Float64,1}),:(m::Int64)]
+      head == :scale # scale,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),:(1 ./ d::Array{Float64,1}::Array{Float64,1})]
     return distributive
   end
 
@@ -363,13 +367,6 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
   # thus does not have type info stored. We have to look up from the lambda. To be
   # faster, we build this dictionary, and look up from it instead.
   symbolInfo = initSymbol2TypeDict(ast)
-
-  distributive = checkDistributivity(ast, symbolInfo, true)
-  dprintln(3,"After our type inference, distributive = ", distributive)
-      
-  if !distributive
-    return ast
-  end
 
   body = ast.args[3]
 
