@@ -628,21 +628,21 @@ function findMmread(lives, in_loop)
 end 
 
 type ExitEdge
-    from_BB       :: Any #LivenessAnalysis.BasicBlock #ISSUE: Not sure why, always complain "LivenessAnalysis" unidentified
+    from_BB       :: CompilerTools.LivenessAnalysis.BasicBlock
     from_stmt_idx :: Int
-    to_BB         :: Any #LivenessAnalysis.BasicBlock
+    to_BB         :: CompilerTools.LivenessAnalysis.BasicBlock
     to_stmt_idx   :: Int
 end
 
 # One part of a region. Both from/to statements and the other statements between them are included
 type RegionInterval
-    BB            :: Any #LivenessAnalysis.BasicBlock
+    BB            :: CompilerTools.LivenessAnalysis.BasicBlock
     from_stmt_idx :: Int
     to_stmt_idx   :: Int
 end
 
 type Region
-    mmread_BB       :: Any #LivenessAnalysis.BasicBlock
+    mmread_BB       :: CompilerTools.LivenessAnalysis.BasicBlock
     mmread_stmt_idx :: Int
     exits           :: Set{ExitEdge}
     intervals       :: Set{RegionInterval}
@@ -911,7 +911,8 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
 
     i = 1
     for new_stmt in new_stmts_before_region
-        insert!(region.mmread_BB.statements, region.mmread_stmt_idx + i, LivenessAnalysis.TopLevelStatement(0, new_stmt))
+        insert!(region.mmread_BB.statements, region.mmread_stmt_idx + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))    
+#        CompilerTools.LivenessAnalysis.insertStatementAfter(lives, region.mmread_BB, region.mmread_stmt_idx + i, new_stmt)
         i += 1
     end
                  
@@ -949,11 +950,13 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
 
             if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
                 for new_stmt in new_stmts
-                    insert!(BB.statements, exit.from_stmt_idx + 1, LivenessAnalysis.TopLevelStatement(0, new_stmt))
+                    insert!(BB.statements, exit.from_stmt_idx + 1, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
+#                    CompilerTools.LivenessAnalysis.insertStatementAfter(lives, BB, exit.from_stmt_idx, new_stmt) # CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
                 end
             else
                 for new_stmt in new_stmts
-                    insert!(BB.statements, exit.to_stmt_idx, LivenessAnalysis.TopLevelStatement(0, new_stmt))
+                    insert!(BB.statements, exit.to_stmt_idx, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
+#                    CompilerTools.LivenessAnalysis.insertStatementBefore(lives, BB, exit.to_stmt_idx, new_stmt) # CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
                 end
             end                
         else
@@ -974,9 +977,9 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
             end
             
             # Now actually change the CFG.
-            (new_bb, new_goto_stmt) = LivenessAnalysis.insertBetween(lives, exit.from_BB.label, exit.to_BB.label)
+            (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, exit.from_BB.label, exit.to_BB.label)
             for new_stmt in new_stmts
-                LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+                CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
             end
             if new_goto_stmt != nothing
                 push!(new_bb.statements, new_goto_stmt)
@@ -1021,7 +1024,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     # identifying IAs, and region transformation. So should unify the two cases.
     success = reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
     if (success)
-        body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+        body_reconstructed = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
         funcAST.args[3] = body_reconstructed
         return funcAST
     end

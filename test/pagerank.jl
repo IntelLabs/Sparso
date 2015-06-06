@@ -1,10 +1,9 @@
-#TODO: remove this include once the package is ready
-include("../src/OptFramework.jl")
-include("../src/SparseAccelerator.jl")
-include("../src/sparse-analyze.jl")
-
-using OptFramework
+using CompilerTools
+using CompilerTools.OptFramework
+using CompilerTools.LivenessAnalysis
 using MatrixMarket
+#TODO: remove this include once the package is ready
+include("../src/SparseAccelerator.jl")
 
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
