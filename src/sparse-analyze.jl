@@ -605,6 +605,9 @@ function findMmread(lives, in_loop)
         end
         for stmt_idx = 1 : length(bb.statements)
             expr = bb.statements[stmt_idx].expr
+            if typeof(expr) != Expr
+                continue
+            end
             if expr.head == :(=) 
                 lhs  = expr.args[1]
                 if typeof(lhs) != Symbol && typeof(lhs) != GenSym
@@ -1013,6 +1016,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)
+    assert(typeof(args[3]) == Expr && args[3].head == :body)
 
     # First, see if there is an mmread() outside all loops.
     # If not, select a sparse matrix from the function AST's arguments. 
@@ -1025,7 +1029,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     success = reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
     if (success)
         body_reconstructed = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
-        funcAST.args[3] = body_reconstructed
+        funcAST.args[3].args = body_reconstructed
         return funcAST
     end
 
