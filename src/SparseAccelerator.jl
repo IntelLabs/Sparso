@@ -240,7 +240,8 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
       head == :spones ||  # spones,Any[:(A::Union((Int64,Int64,Int64,Any,Any,Any),Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))]
       head == :size || # size,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),1]
       head == :repmat || # repmat,Any[:((top(vect))(1 / m::Int64::Float64)::Array{Float64,1}),:(m::Int64)]
-      head == :scale # scale,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),:(1 ./ d::Array{Float64,1}::Array{Float64,1})]
+      head == :scale || # scale,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),:(1 ./ d::Array{Float64,1}::Array{Float64,1})]
+      head == :getfield
     return distributive
   end
 
@@ -388,8 +389,12 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
 
   analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
   dprintln(3,"result after sparse_analyze\n", analyze_res, " type = ", typeof(analyze_res))
-  assert(typeof(analyze_res) == Expr)
-  assert(analyze_res.head == :lambda)
+  assert(typeof(analyze_res) == Expr && analyze_res.head == :lambda)
+  dprintln(3,"typeof(args[3]) = ", typeof(analyze_res.args[3]))
+  if typeof(analyze_res.args[3]) == Expr
+    dprintln(3,"args[3].head = ", analyze_res.args[3].head)
+  end
+  assert(typeof(analyze_res.args[3]) == Expr && analyze_res.args[3].head == :body)
   return analyze_res
 end
 
