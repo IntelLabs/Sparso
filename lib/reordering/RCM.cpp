@@ -878,6 +878,8 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, bool pseudoDiameterSour
 
 void CSR::getBFSPermutation(int *perm, int *inversePerm)
 {
+  assert(isSymmetric(false)); // check structural symmetry
+
   int oldBase = base;
   make0BasedIndexing();
 
