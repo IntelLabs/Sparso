@@ -1,7 +1,7 @@
 module SparseAccelerator
 
-include("ast_walk.jl")
-include("liveness.jl")
+using CompilerTools
+
 include("alias-analysis.jl")
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
@@ -59,7 +59,7 @@ function findInvariants(members::Set, uniqSet::Set{Symbol}, bbs)
 end
 
 function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
-  invariants = Dict{LivenessAnalysis.Loop, Set{Symbol} }()
+  invariants = Dict{CompilerTools.LivenessAnalysis.Loop, Set{Symbol} }()
 
   for l in domloops.loops
     invariants[l] = findInvariants(l.members, uniqSet, bbs)
@@ -236,7 +236,12 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
   # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
   # write all kinds of functions tediously.
   # TODO: a general mechanism to handle functions
-   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println
+   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println ||
+      head == :spones ||  # spones,Any[:(A::Union((Int64,Int64,Int64,Any,Any,Any),Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))]
+      head == :size || # size,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),1]
+      head == :repmat || # repmat,Any[:((top(vect))(1 / m::Int64::Float64)::Array{Float64,1}),:(m::Int64)]
+      head == :scale || # scale,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),:(1 ./ d::Array{Float64,1}::Array{Float64,1})]
+      head == :getfield
     return distributive
   end
 
@@ -333,8 +338,11 @@ function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributi
          asttyp == GotoNode || asttyp == LineNumberNode ||
          asttyp == ASCIIString || asttyp == LambdaStaticData
   elseif asttyp <: Number
-      dprintln(2, "\tNumber ", distributive)
-      return distributive
+    dprintln(2, "\tNumber ", distributive)
+    return distributive
+  elseif asttyp == NewvarNode
+    dprintln(2, "\tNewvarNode ", distributive)
+    return distributive
   elseif asttyp.name == Array.name # Example: Array{Any,1}
       typ = asttyp.parameters[1]
       if (asttyp.parameters[2] == 1) #1-dimensonal array is vector
@@ -364,34 +372,33 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
   # faster, we build this dictionary, and look up from it instead.
   symbolInfo = initSymbol2TypeDict(ast)
 
-  distributive = checkDistributivity(ast, symbolInfo, true)
-  dprintln(3,"After our type inference, distributive = ", distributive)
-      
-  if !distributive
-    return ast
-  end
-
   body = ast.args[3]
 
-  lives = LivenessAnalysis.initial_expr(ast)
+  lives = CompilerTools.LivenessAnalysis.from_expr(ast)
   dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
   dprintln(3,"testing_mode = ", testing_mode)
   if testing_mode
-    LivenessAnalysis.insertBetween(lives, 2, 4)
-    #LivenessAnalysis.insertBefore(lives, 2)
-    body_reconstructed = LivenessAnalysis.createFunctionBody(lives)
+    CompilerTools.LivenessAnalysis.insertBetween(lives, 2, 4)
+    #CompilerTools.LivenessAnalysis.insertBefore(lives, 2)
+    body_reconstructed = Expr(:body)
+    body_reconstructed.typ = body.typ
+    body_reconstructed.args = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
     dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
   end
-  loop_info  = LivenessAnalysis.compute_dom_loops(lives)
+  loop_info  = CompilerTools.LivenessAnalysis.compute_dom_loops(lives)
 
   analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
   dprintln(3,"result after sparse_analyze\n", analyze_res, " type = ", typeof(analyze_res))
-  assert(typeof(analyze_res) == Expr)
-  assert(analyze_res.head == :lambda)
+  assert(typeof(analyze_res) == Expr && analyze_res.head == :lambda)
+  dprintln(3,"typeof(args[3]) = ", typeof(analyze_res.args[3]))
+  if typeof(analyze_res.args[3]) == Expr
+    dprintln(3,"args[3].head = ", analyze_res.args[3].head)
+  end
+  assert(typeof(analyze_res.args[3]) == Expr && analyze_res.args[3].head == :body)
   return analyze_res
 end
 
-LivenessAnalysis.set_debug_level(0)
+CompilerTools.LivenessAnalysis.set_debug_level(0)
 
 # Choose between Julia and PCL library. 
 const JULIA_LIB = 0
