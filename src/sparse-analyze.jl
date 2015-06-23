@@ -796,11 +796,11 @@ function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop
         for interval in region.intervals
             show_interval(interval)
             print("\tPreds: ")
-            for pred in intervals.preds
+            for pred in interval.preds
                 show_interval(pred)
             end
             print("\tSuccs: ")
-            for succ in intervals.succs
+            for succ in interval.succs
                 show_interval(succ)
             end
         end
