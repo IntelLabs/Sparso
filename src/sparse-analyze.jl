@@ -644,13 +644,24 @@ type RegionInterval
     to_stmt_idx   :: Int
     succs         :: Set{RegionInterval}
     preds         :: Set{RegionInterval}
+    
+    RegionInterval() = new(nothing, 0, -1, Set{RegionInterval}(), Set{RegionInterval}())
+    RegionInterval(bb, from, to) = new(bb, from, to, Set{RegionInterval}(), Set{RegionInterval}())
 end
 
 type Region
     mmread_BB       :: CompilerTools.LivenessAnalysis.BasicBlock
     mmread_stmt_idx :: Int
     exits           :: Set{ExitEdge}
-    intervals       :: Set{RegionInterval}
+    intervals       :: Vector{RegionInterval}
+end
+
+function show_interval(interval::RegionInterval)
+    println("\n\nBB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
+        1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
+        interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
+        1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
+        interval.BB.statements[interval.to_stmt_idx].index : "", ")")
 end
 
 # Note: to be sure of profitability, we should require each path to pass through a loop. 
@@ -667,7 +678,7 @@ end
 # This is because we do not have analysis to tell us that -1-->3 is an infeasible path.
 # For now, give up with the requirement of having a loop.
 # TODO: enforce the requirement after some analysis like DCE is implemented
-function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, exits, intervals, symbolInfo, loop_info)
+function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info)
     if (DEBUG_LVL >= 2)
         println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx, "(", 
             1 <= start_stmt_idx && start_stmt_idx <= length(current_BB.statements) ? 
@@ -691,6 +702,7 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
             push!(exits, exit)
             interval = RegionInterval(current_BB, start_stmt_idx, stmt_idx - 1)
             push!(intervals, interval)
+            bb_interval[current_BB.label] = interval
             return true, interval
         end
         if expr.head == :throw
@@ -706,11 +718,13 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
             push!(exits, exit)
             interval = RegionInterval(current_BB, start_stmt_idx, stmt_idx - 1)
             push!(intervals, interval)
+            bb_interval[current_BB.label] = interval
             return true, interval
         end
     end
     interval = RegionInterval(current_BB, start_stmt_idx, last_stmt_idx) 
     push!(intervals, interval)
+    bb_interval[current_BB.label] = interval
     
     # Current BB's statements have been scanned. Now successors
     for succ_BB in current_BB.succs
@@ -745,10 +759,12 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
         
         if (visited[succ_BB.label])
             has_loop[current_BB.label] = has_loop[current_BB.label] || has_loop[succ_BB.label]
+            push!(interval.succs, bb_interval[succ_BB.label])
+            push!(bb_interval[succ_BB.label].preds, interval)
             continue
         end
         
-        success, successor_interval = DFSGrowRegion(mmread_BB, succ_BB, 1, lives, in_loop, visited, has_loop, exits, intervals, symbolInfo, loop_info)
+        success, successor_interval = DFSGrowRegion(mmread_BB, succ_BB, 1, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info)
         if !success
             return false, successor_interval
         else
@@ -762,26 +778,31 @@ end
 function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
     visited  = Dict{Int, Bool}() # BB has been visited?
     has_loop = Dict{Int, Bool}() # Every path starting from the BB crosses a loop?
+    bb_interval = Dict{Int, RegionInterval}()
     for (j,bb) in lives.basic_blocks 
         visited[bb.label]  = false
-        has_loop[bb.label] = false  
+        has_loop[bb.label] = false
     end
     
     # Imagine there are always two invisible statements in any BB, whose statement indices are 0 and last_stmt_idx+1
     # So any real statement always has a statement before and after it. That is why we can do mmread_stmt_idx + 1 here
     # Similary, we can do any stmt_indx -1 as well.
-    region = Region(mmread_BB, mmread_stmt_idx, Set{ExitEdge}(), Set{RegionInterval}())
-    success, interval = DFSGrowRegion(mmread_BB, mmread_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, region.exits, region.intervals, symbolInfo, loop_info)
+    region = Region(mmread_BB, mmread_stmt_idx, Set{ExitEdge}(), RegionInterval[])
+    success, interval = DFSGrowRegion(mmread_BB, mmread_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, bb_interval, region.exits, region.intervals, symbolInfo, loop_info)
 
     if (DEBUG_LVL >= 2)
         println("DFSGrowRegion successful?: ", success)
         println("Intervals of region found:")
         for interval in region.intervals
-            println("\n\nBB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
-                1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
-                interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
-                1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
-                interval.BB.statements[interval.to_stmt_idx].index : "", ")")
+            show_interval(interval)
+            print("\tPreds: ")
+            for pred in intervals.preds
+                show_interval(pred)
+            end
+            print("\tSuccs: ")
+            for succ in intervals.succs
+                show_interval(succ)
+            end
         end
     end
     
@@ -826,17 +847,30 @@ function findIAs(region::Region, symbolInfo)
     return IAs
 end
 
-function forwardTransfer(node :: RMDNode)
+# A node in a graph for reorderable matrix discovery analysis (RMD)
+const PSEUDO_RMDNODE = 0xffff
+type RMDNode
+    stmt  :: CompilerTools.LivenessAnalysis.TopLevelStatement #nothing for a pseudo stmt
+    succs :: Set{RMDNode}
+    preds :: Set{RMDNode}
+    In    :: Set{Any} #Set{Symbol} causes incompatibility with TopLevelStatement.def and use TODO: ask Todd to fix TopLevelStatement declaration
+    Out   :: Set{Any} #TODO: change back to Set{Symbol} 
+            
+    RMDNode() = new(CompilerTools.LivenessAnalysis.TopLevelStatement(PSEUDO_RMDNODE, nothing), 
+                    Set{RMDNode}(), Set{RMDNode}(), Set{Any}(), Set{Any}())
+end
+
+function forwardTransfer(node :: RMDNode, IAs)
     temp1 = temp2 = copy(node.In)
     LHS  = node.stmt.def
-    RHS  = node.stmt.uses
+    RHS  = node.stmt.use
     
-    intersect!(temp1, RHS)
+    temp1 = intersect(temp1, RHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
     setdiff!(temp2, LHS)
     setdiff!(temp2, RHS)
     union!(temp1, temp2)
     
-    result = Set{Symbol}
+    result = Set{Any}()
     for x in temp1
         for IA in IAs[node.stmt]
             if in(x, IA)
@@ -847,65 +881,56 @@ function forwardTransfer(node :: RMDNode)
     return result
 end
 
-function backwardTransfer(node :: RMDNode)
+function backwardTransfer(node :: RMDNode, IAs)
     temp1 = temp2 = copy(node.Out)
     LHS  = node.stmt.def
-    RHS  = node.stmt.uses
+    RHS  = node.stmt.use
     
     setdiff!(temp1, LHS)
-    intersect!(temp1, RHS)
+    temp1 = intersect(temp1, RHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
     setdiff!(temp2, LHS)
     setdiff!(temp2, RHS)
     union!(temp1, temp2)
     
-    result = Set{Symbol}
+    result = Set{Any}()
     for x in temp1
         for IA in IAs[node.stmt]
-            if in(x, IA) && in(x, RHS)
-                union!(result, IA)
+            if in(x, IA)
+                union!(result, intersect(IA, RHS))
             end
         end
     end
     return result
 end
 
-function reorderableMatrixDiscovery(funcAST, lives, loop_info, symbolInfo, region, IAs, root)
-    # A node in a graph for reorderable matrix discovery analysis (RMD)
-    type RMDNode
-        stmt  :: CompilerTools.LivenessAnalysis.TopLevelStatement #nothing for a pseudo stmt
-        succs :: Set{RMDNode}
-        preds :: Set{RMDNode}
-        In    :: Set{Symbol}
-        Out   :: Set{Symbol}
-            
-        RMDNode() = new(nothing, Set{RMDNode}(), Set{RMDNode}(), Set{Symbol}(), Set{Symbol}())
-    end
-    
+function reorderableMatrixDiscovery(lives, region, IAs, root)
     if isempty(region.intervals) 
-        return false
+        return nothing
     end
     
     # build a graph, where each node is a statement. Then process all nodes in 
     first_node = Dict{RegionInterval, RMDNode}()
     last_node  = Dict{RegionInterval, RMDNode}()
-    nodes      = Vector{RMDNode}()
+    nodes      = RMDNode[]
 
     # build a pseudo entry node
     entry = RMDNode()
     push!(nodes, entry)
+    IAs[entry.stmt] = Set()
 
-    # TODOP visit the intervals in reverse postorder, so that the nodes
+    # TODO visit the intervals in reverse postorder, so that the nodes
     # can be processed in a natural order
     for interval in region.intervals
         if interval.from_stmt_idx > interval.to_stmt_idx
             # Empty interval. Make a pseudo node
             node = RMDNode()
+            IAs[node.stmt] = Set()
             first_node[interval] = last_node[interval] = node
             push!(nodes, node)
         else
             prev = nothing    
             for stmt_idx in interval.from_stmt_idx : interval.to_stmt_idx
-                BB = successor_interval.BB
+                BB = interval.BB
                 stmt = BB.statements[stmt_idx]
                 node = RMDNode()
                 node.stmt = stmt
@@ -935,13 +960,8 @@ function reorderableMatrixDiscovery(funcAST, lives, loop_info, symbolInfo, regio
 
     for interval in region.intervals
         for pred_interval in interval.preds
-            push!(pred_interval.succs, first_node[interval])
-            push!(first_node[interval].preds, pred_interval)
-        end
-        
-        for succ_interval in interval.succs
-            push!(succ_interval.preds, last_node[interval])
-            push!(last_node[interval].succs, succ_interval)
+            push!(last_node[pred_interval].succs, first_node[interval])
+            push!(first_node[interval].preds, last_node[pred_interval])
         end
     end
 
@@ -953,47 +973,60 @@ function reorderableMatrixDiscovery(funcAST, lives, loop_info, symbolInfo, regio
         changed = false
         for node in nodes
             # compute In
-            result = Set{Symbol}()
+            result = Set{Any}()
             if node == entry
-                result = backwardTransfer(node.out)
+                result = backwardTransfer(node, IAs)
                 push!(result, root)
             else
                 first = true
                 for pred in node.preds
                     if first
-                        result = pred.out
+                        result = pred.Out
                         first = false
                     else
-                        intersect!(result, pred.out)
+                        result = intersect(result, pred.Out)
                     end
                 end
-                union!(result, backwardTransfer(node.out))
+                union!(result, backwardTransfer(node, IAs))
             end
-            if result != node.in
-                node.in = result
+            if result != node.In
+                node.In = result
                 changed = true
             end
             
             # compute Out
-            result = Set{Symbol}()
+            result = Set{Any}()
             if isempty(node.succs)  # Exit
-                result = forwardTransfer(node.in)
+                result = forwardTransfer(node, IAs)
             else
                 first = true
                 for succ in node.succs
                     if first
-                        result = succ.in
+                        result = succ.In
                         first = false
                     else
-                        intersect!(result, succ.in)
+                        result = intersect(result, succ.In)
                     end
                 end
-                union!(result, forwardTransfer(node.in))
+                union!(result, forwardTransfer(node, IAs))
             end
-            if result != node.out
-                node.out = result
+            if result != node.Out
+                node.Out = result
                 changed = true
             end
+        end
+    end
+    
+    if (DEBUG_LVL >= 2)
+        println("\n******** Results of reorderable matrix discovery analysis *******")
+        for node in nodes
+            if node.stmt.index == PSEUDO_RMDNODE
+                println("Pseudo")
+            else
+                println(node.stmt)    
+            end
+            println("\tIn:  ", node.In)
+            println("\tOut: ", node.Out)
         end
     end
     
@@ -1018,7 +1051,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     mmread_stmt = region.mmread_BB.statements[ region.mmread_stmt_idx] 
     lhs = mmread_stmt.expr.args[1]
 
-    reordered = reorderableMatrixDiscovery(funcAST, lives, loop_info, symbolInfo, region, IAs, lhs)
+    reordered = reorderableMatrixDiscovery(lives, region, IAs, lhs)
     dprintln(2, "Reordered:", reordered)
     
     if reordered == nothing # failed in finding reorderable matrices
