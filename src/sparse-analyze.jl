@@ -656,8 +656,9 @@ type Region
     intervals       :: Vector{RegionInterval}
 end
 
-function show_interval(interval::RegionInterval)
-    println("\n\nBB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
+function show_interval(interval::RegionInterval, level)
+    for i = 1:level print("  ") end
+    println("BB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
         1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
         interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
         1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
@@ -689,6 +690,7 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
     # TODO: enable it in future
     loop_expected_on_every_path = false
     
+    assert(!visited[current_BB.label])
     visited[current_BB.label]  = true
     has_loop[current_BB.label] = in_loop[current_BB.label]
     last_stmt_idx = length(current_BB.statements)
@@ -794,14 +796,14 @@ function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop
         println("DFSGrowRegion successful?: ", success)
         println("Intervals of region found:")
         for interval in region.intervals
-            show_interval(interval)
-            print("\tPreds: ")
+            show_interval(interval, 1)
+            println("\tPreds: ")
             for pred in interval.preds
-                show_interval(pred)
+                show_interval(pred, 3)
             end
-            print("\tSuccs: ")
+            println("\tSuccs: ")
             for succ in interval.succs
-                show_interval(succ)
+                show_interval(succ, 3)
             end
         end
     end
@@ -964,6 +966,7 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
             push!(first_node[interval].preds, last_node[pred_interval])
         end
     end
+
 
     # Do bidirectional dataflow analysis on the graph
     push!(entry.In, root)
