@@ -862,17 +862,65 @@ type RMDNode
                     Set{RMDNode}(), Set{RMDNode}(), Set{Any}(), Set{Any}())
 end
 
+function show_RMD_node(entry::RMDNode, node)
+        if node == entry
+            print("Entry: ")
+        elseif node.stmt.index == PSEUDO_RMDNODE
+            print("Pseudo: ")
+        else
+            print(node.stmt.index, ": ", node.stmt.expr)
+        end
+        
+        print("  Preds(")
+        for pred in node.preds
+            if pred == entry
+                print("Entry ")
+            elseif pred.stmt.index == PSEUDO_RMDNODE
+                print("Pseudo ")
+            else
+                print(pred.stmt.index, " ")
+            end
+        end
+        print(")")
+            
+        print("  Succs(")
+        for succ in node.succs
+            if succ == entry
+                print("Entry ")
+            elseif succ.stmt.index == PSEUDO_RMDNODE
+                print("Pseudo ")
+            else
+                print(succ.stmt.index, " ")
+            end
+        end
+        print(")")
+        
+        print("  In(")
+        for item in node.In
+            print(item, " ")
+        end
+        print(")")
+
+        print("  Out(")
+        for item in node.Out
+            print(item, " ")
+        end
+        println(")")
+end
+
+function show_RMD_graph(entry::RMDNode, nodes, prefix::String)
+    println("******************************* ", prefix, " ***************************")
+    for node in nodes
+        show_RMD_node(entry, node)
+    end
+end
+
 function forwardTransfer(node :: RMDNode, IAs)
-    temp1 = temp2 = copy(node.In)
     LHS  = node.stmt.def
     RHS  = node.stmt.use
-    
-    temp1 = intersect(temp1, RHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
-    setdiff!(temp2, LHS)
-    setdiff!(temp2, RHS)
-    union!(temp1, temp2)
-    
-    result = Set{Any}()
+
+    temp1 = intersect(node.In, RHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
+    result = copy(temp1)
     for x in temp1
         for IA in IAs[node.stmt]
             if in(x, IA)
@@ -880,29 +928,39 @@ function forwardTransfer(node :: RMDNode, IAs)
             end
         end
     end
-    return result
+
+    temp2 = copy(node.In)
+    setdiff!(temp2, LHS)
+    setdiff!(temp2, RHS)
+    
+    union!(result, temp2)
+    
+    temp3 = intersect(result, node.stmt.live_out)
+    return temp3
 end
 
 function backwardTransfer(node :: RMDNode, IAs)
-    temp1 = temp2 = copy(node.Out)
     LHS  = node.stmt.def
     RHS  = node.stmt.use
-    
-    setdiff!(temp1, LHS)
-    temp1 = intersect(temp1, RHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
-    setdiff!(temp2, LHS)
-    setdiff!(temp2, RHS)
-    union!(temp1, temp2)
-    
-    result = Set{Any}()
+
+    temp1 = intersect(node.Out, LHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
+    result = copy(temp1)
     for x in temp1
         for IA in IAs[node.stmt]
             if in(x, IA)
-                union!(result, intersect(IA, RHS))
+                union!(result, IA)
             end
         end
     end
-    return result
+
+    temp2 = copy(node.In)
+    setdiff!(temp2, LHS)
+    setdiff!(temp2, RHS)
+    
+    union!(result, temp2)
+    
+    temp3 = intersect(result, node.stmt.live_in)
+    return temp3
 end
 
 function reorderableMatrixDiscovery(lives, region, IAs, root)
@@ -969,7 +1027,11 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
 
 
     # Do bidirectional dataflow analysis on the graph
-    push!(entry.In, root)
+    push!(entry.Out, root)
+
+    if (DEBUG_LVL >= 2)
+        show_RMD_graph(entry, nodes, "Initial RMD graph:")
+    end
 
     changed = true
     while changed
@@ -977,46 +1039,54 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
         for node in nodes
             # compute In
             result = Set{Any}()
-            if node == entry
-                result = backwardTransfer(node, IAs)
-                push!(result, root)
-            else
-                first = true
-                for pred in node.preds
-                    if first
-                        result = pred.Out
-                        first = false
-                    else
-                        result = intersect(result, pred.Out)
-                    end
+            first = true
+            for pred in node.preds
+                if first
+                    result = pred.Out
+                    first = false
+                else
+                    result = intersect(result, pred.Out)
                 end
-                union!(result, backwardTransfer(node, IAs))
             end
-            if result != node.In
+            union!(result, backwardTransfer(node, IAs))            
+            if node == entry
+                push!(result, root)
+            end
+            if !(result == node.In)
                 node.In = result
                 changed = true
             end
+
+        println(".. In: ")
+        show_RMD_node(entry, node)
             
             # compute Out
             result = Set{Any}()
-            if isempty(node.succs)  # Exit
-                result = forwardTransfer(node, IAs)
-            else
-                first = true
-                for succ in node.succs
-                    if first
-                        result = succ.In
-                        first = false
-                    else
-                        result = intersect(result, succ.In)
-                    end
+            first = true
+            for succ in node.succs
+                if first
+                    result = succ.In
+                    first = false
+                else
+                    result = intersect(result, succ.In)
                 end
-                union!(result, forwardTransfer(node, IAs))
             end
-            if result != node.Out
+            union!(result, forwardTransfer(node, IAs))
+            if node == entry
+                push!(result, root)
+            end
+
+            if !(result == node.Out)
                 node.Out = result
                 changed = true
             end
+
+        println(".. Out: ")
+        show_RMD_node(entry, node)
+        end
+
+        if (DEBUG_LVL >= 2)
+            show_RMD_graph(entry, nodes, "RMD graph after 1 iteration:")
         end
     end
     
