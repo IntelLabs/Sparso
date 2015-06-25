@@ -385,7 +385,7 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
     body_reconstructed.args = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
     dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
   end
-  loop_info  = CompilerTools.LivenessAnalysis.compute_dom_loops(lives)
+  loop_info  = CompilerTools.Loops.compute_dom_loops(lives)
 
   analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
   dprintln(3,"result after sparse_analyze\n", analyze_res, " type = ", typeof(analyze_res))
