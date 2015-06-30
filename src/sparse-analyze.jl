@@ -915,52 +915,16 @@ function show_RMD_graph(entry::RMDNode, nodes, prefix::String)
     end
 end
 
-function forwardTransfer(node :: RMDNode, IAs)
-    LHS  = node.stmt.def
-    RHS  = node.stmt.use
-
-    temp1 = intersect(node.In, RHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
-    result = copy(temp1)
-    for x in temp1
-        for IA in IAs[node.stmt]
+function IAUnion(B::RMDNode, S::Set, IAs)
+    result = copy(S)
+    for x in S
+        for IA in IAs[B.stmt]
             if in(x, IA)
                 union!(result, IA)
             end
         end
     end
-
-    temp2 = copy(node.In)
-    setdiff!(temp2, LHS)
-    setdiff!(temp2, RHS)
-    
-    union!(result, temp2)
-    
-    temp3 = intersect(result, node.stmt.live_out)
-    return temp3
-end
-
-function backwardTransfer(node :: RMDNode, IAs)
-    LHS  = node.stmt.def
-    RHS  = node.stmt.use
-
-    temp1 = intersect(node.Out, LHS) # ISSUE: not sure why, no matching method for intersect!(Set{Any}, Set{Any})
-    result = copy(temp1)
-    for x in temp1
-        for IA in IAs[node.stmt]
-            if in(x, IA)
-                union!(result, IA)
-            end
-        end
-    end
-
-    temp2 = copy(node.In)
-    setdiff!(temp2, LHS)
-    setdiff!(temp2, RHS)
-    
-    union!(result, temp2)
-    
-    temp3 = intersect(result, node.stmt.live_in)
-    return temp3
+    return result
 end
 
 function reorderableMatrixDiscovery(lives, region, IAs, root)
@@ -1027,8 +991,6 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
 
 
     # Do bidirectional dataflow analysis on the graph
-    push!(entry.Out, root)
-
     if (DEBUG_LVL >= 2)
         show_RMD_graph(entry, nodes, "Initial RMD graph:")
     end
@@ -1038,22 +1000,30 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
         changed = false
         for node in nodes
             # compute In
-            result = Set{Any}()
+            S = Set{Any}()
             first = true
             for pred in node.preds
                 if first
-                    result = pred.Out
+                    S = copy(pred.Out)
                     first = false
                 else
-                    result = intersect(result, pred.Out)
+                    S = intersect(S, pred.Out)
                 end
             end
-            union!(result, backwardTransfer(node, IAs))            
+            union!(S, node.Out)            
             if node == entry
-                push!(result, root)
+                push!(S, root)
             end
+            result = IAUnion(node, S, IAs)
+            # TODO: make IA set aware of location of each symbol (LHS or RHS)
+            # This is a hack: if a symbol is only in LHS, get rid of it. otherwise, keep it
+            in_RHS = intersect(result, node.stmt.use) # remove this in future
+            setdiff!(result, node.stmt.def)
+            union!(result, in_RHS) 
+            
             if !(result == node.In)
-                node.In = result
+            println("!!!!! node.In=", node.In, "  result=", result)
+                node.In = copy(result)
                 changed = true
             end
 
@@ -1061,23 +1031,24 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
         show_RMD_node(entry, node)
             
             # compute Out
-            result = Set{Any}()
+            S = Set{Any}()
             first = true
             for succ in node.succs
                 if first
-                    result = succ.In
+                    S = copy(succ.In)
                     first = false
                 else
-                    result = intersect(result, succ.In)
+                    S = intersect(S, succ.In)
                 end
             end
-            union!(result, forwardTransfer(node, IAs))
+            union!(S, node.In)            
             if node == entry
-                push!(result, root)
+                push!(S, root)
             end
-
+            result = IAUnion(node, S, IAs)
             if !(result == node.Out)
-                node.Out = result
+            println("!!!!! node.Out=", node.Out, "  result=", result)
+                node.Out = copy(result)
                 changed = true
             end
 
