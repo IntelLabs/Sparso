@@ -862,23 +862,21 @@ end
 function addToInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, symbolInfo)
     if typeOfNode(currentNode, symbolInfo) <: AbstractArray
         if typeof(currentNode) == Symbol
-        println("*** push sym")
             push!(LHS ? IA.LHS : IA.RHS, currentNode)
         elseif typeof(currentNode) == SymbolNode
-        println("*** push symnode")
             push!(LHS ? IA.LHS : IA.RHS, currentNode.name)
         end
     end 
 end
 
 function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, i)
-   printSpaces(i)
-   println("findIA: ", currentNode)
+#   printSpaces(i)
+#   println("findIA: ", currentNode)
     addToInterDependentArrays(currentNode, LHS, IA, symbolInfo)
     if typeof(currentNode) <: Expr
         for c in currentNode.args
-            printSpaces(i+1)
-            println("c=", c, " type=", typeOfNode(c, symbolInfo))
+#            printSpaces(i+1)
+#            println("c=", c, " type=", typeOfNode(c, symbolInfo))
             if typeOfNode(c, symbolInfo) <: Number
                 push!(seeds, tuple(c, LHS))
             else
@@ -912,8 +910,8 @@ function findInterDependentArrays(region::Region, symbolInfo)
                     push!(IAs[stmt], IA)
                 end
             end
-            println("###Stmt: ", stmt.expr)
-            println("  IAs:", IAs[stmt])        
+#            println("###Stmt: ", stmt.expr)
+#            println("  IAs:", IAs[stmt])        
         end
     end
     return IAs
@@ -1208,34 +1206,18 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
             push!(entry.Out, root)
         end
     end
-        show_RMD_graph(entry, nodes, "after init RMD graph:")
     forwardPass(nodes, IAs, entry, true)
-        show_RMD_graph(entry, nodes, "after 1st forwardpass RMD graph:")
 
     # repetitive backward and forward pass
     changed = true
     while changed
         changed = backwardPass(nodes, IAs)
-        show_RMD_graph(entry, nodes, "after backwardpass RMD graph:")
         changed |= forwardPass(nodes, IAs, entry, false)
         if (DEBUG_LVL >= 2)
             show_RMD_graph(entry, nodes, "RMD graph after 1 iteration:")
         end
     end
-    
-    if (DEBUG_LVL >= 2)
-        println("\n******** Results of reorderable matrix discovery analysis *******")
-        for node in nodes
-            if node.stmt.index == PSEUDO_RMDNODE
-                println("Pseudo")
-            else
-                println(node.stmt)    
-            end
-            println("\tIn:  ", node.In)
-            println("\tOut: ", node.Out)
-        end
-    end
-    
+        
     # Check there is no array that must be reordered on one path, and must not 
     # on another path. This simplifies our work. Hopefully not too restrictive.
     # TODO: allow an array to be reordered and not reordered on different paths.
@@ -1304,6 +1286,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     P = gensym("P")
     Pprime = gensym("Pprime")
     
+    # TODO: change the type of the original RHS to the right type
     mmread_stmt.expr.args[1] = T
     mmread_stmt.expr.args[2].args[1].args[3] = QuoteNode(:mmread_reorder) # change mmread to mmread_reorder
     
