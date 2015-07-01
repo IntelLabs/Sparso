@@ -647,7 +647,6 @@ type RegionInterval
     succs         :: Set{RegionInterval}
     preds         :: Set{RegionInterval}
     
-    RegionInterval() = new(nothing, 0, -1, Set{RegionInterval}(), Set{RegionInterval}())
     RegionInterval(bb, from, to) = new(bb, from, to, Set{RegionInterval}(), Set{RegionInterval}())
 end
 
@@ -919,15 +918,17 @@ end
 
 # A node in a graph for reorderable matrix discovery analysis (RMD)
 const PSEUDO_RMDNODE = 0xffff
+const PSEUDO_BB = 0xffff
 type RMDNode
     stmt  :: CompilerTools.LivenessAnalysis.TopLevelStatement #nothing for a pseudo stmt
+    BB    :: CompilerTools.LivenessAnalysis.BasicBlock
     succs :: Set{RMDNode}
     preds :: Set{RMDNode}
     In    :: Set{Any} #Set{Symbol} causes incompatibility with TopLevelStatement.def and use TODO: ask Todd to fix TopLevelStatement declaration
     Out   :: Set{Any} #TODO: change back to Set{Symbol} 
             
     RMDNode() = new(CompilerTools.LivenessAnalysis.TopLevelStatement(PSEUDO_RMDNODE, nothing), 
-                    Set{RMDNode}(), Set{RMDNode}(), Set{Any}(), Set{Any}())
+                    CompilerTools.LivenessAnalysis.BasicBlock(PSEUDO_BB), Set{RMDNode}(), Set{RMDNode}(), Set{Any}(), Set{Any}())
 end
 
 function show_RMD_node(entry::RMDNode, node)
@@ -1136,7 +1137,7 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
     last_node  = Dict{RegionInterval, RMDNode}()
     nodes      = RMDNode[]
 
-    # build a pseudo entry node
+    # build a pseudo entry and exit node
     entry = RMDNode()
     push!(nodes, entry)
     IAs[entry.stmt] = Set()
@@ -1146,9 +1147,12 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
     for interval in region.intervals
         if interval.from_stmt_idx > interval.to_stmt_idx
             # Empty interval. Make a pseudo node
+            assert(length(interval.BB.statements) == 0) # Must be an empty block
             node = RMDNode()
+            node.stmt.live_in = interval.BB.live_in
             IAs[node.stmt] = Set()
             first_node[interval] = last_node[interval] = node
+            node.BB = interval.BB
             push!(nodes, node)
         else
             prev = nothing    
@@ -1157,6 +1161,7 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
                 stmt = BB.statements[stmt_idx]
                 node = RMDNode()
                 node.stmt = stmt
+                node.BB = BB
                 push!(nodes, node)
                 
                 if stmt_idx == interval.from_stmt_idx
@@ -1175,6 +1180,10 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
             end
         end
     end
+
+    exit = RMDNode()
+    push!(nodes, exit)
+    IAs[exit.stmt] = Set()
     
     # Now nodes in each intervals have been created. Connected them between intervals
     first_interval = region.intervals[1]
@@ -1185,6 +1194,13 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
         for pred_interval in interval.preds
             push!(last_node[pred_interval].succs, first_node[interval])
             push!(first_node[interval].preds, last_node[pred_interval])
+        end
+        
+        # handle exit
+        if isempty(interval.succs)
+            # connect the interval to the exit
+            push!(last_node[interval].succs, exit)
+            push!(exit.preds, last_node[interval])
         end
     end
 
@@ -1217,63 +1233,81 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
             show_RMD_graph(entry, nodes, "RMD graph after 1 iteration:")
         end
     end
+    assert(entry.In == entry.Out)
         
-    # Check there is no array that must be reordered on one path, and must not 
-    # on another path. This simplifies our work. Hopefully not too restrictive.
-    # TODO: allow an array to be reordered and not reordered on different paths.
-    reorderable = entry.In
-    for node in nodes
-        for pred in node.preds
-            # compute what to be reorder on this edge
-            reorder = setdiff(intersect(node.In, node.stmt.live_in), pred.Out)
-            if ⊈(reorder, reorderable)
-                return nothing
-            end
-        end
+    return nodes, entry, exit
+end
+
+function insertStatementsOnEdge(lives, new_stmts, pred, node, entry, exit)
+    assert(pred != entry)
+    assert(pred.BB.label != PSEUDO_BB) # pred.BB must be a real BB, unless it is entry
+
+    if isempty(new_stmts)
+        return
     end
     
-    return reorderable
+    BB = nothing
+    insert_at = 0
+    new_goto_stmt = nothing
+    if node.BB.label == PSEUDO_BB
+        assert(node == exit)
+        BB = pred.BB
+        insert_at = length(BB.statements) + 1
+    else # Both BBs are real
+        if pred == node
+            BB = pred.BB
+            assert(pred.stmt != nothing || node.stmt != nothing) # one of the statement must be real
+            look_for_stmt = pred.stmt
+            if pred.stmt == nothing
+                look_for_stmt = node.stmt
+            end
+            for i in 1 : length(BB.statements)
+                if BB.statements[i]== look_for_stmt
+                    if look_for_stmt == pred.stmt
+                        insert_at = i + 1
+                    else
+                        insert_at = i
+                    end
+                    break
+                end
+            end
+        elseif length(pred.BB.succs) == 1
+            BB = pred.BB
+            insert_at = length(BB.statements) + 1
+        elseif length(node.BB.preds) == 1
+            BB = node.BB
+            insert_at = 1
+        else 
+            (BB, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, pred.BB.label, node.BB.label)
+            insert_at = length(BB.statements) + 1
+        end
+    end
+    assert(BB != nothing) # Must be a real BB
+    assert(insert_at != 0)
+
+    i = 0
+    for new_stmt in new_stmts
+        insert!(BB.statements, insert_at + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
+        i += 1
+    end
+    if new_goto_stmt != nothing
+        push!(BB.statements, new_goto_stmt)
+    end
 end
 
 function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
     mmread_stmt = region.mmread_BB.statements[ region.mmread_stmt_idx] 
     lhs = mmread_stmt.expr.args[1]
 
-    reordered = reorderableMatrixDiscovery(lives, region, IAs, lhs)
-    dprintln(2, "Reordered:", reordered)
-    
-    if reordered == nothing # failed in finding reorderable matrices
-        return
-    end
-    
-    # The symbols that should be reordered before the region are the reordered uses live into the region
-    reorderedBeforeRegion = intersect(reordered, mmread_stmt.live_out)
-    
-    dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
-
-    if isempty(reorderedBeforeRegion)
-        return
-    end
+    nodes, entry, exit = reorderableMatrixDiscovery(lives, region, IAs, lhs)
     
     #TODO: benefit-cost analysis
 
-    # Only those arrays that are updated in the region need to be reverse reordered afterwards
-    # Limitation: the region must be linear (except with some loop back edges) in order for the
-    # analysis to be correct: if there is any control flow, we might be wrong: some arrays in 
-    # the if/else block might never execute, but we assume they do, and propagate their "reordered"
-    # info to other arrays. 
-    # TODO: minimal instrument to control flow graph to record which arrays are actually updated dynamically
-    # if there is control flow. Then insert code to reverse reorder those actually updated.
-    updatedInRegion = Set{Symbol}()
-    for interval in region.intervals
-        BB = interval.BB
-        for stmt_idx in interval.from_stmt_idx : interval.to_stmt_idx
-            stmt = BB.statements[stmt_idx]
-            union!(updatedInRegion, stmt.def)
-        end
-    end
-    dprintln(2, "updatedInRegion: ", updatedInRegion)
-      
+    # The symbols that should be reordered before the region are the reordered uses live into the region
+    reorderedBeforeRegion = intersect(entry.In, mmread_stmt.live_out)
+    dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
+    assert(in(lhs, reorderedBeforeRegion))
+    
     # New a vector to hold the new reordering statements R(LiveIn) before the region. 
     new_stmts_before_region = Expr[]
 
@@ -1316,75 +1350,37 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
 #        CompilerTools.LivenessAnalysis.insertStatementAfter(lives, region.mmread_BB, region.mmread_stmt_idx + i, new_stmt)
         i += 1
     end
-                 
-    # At each exit edge, we need to reverse reorder those that live out.
-    # to recover their original order before they are getting used outside of the region
-    reorderedAndUpdated = intersect(reordered, updatedInRegion)
-    for exit in region.exits
-        if exit.from_BB == exit.to_BB
-            BB = exit.from_BB
-            # insert statements inside a block. At least one of the
-            # from/to stmt_idx is a real statement's index
-            last_stmt_idx = length(BB.statements)
-            assert((1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx) ||
-                (1 <= exit.to_stmt_idx && exit.to_stmt_idx <= last_stmt_idx))
-            if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
-                stmt = BB.statements[exit.from_stmt_idx]
-                reverseReordered = intersect(reorderedAndUpdated, stmt.live_out)
-            else 
-                stmt = BB.statements[exit.to_stmt_idx]
-                reverseReordered = intersect(reorderedAndUpdated, stmt.live_in)
-            end
-            if isempty(reverseReordered)
-                continue
-            end
-            dprintln(2, "ReverseReorder inside BB ", BB.label, " ", exit.from_stmt_idx, "--> ", exit.to_stmt_idx)
-                
-            new_stmts = Expr[]
-            for sym in reverseReordered
-                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                    reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
-                else
-                    reverseReorderVector(sym, P, new_stmts)
-                end
-            end
 
-            if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
-                for new_stmt in new_stmts
-                    insert!(BB.statements, exit.from_stmt_idx + 1, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-#                    CompilerTools.LivenessAnalysis.insertStatementAfter(lives, BB, exit.from_stmt_idx, new_stmt) # CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-                end
-            else
-                for new_stmt in new_stmts
-                    insert!(BB.statements, exit.to_stmt_idx, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-#                    CompilerTools.LivenessAnalysis.insertStatementBefore(lives, BB, exit.to_stmt_idx, new_stmt) # CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-                end
-            end                
-        else
-            # insert reverse reordering between two blocks.
-            reverseReordered = intersect(reorderedAndUpdated, exit.to_BB.live_in)
-            if isempty(reverseReordered)
+    # Now process other nodes
+    for node in nodes
+        for pred in node.preds
+            if pred == entry # Entry has been processed before
                 continue
-            end
-            dprintln(2, "ReverseReorder on edge ", exit.from_BB.label, " --> ", exit.to_BB.label)
-                
-            new_stmts = Expr[]
-            for sym in reverseReordered
-                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                    reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
-                else
-                    reverseReorderVector(sym, P, new_stmts)
-                end
             end
             
-            # Now actually change the CFG.
-            (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, exit.from_BB.label, exit.to_BB.label)
-            for new_stmt in new_stmts
-                CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+            # compute what to be reorder on this edge            
+            reorder = setdiff(intersect(node.In, node.stmt.live_in), pred.Out)
+            new_stmts = Expr[]
+            for sym in reorder
+                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                    reorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
+                else
+                    reorderVector(sym, P, new_stmts)
+                end
             end
-            if new_goto_stmt != nothing
-                push!(new_bb.statements, new_goto_stmt)
+            insertStatementsOnEdge(lives, new_stmts, pred, node, entry, exit)
+            
+            # compute what to be reverse reordered on this edge
+            reverseReorder = setdiff(intersect(pred.Out, node.stmt.live_in), node.In)
+            new_stmts = Expr[]
+            for sym in reverseReorder
+                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                    reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
+                else
+                    reverseReorderVector(sym, P, new_stmts)
+                end
             end
+            insertStatementsOnEdge(lives, new_stmts, pred, node, entry, exit)
         end
     end
 
