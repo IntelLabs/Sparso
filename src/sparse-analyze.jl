@@ -176,6 +176,7 @@ function insertTimerAfterLoop(t1, new_stmts)
     push!(new_stmts, stmt)
 end
 
+# Old version, not differentiating LHS and RHS symbols. To remove
 function addToIA(currentNode, IA, symbolInfo)
     if typeOfNode(currentNode, symbolInfo) <: AbstractArray
         if typeof(currentNode) == Symbol
@@ -192,6 +193,7 @@ function printSpaces(i)
     end
 end
 
+# Old version, not differentiating LHS and RHS symbols. To remove
 function findIA(currentNode, IA, seeds, symbolInfo, i)
 #   printSpaces(i)
 #   println("findIA: ", currentNode)
@@ -582,7 +584,7 @@ function reorderLoop(L, M, lives, symbolInfo)
     end 
 end
 
-# Map each BB to a boolean: true if the BB in any loop 
+# Map each BB to a Bool: true if the BB in any loop 
 function BBsInLoop(lives, loop_info)
     in_loop = Dict{Int, Bool}()
     for (j,bb) in lives.basic_blocks
@@ -824,6 +826,7 @@ function regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     return growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
 end
 
+# Old version, not differentiating LHS and RHS symbols. To remove
 function findIAs(region::Region, symbolInfo)
     # Build inter-dependent arrays
     IAs = Dict{Any, Set}()
@@ -844,6 +847,73 @@ function findIAs(region::Region, symbolInfo)
             end
 #            println("###Stmt: ", stmt.expr)
 #            println("  IAs:", IAs[stmt])        
+        end
+    end
+    return IAs
+end
+
+# a set of inter-dependent arrays in the same statement. Some of them appear in LHS, some in RHS 
+type InterDependentArrays
+    LHS:: Set{Any}
+    RHS:: Set{Any}
+    InterDependentArrays() = new(Set(), Set())
+end
+
+function addToInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, symbolInfo)
+    if typeOfNode(currentNode, symbolInfo) <: AbstractArray
+        if typeof(currentNode) == Symbol
+        println("*** push sym")
+            push!(LHS ? IA.LHS : IA.RHS, currentNode)
+        elseif typeof(currentNode) == SymbolNode
+        println("*** push symnode")
+            push!(LHS ? IA.LHS : IA.RHS, currentNode.name)
+        end
+    end 
+end
+
+function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, i)
+   printSpaces(i)
+   println("findIA: ", currentNode)
+    addToInterDependentArrays(currentNode, LHS, IA, symbolInfo)
+    if typeof(currentNode) <: Expr
+        for c in currentNode.args
+            printSpaces(i+1)
+            println("c=", c, " type=", typeOfNode(c, symbolInfo))
+            if typeOfNode(c, symbolInfo) <: Number
+                push!(seeds, tuple(c, LHS))
+            else
+                findInterDependentArrays(c, LHS, IA, seeds, symbolInfo, i+1)
+            end
+        end
+    end
+end
+
+function findInterDependentArrays(region::Region, symbolInfo)
+    # Build inter-dependent arrays
+    IAs = Dict{Any, Set}()
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            IAs[stmt] = Set{Any}()
+            seeds = Set{Tuple{Any, Bool}} ()
+            push!(seeds, tuple(stmt.expr, false))
+            while !isempty(seeds)
+                seed = pop!(seeds)
+                IA = InterDependentArrays()
+                if typeof(seed[1]) == Expr && seed[1].head == :(=)
+                    # TODO: check that an assignment can happen only at top level, not in LHS or RHS 
+                    findInterDependentArrays(seed[1].args[1], true, IA, seeds, symbolInfo, 1)
+                    findInterDependentArrays(seed[1].args[2], false, IA, seeds, symbolInfo, 1)
+                else
+                    findInterDependentArrays(seed[1], seed[2], IA, seeds, symbolInfo, 1)
+                end
+                if !isempty(IA.LHS) || !isempty(IA.RHS)
+                    push!(IAs[stmt], IA)
+                end
+            end
+            println("###Stmt: ", stmt.expr)
+            println("  IAs:", IAs[stmt])        
         end
     end
     return IAs
@@ -915,16 +985,147 @@ function show_RMD_graph(entry::RMDNode, nodes, prefix::String)
     end
 end
 
-function IAUnion(B::RMDNode, S::Set, IAs)
-    result = copy(S)
+const UNIVERSE_SYM = gensym("universe")
+
+function intersect_preds_out(node)
+    S = Set{Any}()
+    first = true
+    for pred in node.preds
+        if first || in(UNIVERSE_SYM, S)
+            S = copy(pred.Out)
+            first = false
+        else
+            if !in(UNIVERSE_SYM, pred.Out)
+                S = intersect(S, pred.Out)
+            end 
+        end
+    end
+    S
+end
+
+function intersect_succs_in(node)
+    S = Set{Any}()
+    first = true
+    for succ in node.succs
+        if first || in(UNIVERSE_SYM, S)
+            S = copy(succ.In)
+            first = false
+        else
+            if !in(UNIVERSE_SYM, succ.In)
+                S = intersect(S, succ.In)
+            end 
+        end
+    end
+    S
+end
+
+function forward_transfer(B::RMDNode, S::Set, IAs)
+    if isempty(IAs[B.stmt])
+        return copy(S)
+    end
+    
+    result = Set()
     for x in S
         for IA in IAs[B.stmt]
-            if in(x, IA)
-                union!(result, IA)
+            if in(x, IA.RHS)
+                union!(result, IA.RHS)
+                # no matter a RHS symbol is in LHS or not, it should be transfered:
+                # If it is in, then of course it will (It means the new def of the symbol)
+                # If not, it will as well (It means the current def of the symbol)
+                union!(result, IA.LHS)
+            else
+                if in(x, IA.LHS)
+                    # The current def of the symbol is killed. The new def, unless
+                    # some symbol in the RHS is inter-dependent on it, will not be added
+                    # Do nothing.
+                else
+                    push!(result, x)
+                end
             end
         end
     end
     return result
+end
+
+function backward_transfer(B::RMDNode, S::Set, IAs)
+    if isempty(IAs[B.stmt])
+        return copy(S)
+    end
+    
+    result = Set()
+    for x in S
+        for IA in IAs[B.stmt]
+            if in(x, IA.LHS)
+                union!(result, IA.RHS)
+            else
+                if in(x, IA.RHS)
+                    union!(result, IA.RHS)
+                else
+                    push!(result, x)
+                end
+            end
+        end
+    end
+    return result
+end
+
+function forwardPass(nodes, IAs, entry, initialization::Bool)
+    ever_changed = false
+    
+    changed = true
+    while changed
+        changed = false
+        for node in nodes
+            if initialization && node == entry
+                continue
+            end
+            S = intersect_preds_out(node)
+            if !initialization
+                S = union(node.In, S)
+            end
+            if !(S == node.In)
+                changed = true
+                ever_changed = true
+                node.In = S
+            end
+            S = forward_transfer(node, node.In, IAs)
+            if !initialization
+                S = union(node.Out, S)
+            end
+            if !(S == node.Out)
+                changed = true
+                ever_changed = true
+                node.Out = S
+            end
+        end
+    end
+    ever_changed
+end
+
+function backwardPass(nodes, IAs)
+    ever_changed = false
+    
+    changed = true
+    while changed
+        changed = false
+        for node in nodes
+            S = intersect_succs_in(node)
+            S = union(node.Out, S)
+            if !(S == node.Out)
+                changed = true
+                ever_changed = true
+                node.Out = S
+            end
+            S = backward_transfer(node, node.Out, IAs)
+            S = union(node.In, S)
+            if !(S == node.In)
+                changed = true
+                ever_changed = true
+                node.In = S
+            end
+        end
+    end
+    ever_changed
 end
 
 function reorderableMatrixDiscovery(lives, region, IAs, root)
@@ -995,67 +1196,28 @@ function reorderableMatrixDiscovery(lives, region, IAs, root)
         show_RMD_graph(entry, nodes, "Initial RMD graph:")
     end
 
+    # Step 1: initialization
+    for node in nodes
+        if node != entry
+            node.Out = Set{Any}()
+            push!(node.Out, UNIVERSE_SYM)
+        else 
+            entry.In  = Set{Any}()
+            entry.Out = Set{Any}()
+            push!(entry.In, root)
+            push!(entry.Out, root)
+        end
+    end
+        show_RMD_graph(entry, nodes, "after init RMD graph:")
+    forwardPass(nodes, IAs, entry, true)
+        show_RMD_graph(entry, nodes, "after 1st forwardpass RMD graph:")
+
+    # repetitive backward and forward pass
     changed = true
     while changed
-        changed = false
-        for node in nodes
-            # compute In
-            S = Set{Any}()
-            first = true
-            for pred in node.preds
-                if first
-                    S = copy(pred.Out)
-                    first = false
-                else
-                    S = intersect(S, pred.Out)
-                end
-            end
-            union!(S, node.Out)            
-            if node == entry
-                push!(S, root)
-            end
-            result = IAUnion(node, S, IAs)
-            # TODO: make IA set aware of location of each symbol (LHS or RHS)
-            # This is a hack: if a symbol is only in LHS, get rid of it. otherwise, keep it
-            in_RHS = intersect(result, node.stmt.use) # remove this in future
-            setdiff!(result, node.stmt.def)
-            union!(result, in_RHS) 
-            
-            if !(result == node.In)
-            println("!!!!! node.In=", node.In, "  result=", result)
-                node.In = copy(result)
-                changed = true
-            end
-
-        println(".. In: ")
-        show_RMD_node(entry, node)
-            
-            # compute Out
-            S = Set{Any}()
-            first = true
-            for succ in node.succs
-                if first
-                    S = copy(succ.In)
-                    first = false
-                else
-                    S = intersect(S, succ.In)
-                end
-            end
-            union!(S, node.In)            
-            if node == entry
-                push!(S, root)
-            end
-            result = IAUnion(node, S, IAs)
-            if !(result == node.Out)
-            println("!!!!! node.Out=", node.Out, "  result=", result)
-                node.Out = copy(result)
-                changed = true
-            end
-
-        println(".. Out: ")
-        show_RMD_node(entry, node)
-        end
-
+        changed = backwardPass(nodes, IAs)
+        show_RMD_graph(entry, nodes, "after backwardpass RMD graph:")
+        changed |= forwardPass(nodes, IAs, entry, false)
         if (DEBUG_LVL >= 2)
             show_RMD_graph(entry, nodes, "RMD graph after 1 iteration:")
         end
@@ -1260,7 +1422,7 @@ function reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
         return false
     end
     
-    IAs = findIAs(region, symbolInfo)
+    IAs = findInterDependentArrays(region, symbolInfo)
     regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
     return true
 end
