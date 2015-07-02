@@ -651,8 +651,8 @@ type RegionInterval
 end
 
 type Region
-    mmread_BB       :: CompilerTools.LivenessAnalysis.BasicBlock
-    mmread_stmt_idx :: Int
+    entry_BB        :: CompilerTools.LivenessAnalysis.BasicBlock # the first BB that dominates all other BBs in the region
+    mmread_stmt_idx :: Int # 0 unless entry_BB has a statement containing mmread(), in which case this points to the index of the statement
     exits           :: Set{ExitEdge}
     intervals       :: Vector{RegionInterval}
 end
@@ -680,7 +680,7 @@ end
 # This is because we do not have analysis to tell us that -1-->3 is an infeasible path.
 # For now, give up with the requirement of having a loop.
 # TODO: enforce the requirement after some analysis like DCE is implemented
-function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info)
+function DFSGrowRegion(entry_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info)
     if (DEBUG_LVL >= 2)
         println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx, "(", 
             1 <= start_stmt_idx && start_stmt_idx <= length(current_BB.statements) ? 
@@ -744,8 +744,8 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
             continue
         end            
         
-        if !in(mmread_BB.label, loop_info.dom_dict[succ_BB.label])
-            # mmread BB does not dominate succ BB
+        if !in(entry_BB.label, loop_info.dom_dict[succ_BB.label])
+            # entry_BB does not dominate succ BB
             if loop_expected_on_every_path && !has_loop[current_BB.label]
                 return false, interval
             end
@@ -767,7 +767,7 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
             continue
         end
         
-        success, successor_interval = DFSGrowRegion(mmread_BB, succ_BB, 1, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info)
+        success, successor_interval = DFSGrowRegion(entry_BB, succ_BB, 1, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info)
         if !success
             return false, successor_interval
         else
@@ -778,7 +778,7 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
     return true, interval
 end
 
-function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
+function growRegion(entry_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
     visited  = Dict{Int, Bool}() # BB has been visited?
     has_loop = Dict{Int, Bool}() # Every path starting from the BB crosses a loop?
     bb_interval = Dict{Int, RegionInterval}()
@@ -790,8 +790,8 @@ function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop
     # Imagine there are always two invisible statements in any BB, whose statement indices are 0 and last_stmt_idx+1
     # So any real statement always has a statement before and after it. That is why we can do mmread_stmt_idx + 1 here
     # Similary, we can do any stmt_indx -1 as well.
-    region = Region(mmread_BB, mmread_stmt_idx, Set{ExitEdge}(), RegionInterval[])
-    success, interval = DFSGrowRegion(mmread_BB, mmread_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, bb_interval, region.exits, region.intervals, symbolInfo, loop_info)
+    region = Region(entry_BB, mmread_stmt_idx, Set{ExitEdge}(), RegionInterval[])
+    success, interval = DFSGrowRegion(entry_BB, entry_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, bb_interval, region.exits, region.intervals, symbolInfo, loop_info)
 
     if (DEBUG_LVL >= 2)
         println("DFSGrowRegion successful?: ", success)
@@ -1296,7 +1296,7 @@ function insertStatementsOnEdge(lives, new_stmts, pred, node, entry, exit)
 end
 
 function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
-    mmread_stmt = region.mmread_BB.statements[ region.mmread_stmt_idx] 
+    mmread_stmt = region.entry_BB.statements[ region.mmread_stmt_idx] 
     lhs = mmread_stmt.expr.args[1]
 
     nodes, entry, exit = reorderableMatrixDiscovery(lives, region, IAs, lhs)
@@ -1346,8 +1346,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
 
     i = 1
     for new_stmt in new_stmts_before_region
-        insert!(region.mmread_BB.statements, region.mmread_stmt_idx + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))    
-#        CompilerTools.LivenessAnalysis.insertStatementAfter(lives, region.mmread_BB, region.mmread_stmt_idx + i, new_stmt)
+        insert!(region.entry_BB.statements, region.mmread_stmt_idx + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))    
         i += 1
     end
 
