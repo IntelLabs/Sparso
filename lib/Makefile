@@ -20,7 +20,7 @@ test/CSR_test: test/CSR_test.c CSR.cpp CSR_Interface.cpp Vector.cpp mm_io.cpp re
 	$(CXX) -o $@ $^ $(CFLAGS)
 
 # 0 based CSR library
-lib: CSR.cpp CSR_Interface.cpp Vector.cpp reordering/RCM.cpp reordering/ConnectedComponents.cpp mm_io.cpp 
+lib: CSR.cpp CSR_Interface.cpp Vector.cpp reordering/RCM.cpp reordering/ConnectedComponents.cpp mm_io.cpp knob.cpp
 	$(CXX) $(CFLAGS) -shared -Wl,-soname,libcsr.so  -o libcsr.so -fopenmp -g -I. -fPIC $^
 		
 all:	test/CSR_test lib
