@@ -825,6 +825,11 @@ function regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     return growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
 end
 
+function regionFormationBasedOnLoop(L, lives, loop_info, symbolInfo)
+    in_loop = BBsInLoop(lives, loop_info)
+    return growRegion(L.head, 0, lives, in_loop, symbolInfo, loop_info)
+end
+
 # Old version, not differentiating LHS and RHS symbols. To remove
 function findIAs(region::Region, symbolInfo)
     # Build inter-dependent arrays
@@ -1389,23 +1394,17 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     end 
 end
 
-function reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
-    if (DEBUG_LVL >= 2)
-        println("******** CFG before mmread_reorder: ********")
-        show(lives);
-    end 
-    
-    region = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
-    if region == nothing
-        return false
-    end
-    
+function reorderRegion(funcAST, lives, loop_info, symbolInfo, region)
     IAs = findInterDependentArrays(region, symbolInfo)
     regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
-    return true
 end
 
 function reorder(funcAST, lives, loop_info, symbolInfo)
+    if (DEBUG_LVL >= 2)
+        println("******** CFG before reorder: ********")
+        show(lives);
+    end 
+    
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)
@@ -1419,8 +1418,9 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     # TODO: it really does not matter whether the sparse matrix is from
     # an mmread or from an argument -- from the perspective of region formation,
     # identifying IAs, and region transformation. So should unify the two cases.
-    success = reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
-    if (success)
+    region = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
+    if region != nothing 
+        reorderRegion(funcAST, lives, loop_info, symbolInfo, region)
         body_reconstructed = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
         funcAST.args[3].args = body_reconstructed
         return funcAST
@@ -1437,15 +1437,23 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
         end
     end    
     if found 
-        distributive = checkDistributivity(funcAST, symbolInfo, true)
-        dprintln(3,"After our type inference, distributive = ", distributive)
-          
-        if !distributive
-            return funcAST
-        end
-        
+        # form a region for each outermost loop in the function
+        in_loop = BBsInLoop(lives, loop_info)
         for L in loop_info.loops
-            reorderLoop(L, M, lives, symbolInfo)
+            is_outermost = true
+            for L1 in loop_info.loops
+                assert(L == L1 || L.members != L1.members)
+                if L != L && L.members < L1.members
+                    is_outermost = false
+                    break
+                end
+            end
+            if is_outermost
+                region = regionFormationBasedOnLoop(L, lives, loop_info, symbolInfo)
+                if region != nothing
+                    reorderRegion(funcAST, lives, loop_info, symbolInfo, region)
+                end
+            end
         end
     end
     
