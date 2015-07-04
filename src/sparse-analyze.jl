@@ -657,6 +657,12 @@ type Region
     intervals       :: Vector{RegionInterval}
 end
 
+module Base
+    function show_expr_type(io::IO, ty)
+        return
+    end
+end
+
 function show_interval(interval::RegionInterval, level)
     for i = 1:level print("  ") end
     println("BB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
@@ -825,7 +831,7 @@ function regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     in_loop = BBsInLoop(lives, loop_info)
     mmread_BB, mmread_stmt_idx = findMmread(lives, in_loop)
     if mmread_BB == nothing
-        return nothing
+        return nothing, nothing
     end
     return growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info, nothing)
 end
@@ -926,6 +932,20 @@ function findInterDependentArrays(region::Region, symbolInfo)
     return IAs
 end
 
+function show_IAs(region::Region, IAs, prefix)
+    println("******************************* ", prefix, " ***************************")
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            print(stmt)
+            for IA in IAs[stmt]
+                println("\tIA: L(", IA.LHS, ") R(", IA.RHS, ")")
+            end
+        end
+    end
+end
+
 # A node in a graph for reorderable matrix discovery analysis (RMD)
 # There are 4 kinds of nodes: 
 # (1) Entry. It is inserted into the region as a special INSIDE statement.
@@ -936,25 +956,24 @@ end
 # is subject to the dataflow propagation, while the OUTSIDE statement is not.
 # The OUTSIDE statement only provides a fixed IN (empty set) to its INSIDE predecessors
 # and a fixed OUT (empty set) to its INSIDE successors.
-typedef enum {
-    RMD_NODE_ENTRY,
-    RMD_NODE_EMPTY,
-    RMD_NODE_NORMAL,
-    RMD_NODE_OUTSIDE
-} RMD_NODE_KIND;
+const RMD_NODE_ENTRY = 0xfff0
+const RMD_NODE_EMPTY = 0xfff1
+const RMD_NODE_NORMAL = 0xfff2
+const RMD_NODE_OUTSIDE = 0xfff4
 
 FIRST_RMD_NODE_INDEX = 0
 type RMDNode
     node_idx
     bbnum   
     stmt_idx
-    kind      :: RMD_NODE_KIND
+    kind      
     succs     :: Set{RMDNode}
     preds     :: Set{RMDNode}
     In        :: Set{Any} #Set{Symbol} causes incompatibility with TopLevelStatement.def and use TODO: ask Todd to fix TopLevelStatement declaration
     Out       :: Set{Any} #TODO: change back to Set{Symbol} 
             
     RMDNode(basicBlock_num, statement_idx, node_kind) = (
+        global FIRST_RMD_NODE_INDEX;
         FIRST_RMD_NODE_INDEX += 1;
         new(FIRST_RMD_NODE_INDEX, basicBlock_num, statement_idx, node_kind,
             Set{RMDNode}(), Set{RMDNode}(), Set{Any}(), Set{Any}()))
@@ -974,18 +993,18 @@ function show_RMD_node_kind(node::RMDNode)
         end
 end
 
-function show_RMD_node(node::RMDNode)
-        println(node.node_idx, " <BB ", node.bbnum, ", Stmt ", node.stmt_idx, ">")
+function show_RMD_node(node::RMDNode, lives)
+        print(node.node_idx, " <BB ", node.bbnum, ", Stmt ", node.stmt_idx, ">")
         show_RMD_node_kind(node)
         print(" Preds(")
         for pred in node.preds
-            print(pred.node_idx)
+            print(pred.node_idx, " ")
         end
         print(")")
             
         print(" Succs(")
         for succ in node.succs
-            print(succ.node_idx)
+            print(succ.node_idx, " ")
         end
         print(")")
         
@@ -1000,12 +1019,18 @@ function show_RMD_node(node::RMDNode)
             print(item, " ")
         end
         println(")")
+        
+        if node.kind == RMD_NODE_NORMAL
+            BB = lives.basic_blocks[node.bbnum]
+            stmt = BB.statements[node.stmt_idx]
+            println("\t", stmt)
+        end
 end
 
-function show_RMD_graph(nodes, prefix::String)
+function show_RMD_graph(nodes, outside_nodes, lives, prefix::String)
     println("******************************* ", prefix, " ***************************")
-    for node in nodes
-        show_RMD_node(node)
+    for node in union(nodes, outside_nodes)
+        show_RMD_node(node, lives)
     end
 end
 
@@ -1043,14 +1068,21 @@ function intersect_succs_in(node)
     S
 end
 
-function forward_transfer(B::RMDNode, S::Set, IAs)
-    if isempty(IAs[B.stmt])
+function forward_transfer(B::RMDNode, S::Set, IAs, lives)
+    assert(B.kind != RMD_NODE_OUTSIDE)
+    if B.kind == RMD_NODE_ENTRY || B.kind == RMD_NODE_EMPTY
+        return copy(S)
+    end
+    
+    BB = lives.basic_blocks[B.bbnum]
+    stmt = BB.statements[B.stmt_idx]
+    if isempty(IAs[stmt])
         return copy(S)
     end
     
     result = Set()
     for x in S
-        for IA in IAs[B.stmt]
+        for IA in IAs[stmt]
             if in(x, IA.RHS)
                 union!(result, IA.RHS)
                 # no matter a RHS symbol is in LHS or not, it should be transfered:
@@ -1071,14 +1103,21 @@ function forward_transfer(B::RMDNode, S::Set, IAs)
     return result
 end
 
-function backward_transfer(B::RMDNode, S::Set, IAs)
-    if isempty(IAs[B.stmt])
+function backward_transfer(B::RMDNode, S::Set, IAs, lives)
+    assert(B.kind != RMD_NODE_OUTSIDE)
+    if B.kind == RMD_NODE_ENTRY || B.kind == RMD_NODE_EMPTY
+        return copy(S)
+    end
+    
+    BB = lives.basic_blocks[B.bbnum]
+    stmt = BB.statements[B.stmt_idx]
+    if isempty(IAs[stmt])
         return copy(S)
     end
     
     result = Set()
     for x in S
-        for IA in IAs[B.stmt]
+        for IA in IAs[stmt]
             if in(x, IA.LHS)
                 union!(result, IA.RHS)
             else
@@ -1093,7 +1132,7 @@ function backward_transfer(B::RMDNode, S::Set, IAs)
     return result
 end
 
-function forwardPass(nodes, IAs, initialization::Bool)
+function forwardPass(nodes, IAs, initialization::Bool, lives)
     ever_changed = false
     
     changed = true
@@ -1103,7 +1142,13 @@ function forwardPass(nodes, IAs, initialization::Bool)
             if initialization && node.kind == RMD_NODE_ENTRY
                 continue
             end
+println("... forward pass node is")
+        show_RMD_node(node, lives)
+            
             S = intersect_preds_out(node)
+
+println("\t after insect pred out. S=", S)
+
             if !initialization
                 S = union(node.In, S)
             end
@@ -1112,7 +1157,10 @@ function forwardPass(nodes, IAs, initialization::Bool)
                 ever_changed = true
                 node.In = S
             end
-            S = forward_transfer(node, node.In, IAs)
+println("... after updatge node is")
+        show_RMD_node(node, lives)
+            
+            S = forward_transfer(node, node.In, IAs, lives)
             if !initialization
                 S = union(node.Out, S)
             end
@@ -1126,7 +1174,7 @@ function forwardPass(nodes, IAs, initialization::Bool)
     ever_changed
 end
 
-function backwardPass(nodes, IAs)
+function backwardPass(nodes, IAs, lives)
     ever_changed = false
     
     changed = true
@@ -1140,7 +1188,7 @@ function backwardPass(nodes, IAs)
                 ever_changed = true
                 node.Out = S
             end
-            S = backward_transfer(node, node.Out, IAs)
+            S = backward_transfer(node, node.Out, IAs, lives)
             S = union(node.In, S)
             if !(S == node.In)
                 changed = true
@@ -1170,17 +1218,19 @@ function makeConnectPredOutsideNode(interval::RegionInterval, predBB, pred_stmt_
     outside_node = RMDNode(predBB.label, pred_stmt_idx, RMD_NODE_OUTSIDE)
     push!(outside_nodes, outside_node)
     push!(first_node[interval].preds, outside_node)
+    push!(outside_node.succs, first_node[interval])
 end
 
 function makeConnectSuccOutsideNode(interval::RegionInterval, succBB, succ_stmt_idx, last_node, outside_nodes)
     outside_node = RMDNode(succBB.label, succ_stmt_idx, RMD_NODE_OUTSIDE)
     push!(outside_nodes, outside_node)
     push!(last_node[interval].succs, outside_node)
+    push!(outside_node.preds, last_node[interval])
 end
 
-function reorderableMatrixDiscovery(lives, region, bb_interval, IAs, root)
+function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, root)
     if isempty(region.intervals) 
-        return nothing
+        return nothing, nothing, nothing
     end
     
     # build a graph, where each node is a statement.
@@ -1235,7 +1285,14 @@ function reorderableMatrixDiscovery(lives, region, bb_interval, IAs, root)
         BB = interval.BB
         if interval.from_stmt_idx == 1
             # interval covers the start of the BB. Connect to predecessors
+            # Exception: if this is a loop region and BB is the loop head, then ENTRY has
+            # represented all its predecessors except the backedge one. So we need only to
+            # build the predecessor on the backedge.
+            BB_is_loop_head = ((region.first_BB == BB) && (region.mmread_stmt_idx == 0))
             for pred in BB.preds
+                if BB_is_loop_head && !in(BB.label, loop_info.dom_dict[pred.label])
+                    continue
+                end
                 if haskey(bb_interval, pred.label)
                     pred_interval = bb_interval[pred.label]
                     if intervalsAreAdjacent(pred_interval, interval)
@@ -1283,7 +1340,7 @@ function reorderableMatrixDiscovery(lives, region, bb_interval, IAs, root)
     
     # Do bidirectional dataflow analysis on the graph
     if (DEBUG_LVL >= 2)
-        show_RMD_graph(nodes, "Initial RMD graph:")
+        show_RMD_graph(nodes, outside_nodes, lives, "Initial RMD graph:")
     end
 
     # Step 1: initialization
@@ -1300,24 +1357,27 @@ function reorderableMatrixDiscovery(lives, region, bb_interval, IAs, root)
     end
 
     for outside_node in outside_nodes
-        node.In  = Set{Any}()
-        node.Out = Set{Any}()
+        outside_node.In  = Set{Any}()
+        outside_node.Out = Set{Any}()
     end
 
-    forwardPass(nodes, IAs, true)
+    forwardPass(nodes, IAs, true, lives)
+        if (DEBUG_LVL >= 2)
+            show_RMD_graph(nodes, outside_nodes, lives, "RMD graph after initialization:")
+        end
     
     # repetitive backward and forward pass
     changed = true
     while changed
-        changed = backwardPass(nodes, IAs)
-        changed |= forwardPass(nodes, IAs, false)
+        changed = backwardPass(nodes, IAs, lives)
+        changed |= forwardPass(nodes, IAs, false, lives)
         if (DEBUG_LVL >= 2)
-            show_RMD_graph(nodes, "RMD graph after 1 iteration:")
+            show_RMD_graph(nodes, outside_nodes, lives, "RMD graph after 1 iteration:")
         end
     end
     assert(entry.In == entry.Out)
         
-    return nodes, entry
+    return nodes, entry, outside_nodes
 end
 
 function insertStatementsOnEdge(lives, new_stmts, node::RMDNode, node_BB, succ::RMDNode, succ_BB)
@@ -1332,13 +1392,13 @@ function insertStatementsOnEdge(lives, new_stmts, node::RMDNode, node_BB, succ::
     new_goto_stmt = nothing
     if node_BB == succ_BB
         #insert inside the same block
-        assert(node.stmt_idx + 1 = succ.stmt_idx)
+        assert(node.stmt_idx + 1 == succ.stmt_idx)
         assert(succ.stmt_idx >= 1)
         assert(succ.stmt_idx <= length(succ_BB.statements) + 1)
         BB = node_BB
         insert_at = succ.stmt_idx
     else
-        (BB, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, node.BB.label, succ.BB.label)
+        (BB, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, node.bbnum, succ.bbnum)
         insert_at = 1
     end
     
@@ -1357,7 +1417,7 @@ function nodeLiveIn(node::RMDNode, BB)
         assert(node.stmt_idx == 0)
         return BB.live_in
     elseif node.stmt_idx > length(BB.statements)
-        assert(node.stmt_idx == length(BB.statements) + 1)
+        assert(node.stmt_idx == (length(BB.statements) + 1))
         return BB.live_out
     else
         stmt = BB.statements[node.stmt_idx]
@@ -1375,7 +1435,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
         M = mmread_stmt.expr.args[1]
     end 
         
-    nodes, entry = reorderableMatrixDiscovery(lives, region, bb_interval, IAs, M)
+    nodes, entry, outside_nodes = reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, M)
     
     #TODO: benefit-cost analysis
     
@@ -1483,9 +1543,9 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
             insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
 
 println("... reverse ... node is")
-        show_RMD_node(entry, node)
+        show_RMD_node(node, lives)
 println("\tsucc is")
-        show_RMD_node(entry, succ)
+        show_RMD_node(succ, lives)
             
             # compute what to be reverse reordered on this edge
             reverseReorder = setdiff(intersect(node.Out, succ_live_in), succ.In)
@@ -1510,6 +1570,9 @@ end
 
 function reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, M, back_edge)
     IAs = findInterDependentArrays(region, symbolInfo)
+    if (DEBUG_LVL >= 2)
+        show_IAs(region, IAs, "Inter-dependent arrays")
+    end
     regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_interval, IAs, M, back_edge)
 end
 
