@@ -931,8 +931,7 @@ end
 # (1) Entry. It is inserted into the region as a special INSIDE statement.
 # (2) Empty. It represents an empty interval INSIDE the region.
 # (3) Normal. It represents a statement INSIDE the region.
-# (4) Outside. It represents an OUTSIDE statement. One outside statement can be 
-#              used to represents all the statements in the same basic block. 
+# (4) Outside. It represents an OUTSIDE statement.
 # The difference between INSIDE and OUTSIDE statement is that the INSIDE statement 
 # is subject to the dataflow propagation, while the OUTSIDE statement is not.
 # The OUTSIDE statement only provides a fixed IN (empty set) to its INSIDE predecessors
@@ -964,8 +963,6 @@ end
 function show_RMD_node_kind(node::RMDNode)
         if node.kind == RMD_NODE_ENTRY
             print(" ENTRY ")
-        elseif node.kind == RMD_NODE_EXIT
-            print(" EXIT ")
         elseif node.kind == RMD_NODE_EMPTY
             print(" EMPTY ")
         elseif node.kind == RMD_NODE_NORMAL
@@ -978,7 +975,7 @@ function show_RMD_node_kind(node::RMDNode)
 end
 
 function show_RMD_node(node::RMDNode)
-        println(node.node_idx, " <BB ", node.bbnum, " Stmt ", node.stmt_idx, ">")
+        println(node.node_idx, " <BB ", node.bbnum, ", Stmt ", node.stmt_idx, ">")
         show_RMD_node_kind(node)
         print(" Preds(")
         for pred in node.preds
@@ -1155,7 +1152,7 @@ function backwardPass(nodes, IAs)
     ever_changed
 end
 
-function intervalsAreAdjacent(pred_interval, interval)
+function intervalsAreAdjacent(pred_interval::RegionInterval, interval::RegionInterval)
     assert(interval.from_stmt_idx >= 1)
     if interval.from_stmt_idx == 1 
         assert(pred_interval.to_stmt_idx <= length(pred_interval.BB.statements))
@@ -1189,7 +1186,7 @@ function reorderableMatrixDiscovery(lives, region, bb_interval, IAs, root)
     # build a graph, where each node is a statement.
     first_node = Dict{RegionInterval, RMDNode}()
     last_node  = Dict{RegionInterval, RMDNode}()
-    nodes      = RMDNode[] # All INSIDE NODES
+    nodes      = RMDNode[] # All INSIDE nodes
 
     # build a pseudo entry and exit node
     entry = RMDNode(0, 0, RMD_NODE_ENTRY)
@@ -1226,12 +1223,10 @@ function reorderableMatrixDiscovery(lives, region, bb_interval, IAs, root)
         end
     end
 
-    # Create OUTSIDE nodes
-    outside_nodes = RMDNode[]
-     
     # Now all INSIDE nodes have been created, and those in the same interval have been
-    # connected. Connected nodes between intervals, and create  predecessor and
+    # connected. Connected nodes between intervals, and create OUTSIDE predecessor and
     # successors
+    outside_nodes = RMDNode[]
     first_interval = region.intervals[1]
     push!(entry.succs, first_node[first_interval])
     push!(first_node[first_interval].preds, entry)
