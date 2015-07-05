@@ -144,7 +144,9 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
     if typeOfNode(args[1], symbolInfo) <: Vector
         if (typeOfNode(args[2], symbolInfo) <: Vector)
             return distributive
-        else 
+        elseif (typeOfNode(args[2], symbolInfo) <: Number)
+            return distributive 
+        else
             return false
         end
     end
@@ -432,7 +434,7 @@ function SpMV!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::Abstract
         DestroyCSR(A2)
     else
         # use Julia implementation
-        w = alpha * A * x + beta * x + gamma
+        w = alpha * A * x + beta * y + gamma
     end
 end
 
