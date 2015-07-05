@@ -1515,6 +1515,17 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
         end
     end
 
+    # Only those arrays that are updated in the region need to be reverse reordered afterwards
+    updatedInRegion = Set{Symbol}()
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            union!(updatedInRegion, stmt.def)
+        end
+    end
+    dprintln(2, "updatedInRegion: ", updatedInRegion)
+ 
     # Now process other nodes. Consider outside nodes as well: we may need to insert on
     # an edge between an inside and outside node.
     all_nodes = union(nodes, outside_nodes)
@@ -1548,7 +1559,7 @@ println("\tsucc is")
         show_RMD_node(succ, lives)
             
             # compute what to be reverse reordered on this edge
-            reverseReorder = setdiff(intersect(node.Out, succ_live_in), succ.In)
+            reverseReorder = setdiff(intersect(node.Out, succ_live_in, updatedInRegion), succ.In)
 println("\t\t revser is:", reverseReorder)            
             new_stmts = Expr[]
             for sym in reverseReorder
