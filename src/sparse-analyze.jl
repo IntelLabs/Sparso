@@ -1134,7 +1134,6 @@ end
 
 function forwardPass(nodes, IAs, initialization::Bool, lives)
     ever_changed = false
-    
     changed = true
     while changed
         changed = false
@@ -1142,13 +1141,7 @@ function forwardPass(nodes, IAs, initialization::Bool, lives)
             if initialization && node.kind == RMD_NODE_ENTRY
                 continue
             end
-println("... forward pass node is")
-        show_RMD_node(node, lives)
-            
             S = intersect_preds_out(node)
-
-println("\t after insect pred out. S=", S)
-
             if !initialization
                 S = union(node.In, S)
             end
@@ -1157,9 +1150,6 @@ println("\t after insect pred out. S=", S)
                 ever_changed = true
                 node.In = S
             end
-println("... after updatge node is")
-        show_RMD_node(node, lives)
-            
             S = forward_transfer(node, node.In, IAs, lives)
             if !initialization
                 S = union(node.Out, S)
@@ -1176,7 +1166,6 @@ end
 
 function backwardPass(nodes, IAs, lives)
     ever_changed = false
-    
     changed = true
     while changed
         changed = false
@@ -1553,14 +1542,8 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
             end
             insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
 
-println("... reverse ... node is")
-        show_RMD_node(node, lives)
-println("\tsucc is")
-        show_RMD_node(succ, lives)
-            
             # compute what to be reverse reordered on this edge
             reverseReorder = setdiff(intersect(node.Out, succ_live_in, updatedInRegion), succ.In)
-println("\t\t revser is:", reverseReorder)            
             new_stmts = Expr[]
             for sym in reverseReorder
                 if typeOfNode(sym, symbolInfo) <: AbstractMatrix

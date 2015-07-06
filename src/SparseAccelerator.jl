@@ -478,6 +478,7 @@ function WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
   else
     w = alpha*x + beta*y
   end
+  w
 end
 
 function WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
