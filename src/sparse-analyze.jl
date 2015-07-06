@@ -176,6 +176,7 @@ function insertTimerAfterLoop(t1, new_stmts)
     push!(new_stmts, stmt)
 end
 
+# Old version, not differentiating LHS and RHS symbols. To remove
 function addToIA(currentNode, IA, symbolInfo)
     if typeOfNode(currentNode, symbolInfo) <: AbstractArray
         if typeof(currentNode) == Symbol
@@ -192,6 +193,7 @@ function printSpaces(i)
     end
 end
 
+# Old version, not differentiating LHS and RHS symbols. To remove
 function findIA(currentNode, IA, seeds, symbolInfo, i)
 #   printSpaces(i)
 #   println("findIA: ", currentNode)
@@ -582,7 +584,7 @@ function reorderLoop(L, M, lives, symbolInfo)
     end 
 end
 
-# Map each BB to a boolean: true if the BB in any loop 
+# Map each BB to a Bool: true if the BB in any loop 
 function BBsInLoop(lives, loop_info)
     in_loop = Dict{Int, Bool}()
     for (j,bb) in lives.basic_blocks
@@ -642,13 +644,32 @@ type RegionInterval
     BB            :: CompilerTools.LivenessAnalysis.BasicBlock
     from_stmt_idx :: Int
     to_stmt_idx   :: Int
+    succs         :: Set{RegionInterval}
+    preds         :: Set{RegionInterval}
+    
+    RegionInterval(bb, from, to) = new(bb, from, to, Set{RegionInterval}(), Set{RegionInterval}())
 end
 
 type Region
-    mmread_BB       :: CompilerTools.LivenessAnalysis.BasicBlock
-    mmread_stmt_idx :: Int
+    first_BB        :: CompilerTools.LivenessAnalysis.BasicBlock # the first BB that dominates all other BBs in the region
+    mmread_stmt_idx :: Int # 0 unless first_BB has a statement containing mmread(), in which case this points to the index of the statement
     exits           :: Set{ExitEdge}
-    intervals       :: Set{RegionInterval}
+    intervals       :: Vector{RegionInterval}
+end
+
+module Base
+    function show_expr_type(io::IO, ty)
+        return
+    end
+end
+
+function show_interval(interval::RegionInterval, level)
+    for i = 1:level print("  ") end
+    println("BB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
+        1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
+        interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
+        1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
+        interval.BB.statements[interval.to_stmt_idx].index : "", ")")
 end
 
 # Note: to be sure of profitability, we should require each path to pass through a loop. 
@@ -665,7 +686,7 @@ end
 # This is because we do not have analysis to tell us that -1-->3 is an infeasible path.
 # For now, give up with the requirement of having a loop.
 # TODO: enforce the requirement after some analysis like DCE is implemented
-function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, exits, intervals, symbolInfo, loop_info)
+function DFSGrowRegion(first_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info, loop_bbs)
     if (DEBUG_LVL >= 2)
         println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx, "(", 
             1 <= start_stmt_idx && start_stmt_idx <= length(current_BB.statements) ? 
@@ -676,6 +697,7 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
     # TODO: enable it in future
     loop_expected_on_every_path = false
     
+    assert(!visited[current_BB.label])
     visited[current_BB.label]  = true
     has_loop[current_BB.label] = in_loop[current_BB.label]
     last_stmt_idx = length(current_BB.statements)
@@ -683,32 +705,39 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
         expr = current_BB.statements[stmt_idx].expr
         if expr.head == :return
             if loop_expected_on_every_path && !has_loop[current_BB.label]
-                return false
+                return false, nothing
             end
             exit = ExitEdge(current_BB, stmt_idx - 1, current_BB, stmt_idx)
             push!(exits, exit)
             interval = RegionInterval(current_BB, start_stmt_idx, stmt_idx - 1)
             push!(intervals, interval)
-            return true
+            bb_interval[current_BB.label] = interval
+            return true, interval
         end
         if expr.head == :throw
             throw("DFSGrowRegion: throw not handled")
-            return false
+            return false, nothing
         end
         distributive = checkDistributivity(expr, symbolInfo, true)
         if !distributive
             if loop_expected_on_every_path && !has_loop[current_BB.label]
-                return false
+                return false, nothing
+            end
+            if loop_bbs != nothing
+                # The region cannot cover the whole loop
+                return false, nothing
             end
             exit = ExitEdge(current_BB, stmt_idx - 1, current_BB, stmt_idx)
             push!(exits, exit)
             interval = RegionInterval(current_BB, start_stmt_idx, stmt_idx - 1)
             push!(intervals, interval)
-            return true
+            bb_interval[current_BB.label] = interval
+            return true, interval
         end
     end
     interval = RegionInterval(current_BB, start_stmt_idx, last_stmt_idx) 
     push!(intervals, interval)
+    bb_interval[current_BB.label] = interval
     
     # Current BB's statements have been scanned. Now successors
     for succ_BB in current_BB.succs
@@ -716,24 +745,25 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
             println("looking at succ BB ", succ_BB.label, " whose dominators are ", loop_info.dom_dict[succ_BB.label])
         end
         
-        if succ_BB.label == -2 # the pseudo exit of the function
+        if succ_BB.label == -2 || # the pseudo exit of the function
+            (loop_bbs != nothing && !in(succ_BB.label, loop_bbs)) # out of loop TODO: allow region to include bbs out of loop. Just make sure it covers the whole loop, not part of it.
             if loop_expected_on_every_path && !has_loop[current_BB.label]
-                return false
+                return false, interval
             end
             exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
             push!(exits, exit)
             continue
         end            
         
-        if !in(mmread_BB.label, loop_info.dom_dict[succ_BB.label])
-            # mmread BB does not dominate succ BB
+        if !in(first_BB.label, loop_info.dom_dict[succ_BB.label])
+            # first_BB does not dominate succ BB
             if loop_expected_on_every_path && !has_loop[current_BB.label]
-                return false
+                return false, interval
             end
             if in_loop[succ_BB.label]
                 # we are going to insert reverse reodering on a new block between current and succ BB.
                 # If succ BB is in a loop, the new block is also in a loop. We cannot affort that cost 
-                return false
+                return false, interval
             end
             
             exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
@@ -743,47 +773,57 @@ function DFSGrowRegion(mmread_BB, current_BB, start_stmt_idx, lives, in_loop, vi
         
         if (visited[succ_BB.label])
             has_loop[current_BB.label] = has_loop[current_BB.label] || has_loop[succ_BB.label]
+            push!(interval.succs, bb_interval[succ_BB.label])
+            push!(bb_interval[succ_BB.label].preds, interval)
             continue
         end
         
-        success = DFSGrowRegion(mmread_BB, succ_BB, 1, lives, in_loop, visited, has_loop, exits, intervals, symbolInfo, loop_info)
+        success, successor_interval = DFSGrowRegion(first_BB, succ_BB, 1, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info, loop_bbs)
         if !success
-            return false
+            return false, successor_interval
+        else
+            push!(interval.succs, successor_interval)
+            push!(successor_interval.preds, interval)
         end
     end
-    return true
+    return true, interval
 end
 
-function growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
+function growRegion(first_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info, loop_bbs)
     visited  = Dict{Int, Bool}() # BB has been visited?
     has_loop = Dict{Int, Bool}() # Every path starting from the BB crosses a loop?
+    bb_interval = Dict{Int, RegionInterval}()
     for (j,bb) in lives.basic_blocks 
         visited[bb.label]  = false
-        has_loop[bb.label] = false  
+        has_loop[bb.label] = false
     end
     
     # Imagine there are always two invisible statements in any BB, whose statement indices are 0 and last_stmt_idx+1
     # So any real statement always has a statement before and after it. That is why we can do mmread_stmt_idx + 1 here
     # Similary, we can do any stmt_indx -1 as well.
-    region = Region(mmread_BB, mmread_stmt_idx, Set{ExitEdge}(), Set{RegionInterval}())
-    success = DFSGrowRegion(mmread_BB, mmread_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, region.exits, region.intervals, symbolInfo, loop_info)
+    region = Region(first_BB, mmread_stmt_idx, Set{ExitEdge}(), RegionInterval[])
+    success, interval = DFSGrowRegion(first_BB, first_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, bb_interval, region.exits, region.intervals, symbolInfo, loop_info, loop_bbs)
 
     if (DEBUG_LVL >= 2)
         println("DFSGrowRegion successful?: ", success)
         println("Intervals of region found:")
         for interval in region.intervals
-            println("\n\nBB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
-                1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
-                interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
-                1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
-                interval.BB.statements[interval.to_stmt_idx].index : "", ")")
+            show_interval(interval, 1)
+            println("\tPreds: ")
+            for pred in interval.preds
+                show_interval(pred, 3)
+            end
+            println("\tSuccs: ")
+            for succ in interval.succs
+                show_interval(succ, 3)
+            end
         end
     end
     
     if success
-        return region
+        return region, bb_interval
     else
-        return nothing
+        return nothing, bb_interval
     end
 end
 
@@ -791,11 +831,17 @@ function regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     in_loop = BBsInLoop(lives, loop_info)
     mmread_BB, mmread_stmt_idx = findMmread(lives, in_loop)
     if mmread_BB == nothing
-        return nothing
+        return nothing, nothing
     end
-    return growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info)
+    return growRegion(mmread_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info, nothing)
 end
 
+function regionFormationBasedOnLoop(L, lives, loop_info, symbolInfo)
+    in_loop = BBsInLoop(lives, loop_info)
+    return growRegion(lives.basic_blocks[L.head], 0, lives, in_loop, symbolInfo, loop_info, L.members)
+end
+
+# Old version, not differentiating LHS and RHS symbols. To remove
 function findIAs(region::Region, symbolInfo)
     # Build inter-dependent arrays
     IAs = Dict{Any, Set}()
@@ -821,89 +867,619 @@ function findIAs(region::Region, symbolInfo)
     return IAs
 end
 
-function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
-    mmread_stmt = region.mmread_BB.statements[ region.mmread_stmt_idx] 
-    lhs = mmread_stmt.expr.args[1]
+# a set of inter-dependent arrays in the same statement. Some of them appear in LHS, some in RHS 
+type InterDependentArrays
+    LHS:: Set{Any}
+    RHS:: Set{Any}
+    InterDependentArrays() = new(Set(), Set())
+end
 
-    reordered = Set{Symbol}()
-    push!(reordered, lhs)
+function addToInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, symbolInfo)
+    if typeOfNode(currentNode, symbolInfo) <: AbstractArray
+        if typeof(currentNode) == Symbol
+            push!(LHS ? IA.LHS : IA.RHS, currentNode)
+        elseif typeof(currentNode) == SymbolNode
+            push!(LHS ? IA.LHS : IA.RHS, currentNode.name)
+        end
+    end 
+end
+
+function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, i)
+#   printSpaces(i)
+#   println("findIA: ", currentNode)
+    addToInterDependentArrays(currentNode, LHS, IA, symbolInfo)
+    if typeof(currentNode) <: Expr
+        for c in currentNode.args
+#            printSpaces(i+1)
+#            println("c=", c, " type=", typeOfNode(c, symbolInfo))
+            if typeOfNode(c, symbolInfo) <: Number
+                push!(seeds, tuple(c, LHS))
+            else
+                findInterDependentArrays(c, LHS, IA, seeds, symbolInfo, i+1)
+            end
+        end
+    end
+end
+
+function findInterDependentArrays(region::Region, symbolInfo)
+    # Build inter-dependent arrays
+    IAs = Dict{Any, Set}()
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            IAs[stmt] = Set{Any}()
+            seeds = Set{Tuple{Any, Bool}} ()
+            push!(seeds, tuple(stmt.expr, false))
+            while !isempty(seeds)
+                seed = pop!(seeds)
+                IA = InterDependentArrays()
+                if typeof(seed[1]) == Expr && seed[1].head == :(=)
+                    # TODO: check that an assignment can happen only at top level, not in LHS or RHS 
+                    findInterDependentArrays(seed[1].args[1], true, IA, seeds, symbolInfo, 1)
+                    findInterDependentArrays(seed[1].args[2], false, IA, seeds, symbolInfo, 1)
+                else
+                    findInterDependentArrays(seed[1], seed[2], IA, seeds, symbolInfo, 1)
+                end
+                if !isempty(IA.LHS) || !isempty(IA.RHS)
+                    push!(IAs[stmt], IA)
+                end
+            end
+#            println("###Stmt: ", stmt.expr)
+#            println("  IAs:", IAs[stmt])        
+        end
+    end
+    return IAs
+end
+
+function show_IAs(region::Region, IAs, prefix)
+    println("******************************* ", prefix, " ***************************")
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            print(stmt)
+            for IA in IAs[stmt]
+                println("\tIA: L(", IA.LHS, ") R(", IA.RHS, ")")
+            end
+        end
+    end
+end
+
+# A node in a graph for reorderable matrix discovery analysis (RMD)
+# There are 4 kinds of nodes: 
+# (1) Entry. It is inserted into the region as a special INSIDE statement.
+# (2) Empty. It represents an empty interval INSIDE the region.
+# (3) Normal. It represents a statement INSIDE the region.
+# (4) Outside. It represents an OUTSIDE statement.
+# The difference between INSIDE and OUTSIDE statement is that the INSIDE statement 
+# is subject to the dataflow propagation, while the OUTSIDE statement is not.
+# The OUTSIDE statement only provides a fixed IN (empty set) to its INSIDE predecessors
+# and a fixed OUT (empty set) to its INSIDE successors.
+const RMD_NODE_ENTRY = 0xfff0
+const RMD_NODE_EMPTY = 0xfff1
+const RMD_NODE_NORMAL = 0xfff2
+const RMD_NODE_OUTSIDE = 0xfff4
+
+FIRST_RMD_NODE_INDEX = 0
+type RMDNode
+    node_idx
+    bbnum   
+    stmt_idx
+    kind      
+    succs     :: Set{RMDNode}
+    preds     :: Set{RMDNode}
+    In        :: Set{Any} #Set{Symbol} causes incompatibility with TopLevelStatement.def and use TODO: ask Todd to fix TopLevelStatement declaration
+    Out       :: Set{Any} #TODO: change back to Set{Symbol} 
+            
+    RMDNode(basicBlock_num, statement_idx, node_kind) = (
+        global FIRST_RMD_NODE_INDEX;
+        FIRST_RMD_NODE_INDEX += 1;
+        new(FIRST_RMD_NODE_INDEX, basicBlock_num, statement_idx, node_kind,
+            Set{RMDNode}(), Set{RMDNode}(), Set{Any}(), Set{Any}()))
+end
+
+function show_RMD_node_kind(node::RMDNode)
+        if node.kind == RMD_NODE_ENTRY
+            print(" ENTRY ")
+        elseif node.kind == RMD_NODE_EMPTY
+            print(" EMPTY ")
+        elseif node.kind == RMD_NODE_NORMAL
+            print(" NORMAL ")
+        elseif node.kind == RMD_NODE_OUTSIDE
+            print(" OUTSIDE ")            
+        else
+            print(" WRONG KIND!!!! ")
+        end
+end
+
+function show_RMD_node(node::RMDNode, lives)
+        print(node.node_idx, " <BB ", node.bbnum, ", Stmt ", node.stmt_idx, ">")
+        show_RMD_node_kind(node)
+        print(" Preds(")
+        for pred in node.preds
+            print(pred.node_idx, " ")
+        end
+        print(")")
+            
+        print(" Succs(")
+        for succ in node.succs
+            print(succ.node_idx, " ")
+        end
+        print(")")
+        
+        print("  In(")
+        for item in node.In
+            print(item, " ")
+        end
+        print(")")
+
+        print("  Out(")
+        for item in node.Out
+            print(item, " ")
+        end
+        println(")")
+        
+        if node.kind == RMD_NODE_NORMAL
+            BB = lives.basic_blocks[node.bbnum]
+            stmt = BB.statements[node.stmt_idx]
+            println("\t", stmt)
+        end
+end
+
+function show_RMD_graph(nodes, outside_nodes, lives, prefix::String)
+    println("******************************* ", prefix, " ***************************")
+    for node in union(nodes, outside_nodes)
+        show_RMD_node(node, lives)
+    end
+end
+
+const UNIVERSE_SYM = gensym("universe")
+
+function intersect_preds_out(node)
+    S = Set{Any}()
+    first = true
+    for pred in node.preds
+        if first || in(UNIVERSE_SYM, S)
+            S = copy(pred.Out)
+            first = false
+        else
+            if !in(UNIVERSE_SYM, pred.Out)
+                S = intersect(S, pred.Out)
+            end 
+        end
+    end
+    S
+end
+
+function intersect_succs_in(node)
+    S = Set{Any}()
+    first = true
+    for succ in node.succs
+        if first || in(UNIVERSE_SYM, S)
+            S = copy(succ.In)
+            first = false
+        else
+            if !in(UNIVERSE_SYM, succ.In)
+                S = intersect(S, succ.In)
+            end 
+        end
+    end
+    S
+end
+
+function forward_transfer(B::RMDNode, S::Set, IAs, lives)
+    assert(B.kind != RMD_NODE_OUTSIDE)
+    if B.kind == RMD_NODE_ENTRY || B.kind == RMD_NODE_EMPTY
+        return copy(S)
+    end
     
-    changed = true
-    while changed
-        changed = false
-        for interval in region.intervals
-            BB = interval.BB
-            for stmt_idx in interval.from_stmt_idx : interval.to_stmt_idx
-                stmt = BB.statements[stmt_idx]
-                for IA in IAs[stmt]
-                    if ⊈(IA, reordered)
-                        if !isempty(intersect(IA, reordered))
-                            union!(reordered, IA)
-                            changed = true
-                        end
-                    end
+    BB = lives.basic_blocks[B.bbnum]
+    stmt = BB.statements[B.stmt_idx]
+    if isempty(IAs[stmt])
+        return copy(S)
+    end
+    
+    result = Set()
+    for x in S
+        for IA in IAs[stmt]
+            if in(x, IA.RHS)
+                union!(result, IA.RHS)
+                # no matter a RHS symbol is in LHS or not, it should be transfered:
+                # If it is in, then of course it will (It means the new def of the symbol)
+                # If not, it will as well (It means the current def of the symbol)
+                union!(result, IA.LHS)
+            else
+                if in(x, IA.LHS)
+                    # The current def of the symbol is killed. The new def, unless
+                    # some symbol in the RHS is inter-dependent on it, will not be added
+                    # Do nothing.
+                else
+                    push!(result, x)
                 end
             end
         end
     end
-    
-    dprintln(2, "Reordered:", reordered)
-    
-    # The symbols that should be reordered before the region are the reordered uses live into the region
-    reorderedBeforeRegion = intersect(reordered, mmread_stmt.live_out)
-    
-    dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
+    return result
+end
 
-    if isempty(reorderedBeforeRegion)
-        return
+function backward_transfer(B::RMDNode, S::Set, IAs, lives)
+    assert(B.kind != RMD_NODE_OUTSIDE)
+    if B.kind == RMD_NODE_ENTRY || B.kind == RMD_NODE_EMPTY
+        return copy(S)
     end
     
-    #TODO: benefit-cost analysis
-
-    # Only those arrays that are updated in the region need to be reverse reordered afterwards
-    # Limitation: the region must be linear (except with some loop back edges) in order for the
-    # analysis to be correct: if there is any control flow, we might be wrong: some arrays in 
-    # the if/else block might never execute, but we assume they do, and propagate their "reordered"
-    # info to other arrays. 
-    # TODO: minimal instrument to control flow graph to record which arrays are actually updated dynamically
-    # if there is control flow. Then insert code to reverse reorder those actually updated.
-    updatedInRegion = Set{Symbol}()
-    for interval in region.intervals
-        BB = interval.BB
-        for stmt_idx in interval.from_stmt_idx : interval.to_stmt_idx
-            stmt = BB.statements[stmt_idx]
-            union!(updatedInRegion, stmt.def)
+    BB = lives.basic_blocks[B.bbnum]
+    stmt = BB.statements[B.stmt_idx]
+    if isempty(IAs[stmt])
+        return copy(S)
+    end
+    
+    result = Set()
+    for x in S
+        for IA in IAs[stmt]
+            if in(x, IA.LHS)
+                union!(result, IA.RHS)
+            else
+                if in(x, IA.RHS)
+                    union!(result, IA.RHS)
+                else
+                    push!(result, x)
+                end
+            end
         end
     end
-    dprintln(2, "updatedInRegion: ", updatedInRegion)
-      
+    return result
+end
+
+function forwardPass(nodes, IAs, initialization::Bool, lives)
+    ever_changed = false
+    changed = true
+    while changed
+        changed = false
+        for node in nodes
+            if initialization && node.kind == RMD_NODE_ENTRY
+                continue
+            end
+            S = intersect_preds_out(node)
+            if !initialization
+                S = union(node.In, S)
+            end
+            if !(S == node.In)
+                changed = true
+                ever_changed = true
+                node.In = S
+            end
+            S = forward_transfer(node, node.In, IAs, lives)
+            if !initialization
+                S = union(node.Out, S)
+            end
+            if !(S == node.Out)
+                changed = true
+                ever_changed = true
+                node.Out = S
+            end
+        end
+    end
+    ever_changed
+end
+
+function backwardPass(nodes, IAs, lives)
+    ever_changed = false
+    changed = true
+    while changed
+        changed = false
+        for node in nodes
+            S = intersect_succs_in(node)
+            S = union(node.Out, S)
+            if !(S == node.Out)
+                changed = true
+                ever_changed = true
+                node.Out = S
+            end
+            S = backward_transfer(node, node.Out, IAs, lives)
+            S = union(node.In, S)
+            if !(S == node.In)
+                changed = true
+                ever_changed = true
+                node.In = S
+            end
+        end
+    end
+    ever_changed
+end
+
+function intervalsAreAdjacent(pred_interval::RegionInterval, interval::RegionInterval)
+    assert(interval.from_stmt_idx >= 1)
+    if interval.from_stmt_idx == 1 
+        assert(pred_interval.to_stmt_idx <= length(pred_interval.BB.statements))
+        if pred_interval.to_stmt_idx == length(pred_interval.BB.statements)
+            return true # true even if pred_interval is empty (from_stmt_idx > to_stmt_idx)
+        else 
+            return false
+        end
+    else
+        return false
+    end
+end
+
+function makeConnectPredOutsideNode(interval::RegionInterval, predBB, pred_stmt_idx, first_node, outside_nodes)
+    outside_node = RMDNode(predBB.label, pred_stmt_idx, RMD_NODE_OUTSIDE)
+    push!(outside_nodes, outside_node)
+    push!(first_node[interval].preds, outside_node)
+    push!(outside_node.succs, first_node[interval])
+end
+
+function makeConnectSuccOutsideNode(interval::RegionInterval, succBB, succ_stmt_idx, last_node, outside_nodes)
+    outside_node = RMDNode(succBB.label, succ_stmt_idx, RMD_NODE_OUTSIDE)
+    push!(outside_nodes, outside_node)
+    push!(last_node[interval].succs, outside_node)
+    push!(outside_node.preds, last_node[interval])
+end
+
+function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, root)
+    if isempty(region.intervals) 
+        return nothing, nothing, nothing
+    end
+    
+    # build a graph, where each node is a statement.
+    first_node = Dict{RegionInterval, RMDNode}()
+    last_node  = Dict{RegionInterval, RMDNode}()
+    nodes      = RMDNode[] # All INSIDE nodes
+
+    # build a pseudo entry and exit node
+    entry = RMDNode(0, 0, RMD_NODE_ENTRY)
+    push!(nodes, entry)
+
+    # TODO visit the intervals in reverse postorder, so that the nodes
+    # can be processed in a natural order
+    for interval in region.intervals
+        if interval.from_stmt_idx > interval.to_stmt_idx
+            # Empty interval. Make a pseudo node
+            node = RMDNode(interval.BB.label, interval.from_stmt_idx, RMD_NODE_EMPTY)
+            push!(nodes, node)
+            first_node[interval] = last_node[interval] = node
+        else
+            prev = nothing    
+            for stmt_idx in interval.from_stmt_idx : interval.to_stmt_idx
+                node = RMDNode(interval.BB.label, stmt_idx, RMD_NODE_NORMAL)
+                push!(nodes, node)
+                
+                if stmt_idx == interval.from_stmt_idx
+                    first_node[interval] = node
+                end
+                if stmt_idx == interval.to_stmt_idx
+                    last_node[interval] = node
+                end
+                
+                if prev != nothing
+                    push!(prev.succs, node)
+                    push!(node.preds, prev)
+                end
+                
+                prev = node
+            end
+        end
+    end
+
+    # Now all INSIDE nodes have been created, and those in the same interval have been
+    # connected. Connected nodes between intervals, and create OUTSIDE predecessor and
+    # successors
+    outside_nodes = RMDNode[]
+    first_interval = region.intervals[1]
+    push!(entry.succs, first_node[first_interval])
+    push!(first_node[first_interval].preds, entry)
+
+    for interval in region.intervals
+        BB = interval.BB
+        if interval.from_stmt_idx == 1
+            # interval covers the start of the BB. Connect to predecessors
+            # Exception: if this is a loop region and BB is the loop head, then ENTRY has
+            # represented all its predecessors except the backedge one. So we need only to
+            # build the predecessor on the backedge.
+            BB_is_loop_head = ((region.first_BB == BB) && (region.mmread_stmt_idx == 0))
+            for pred in BB.preds
+                if BB_is_loop_head && !in(BB.label, loop_info.dom_dict[pred.label])
+                    continue
+                end
+                if haskey(bb_interval, pred.label)
+                    pred_interval = bb_interval[pred.label]
+                    if intervalsAreAdjacent(pred_interval, interval)
+                        push!(last_node[pred_interval].succs, first_node[interval])
+                        push!(first_node[interval].preds, last_node[pred_interval])
+                    else 
+                        makeConnectPredOutsideNode(interval, pred, length(pred.statements), first_node, outside_nodes)
+                    end
+                else
+                    # pred has no interval. Make an outside node for it.
+                    makeConnectPredOutsideNode(interval, pred, length(pred.statements), first_node, outside_nodes)
+                end
+            end
+        else
+            assert(interval.from_stmt_idx > 1)
+            # interval starts from the middle of the BB. Make and connect to an OUTSIDE predecessor in the current BB
+            makeConnectPredOutsideNode(interval, BB, interval.from_stmt_idx - 1, first_node, outside_nodes)
+        end
+        
+        if interval.to_stmt_idx == length(BB.statements)
+            # interval covers the end of the BB. Connect to successors
+            for succ in BB.succs
+                if haskey(bb_interval, succ.label)
+                    succ_interval = bb_interval[succ.label]
+                    if intervalsAreAdjacent(interval, succ_interval)
+                        push!(last_node[interval].succs, first_node[succ_interval])
+                        push!(first_node[succ_interval].preds, last_node[interval])
+                    else 
+                        makeConnectSuccOutsideNode(interval, succ, 1, last_node, outside_nodes)
+                    end
+                else
+                    # succ has no interval. Make an outside node for it.
+                    makeConnectSuccOutsideNode(interval, succ, 1, last_node, outside_nodes)
+                end
+            end
+        else
+            assert(interval.to_stmt_idx < length(BB.statements))
+            # interval stops at the middle of the BB. Make and connect to an OUTSIDE successor in the current BB
+            makeConnectSuccOutsideNode(interval, BB, interval.to_stmt_idx + 1, last_node, outside_nodes)
+        end
+    end
+    
+    # The region must have at least one exit to outside.
+    assert(!isempty(outside_nodes))
+    
+    # Do bidirectional dataflow analysis on the graph
+    if (DEBUG_LVL >= 2)
+        show_RMD_graph(nodes, outside_nodes, lives, "Initial RMD graph:")
+    end
+
+    # Step 1: initialization
+    for node in nodes
+        if node.kind == RMD_NODE_ENTRY
+            entry.In  = Set{Any}()
+            entry.Out = Set{Any}()
+            push!(entry.In, root)
+            push!(entry.Out, root)
+         else
+            node.Out = Set{Any}()
+            push!(node.Out, UNIVERSE_SYM)
+        end
+    end
+
+    for outside_node in outside_nodes
+        outside_node.In  = Set{Any}()
+        outside_node.Out = Set{Any}()
+    end
+
+    forwardPass(nodes, IAs, true, lives)
+        if (DEBUG_LVL >= 2)
+            show_RMD_graph(nodes, outside_nodes, lives, "RMD graph after initialization:")
+        end
+    
+    # repetitive backward and forward pass
+    changed = true
+    while changed
+        changed = backwardPass(nodes, IAs, lives)
+        changed |= forwardPass(nodes, IAs, false, lives)
+        if (DEBUG_LVL >= 2)
+            show_RMD_graph(nodes, outside_nodes, lives, "RMD graph after 1 iteration:")
+        end
+    end
+    assert(entry.In == entry.Out)
+        
+    return nodes, entry, outside_nodes
+end
+
+function insertStatementsOnEdge(lives, new_stmts, node::RMDNode, node_BB, succ::RMDNode, succ_BB)
+    assert(node.kind != RMD_NODE_ENTRY) # Reordering from entry to the first BB has been processed specially. Not here.
+
+    if isempty(new_stmts)
+        return
+    end
+
+    BB = nothing
+    insert_at = 0
+    new_goto_stmt = nothing
+    if node_BB == succ_BB
+        #insert inside the same block
+        assert(node.stmt_idx + 1 == succ.stmt_idx)
+        assert(succ.stmt_idx >= 1)
+        assert(succ.stmt_idx <= length(succ_BB.statements) + 1)
+        BB = node_BB
+        insert_at = succ.stmt_idx
+    else
+        (BB, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, node.bbnum, succ.bbnum)
+        insert_at = 1
+    end
+    
+    i = 0
+    for new_stmt in new_stmts
+        insert!(BB.statements, insert_at + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
+        i += 1
+    end
+    if new_goto_stmt != nothing
+        push!(BB.statements, new_goto_stmt)
+    end
+end
+
+function nodeLiveIn(node::RMDNode, BB)
+    if node.stmt_idx < 1
+        assert(node.stmt_idx == 0)
+        return BB.live_in
+    elseif node.stmt_idx > length(BB.statements)
+        assert(node.stmt_idx == (length(BB.statements) + 1))
+        return BB.live_out
+    else
+        stmt = BB.statements[node.stmt_idx]
+        return stmt.live_in
+    end
+end
+
+function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_interval, IAs, M, back_edge)
+    # The region is based on either a mmread(), in which case LHS of the statement will be the root symbol, 
+    # or a loop, in which case the root symbol is identified from the function's argument list
+    assert(region.mmread_stmt_idx != 0 || M != nothing)
+    
+    if region.mmread_stmt_idx != 0
+        mmread_stmt = region.first_BB.statements[ region.mmread_stmt_idx] 
+        M = mmread_stmt.expr.args[1]
+    end 
+        
+    nodes, entry, outside_nodes = reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, M)
+    
+    #TODO: benefit-cost analysis
+    
     # New a vector to hold the new reordering statements R(LiveIn) before the region. 
     new_stmts_before_region = Expr[]
 
-    # Replace the original "lhs=mmread(filename)" with
-    #   T   = mmread_reorder(filename) // T is a tuple
-    #   lhs = (top(tupleref))(T, 1)
-    #   P   = (top(tupleref))(T, 2)
-    #   P'  = (top(tupleref))(T, 3)
-    T = gensym("T")
-    P = gensym("P")
-    Pprime = gensym("Pprime")
-    
-    mmread_stmt.expr.args[1] = T
-    mmread_stmt.expr.args[2].args[1].args[3] = QuoteNode(:mmread_reorder) # change mmread to mmread_reorder
-    
-    stmt = Expr(:(=), lhs, Expr(:call, TopNode(:tupleref), T, 1))
-    push!(new_stmts_before_region, stmt)
-    
-    stmt = Expr(:(=), P, Expr(:call, TopNode(:tupleref), T, 2))
-    push!(new_stmts_before_region, stmt)
-    
-    stmt = Expr(:(=), Pprime, Expr(:call, TopNode(:tupleref), T, 3))
-    push!(new_stmts_before_region, stmt)
+    if region.mmread_stmt_idx != 0
+        reorderedBeforeRegion = intersect(entry.Out, mmread_stmt.live_out)
+        dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
 
+        if isempty(reorderedBeforeRegion)
+            return
+        end
+        
+        # Replace the original "M=mmread(filename)" with
+        #   T   = mmread_reorder(filename) // T is a tuple
+        #   M = (top(tupleref))(T, 1)
+        #   P   = (top(tupleref))(T, 2)
+        #   P'  = (top(tupleref))(T, 3)
+        T = gensym("T")
+        P = gensym("P")
+        Pprime = gensym("Pprime")
+        
+        # TODO: change the type of the original RHS to the right type
+        mmread_stmt.expr.args[1] = T
+        mmread_stmt.expr.args[2].args[1].args[3] = QuoteNode(:mmread_reorder) # change mmread to mmread_reorder
+        
+        stmt = Expr(:(=), root, Expr(:call, TopNode(:tupleref), T, 1))
+        push!(new_stmts_before_region, stmt)
+        
+        stmt = Expr(:(=), P, Expr(:call, TopNode(:tupleref), T, 2))
+        push!(new_stmts_before_region, stmt)
+        
+        stmt = Expr(:(=), Pprime, Expr(:call, TopNode(:tupleref), T, 3))
+        push!(new_stmts_before_region, stmt)
+    else
+        # The symbols that should be reordered before the region are the reordered uses live into the region
+        reorderedBeforeRegion = intersect(entry.Out, region.first_BB.live_in)
+        dprintln(2, "To be reordered before region: ", reorderedBeforeRegion)
+
+        if isempty(reorderedBeforeRegion)
+            return
+        end
+    
+        # Allocate space to store the permutation and inverse permutation info
+        (P, Pprime) = allocateForPermutation(M, new_stmts_before_region)
+    
+        # Compute P and Pprime, and reorder M
+        reorderMatrix(M, P, Pprime, new_stmts_before_region, true, true, true)
+    
+    end
+    
     # Now reorder other arrays
     for sym in reorderedBeforeRegion
-        if sym != lhs
+        if sym != M
             if typeOfNode(sym, symbolInfo) <: AbstractMatrix
                 reorderMatrix(sym, P, Pprime, new_stmts_before_region, false, true, true)
             else
@@ -912,81 +1488,71 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
         end
     end
 
-    i = 1
-    for new_stmt in new_stmts_before_region
-        insert!(region.mmread_BB.statements, region.mmread_stmt_idx + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))    
-#        CompilerTools.LivenessAnalysis.insertStatementAfter(lives, region.mmread_BB, region.mmread_stmt_idx + i, new_stmt)
-        i += 1
+    if region.mmread_stmt_idx != 0
+        i = 1
+        for new_stmt in new_stmts_before_region
+            insert!(region.first_BB.statements, region.mmread_stmt_idx + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))    
+            i += 1
+        end
+    else 
+        (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBefore(lives, region.first_BB.label, true, back_edge)
+        for new_stmt in new_stmts_before_region
+            CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, new_stmt)
+        end
+        if new_goto_stmt != nothing
+          push!(new_bb.statements, new_goto_stmt)
+        end
     end
-                 
-    # At each exit edge, we need to reverse reorder those that live out.
-    # to recover their original order before they are getting used outside of the region
-    reorderedAndUpdated = intersect(reordered, updatedInRegion)
-    for exit in region.exits
-        if exit.from_BB == exit.to_BB
-            BB = exit.from_BB
-            # insert statements inside a block. At least one of the
-            # from/to stmt_idx is a real statement's index
-            last_stmt_idx = length(BB.statements)
-            assert((1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx) ||
-                (1 <= exit.to_stmt_idx && exit.to_stmt_idx <= last_stmt_idx))
-            if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
-                stmt = BB.statements[exit.from_stmt_idx]
-                reverseReordered = intersect(reorderedAndUpdated, stmt.live_out)
-            else 
-                stmt = BB.statements[exit.to_stmt_idx]
-                reverseReordered = intersect(reorderedAndUpdated, stmt.live_in)
-            end
-            if isempty(reverseReordered)
-                continue
-            end
-            dprintln(2, "ReverseReorder inside BB ", BB.label, " ", exit.from_stmt_idx, "--> ", exit.to_stmt_idx)
-                
-            new_stmts = Expr[]
-            for sym in reverseReordered
-                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
-                    reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
-                else
-                    reverseReorderVector(sym, P, new_stmts)
-                end
-            end
 
-            if (1 <= exit.from_stmt_idx && exit.from_stmt_idx <= last_stmt_idx)
-                for new_stmt in new_stmts
-                    insert!(BB.statements, exit.from_stmt_idx + 1, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-#                    CompilerTools.LivenessAnalysis.insertStatementAfter(lives, BB, exit.from_stmt_idx, new_stmt) # CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-                end
-            else
-                for new_stmt in new_stmts
-                    insert!(BB.statements, exit.to_stmt_idx, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-#                    CompilerTools.LivenessAnalysis.insertStatementBefore(lives, BB, exit.to_stmt_idx, new_stmt) # CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
-                end
-            end                
-        else
-            # insert reverse reordering between two blocks.
-            reverseReordered = intersect(reorderedAndUpdated, exit.to_BB.live_in)
-            if isempty(reverseReordered)
-                continue
-            end
-            dprintln(2, "ReverseReorder on edge ", exit.from_BB.label, " --> ", exit.to_BB.label)
-                
+    # Only those arrays that are updated in the region need to be reverse reordered afterwards
+    updatedInRegion = Set{Symbol}()
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            union!(updatedInRegion, stmt.def)
+        end
+    end
+    dprintln(2, "updatedInRegion: ", updatedInRegion)
+ 
+    # Now process other nodes. Consider outside nodes as well: we may need to insert on
+    # an edge between an inside and outside node.
+    all_nodes = union(nodes, outside_nodes)
+    # Look at all edges in the graph
+    for node in all_nodes
+        if node == entry # Entry has been processed before
+            continue
+        end
+        # an inside node must have at least one successor
+        assert(node.kind == RMD_NODE_OUTSIDE || !isempty(node.succs))
+        BB = lives.basic_blocks[node.bbnum]
+        for succ in node.succs
+            succ_BB = lives.basic_blocks[succ.bbnum]
+            succ_live_in = nodeLiveIn(succ, succ_BB)
+            
+            # compute what to be reorder on this edge
+            reorder = setdiff(intersect(succ.In, succ_live_in), node.Out)
             new_stmts = Expr[]
-            for sym in reverseReordered
+            for sym in reorder
+                if typeOfNode(sym, symbolInfo) <: AbstractMatrix
+                    reorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
+                else
+                    reorderVector(sym, P, new_stmts)
+                end
+            end
+            insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
+
+            # compute what to be reverse reordered on this edge
+            reverseReorder = setdiff(intersect(node.Out, succ_live_in, updatedInRegion), succ.In)
+            new_stmts = Expr[]
+            for sym in reverseReorder
                 if typeOfNode(sym, symbolInfo) <: AbstractMatrix
                     reverseReorderMatrix(sym, P, Pprime, new_stmts, false, true, true)
                 else
                     reverseReorderVector(sym, P, new_stmts)
                 end
             end
-            
-            # Now actually change the CFG.
-            (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, exit.from_BB.label, exit.to_BB.label)
-            for new_stmt in new_stmts
-                CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
-            end
-            if new_goto_stmt != nothing
-                push!(new_bb.statements, new_goto_stmt)
-            end
+            insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
         end
     end
 
@@ -996,23 +1562,20 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs
     end 
 end
 
-function reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
+function reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, M, back_edge)
+    IAs = findInterDependentArrays(region, symbolInfo)
     if (DEBUG_LVL >= 2)
-        println("******** CFG before mmread_reorder: ********")
-        show(lives);
-    end 
-    
-    region = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
-    if region == nothing
-        return false
+        show_IAs(region, IAs, "Inter-dependent arrays")
     end
-    
-    IAs = findIAs(region, symbolInfo)
-    regionTransformation(funcAST, lives, loop_info, symbolInfo, region, IAs)
-    return true
+    regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_interval, IAs, M, back_edge)
 end
 
 function reorder(funcAST, lives, loop_info, symbolInfo)
+    if (DEBUG_LVL >= 2)
+        println("******** CFG before reorder: ********")
+        show(lives);
+    end 
+    
     assert(funcAST.head == :lambda)
     args = funcAST.args
     assert(length(args) == 3)
@@ -1026,8 +1589,9 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     # TODO: it really does not matter whether the sparse matrix is from
     # an mmread or from an argument -- from the perspective of region formation,
     # identifying IAs, and region transformation. So should unify the two cases.
-    success = reorderDuringMmread(funcAST, lives, loop_info, symbolInfo)
-    if (success)
+    region, bb_interval = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
+    if region != nothing 
+        reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, nothing, nothing)
         body_reconstructed = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
         funcAST.args[3].args = body_reconstructed
         return funcAST
@@ -1044,15 +1608,23 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
         end
     end    
     if found 
-        distributive = checkDistributivity(funcAST, symbolInfo, true)
-        dprintln(3,"After our type inference, distributive = ", distributive)
-          
-        if !distributive
-            return funcAST
-        end
-        
+        # form a region for each outermost loop in the function
+        in_loop = BBsInLoop(lives, loop_info)
         for L in loop_info.loops
-            reorderLoop(L, M, lives, symbolInfo)
+            is_outermost = true
+            for L1 in loop_info.loops
+                assert(L == L1 || L.members != L1.members)
+                if L != L && L.members < L1.members
+                    is_outermost = false
+                    break
+                end
+            end
+            if is_outermost
+                region, bb_interval = regionFormationBasedOnLoop(L, lives, loop_info, symbolInfo)
+                if region != nothing
+                    reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, M, L.back_edge)
+                end
+            end
         end
     end
     

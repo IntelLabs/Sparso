@@ -144,7 +144,9 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
     if typeOfNode(args[1], symbolInfo) <: Vector
         if (typeOfNode(args[2], symbolInfo) <: Vector)
             return distributive
-        else 
+        elseif (typeOfNode(args[2], symbolInfo) <: Number)
+            return distributive 
+        else
             return false
         end
     end
@@ -385,7 +387,7 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
     body_reconstructed.args = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
     dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
   end
-  loop_info  = CompilerTools.LivenessAnalysis.compute_dom_loops(lives)
+  loop_info  = CompilerTools.Loops.compute_dom_loops(lives)
 
   analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
   dprintln(3,"result after sparse_analyze\n", analyze_res, " type = ", typeof(analyze_res))
@@ -432,7 +434,7 @@ function SpMV!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::Abstract
         DestroyCSR(A2)
     else
         # use Julia implementation
-        w = alpha * A * x + beta * x + gamma
+        w = alpha * A * x + beta * y + gamma
     end
 end
 
@@ -476,6 +478,7 @@ function WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
   else
     w = alpha*x + beta*y
   end
+  w
 end
 
 function WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
