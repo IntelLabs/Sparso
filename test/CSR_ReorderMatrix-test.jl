@@ -18,5 +18,18 @@ A[5 , 10]  =  0.283148
 P = Array(Cint,size(A,2))
 Pprime = Array(Cint,size(A,2))
 A1 = SparseMatrixCSC(A.m, A.n, Array(Cint, length(A.colptr)), Array(Cint, length(A.rowval)), Array(Cdouble, length(A.nzval)))
+
+println("**** Checking symmetry")
+for i = 1:m 
+    for j = 1:m 
+        if A[i, j] != A[j, i]
+            println("Matrix is asymmetric!")
+            println("A[", i, ",", j, "] != A[", j, ",", i, "]")
+        end
+    end
+end
+println("Done checking")
+flush(STDOUT::IO)
+
 SparseAccelerator.CSR_ReorderMatrix(A, A1, P, Pprime, true, true, true)
 A = A1
