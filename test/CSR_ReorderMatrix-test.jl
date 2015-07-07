@@ -1,4 +1,4 @@
-include("../Src/SparseAccelerator.jl")
+include("../src/SparseAccelerator.jl")
 using SparseAccelerator
 
 m = 10
