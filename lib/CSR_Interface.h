@@ -16,6 +16,15 @@ int CSR_GetNumRows(CSR_Handle *A);
 int CSR_GetNumCols(CSR_Handle *A);
 int CSR_GetNumNonZeros(CSR_Handle *A);
 
+// load matrix
+// Julia should call the following two function in order.
+// Between the two calls, the CSR array space must be allocated.
+void load_matrix_market_step1 (char *file, int *sizes, bool force_symmetric = false);
+void load_matrix_market_step2 (char *file, double *a, int *j, int *i, int *sizes, bool one_based_CSR);
+
+// C can directly call this once
+void load_matrix_market (char *file, double **a, int **aj, int **ai, int *is_symmetric, int *am, int *an, int *annz, bool one_based_CSR = false, bool force_symmetric = false);
+
 // w = alpha*A*x + beta*y + gamma
 void CSR_MultiplyWithVector(
   double *w,
@@ -26,10 +35,6 @@ void CSR_MultiplyWithVector(
 void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetRCMPermutationWithoutPseudoDiameterSourceSelection(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetBFSPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
-#ifdef USE_BOOST
-void CSR_BoostGetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
-void CSR_BoostGetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source);
-#endif
 
 void CSR_FindConnectedComponents(
   const CSR_Handle *A,
@@ -39,8 +44,6 @@ void CSR_FindConnectedComponents(
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm);
 
 int CSR_GetBandwidth(CSR_Handle *A);
-void CSR_PrintInDense(CSR_Handle *A);
-void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance, bool is_1_based);
 
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
                  int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput);

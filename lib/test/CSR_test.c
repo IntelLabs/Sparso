@@ -7,34 +7,10 @@
 #include <omp.h>
 
 #include "CSR_Interface.h"
-#include "mm_io.h"
+#include "SpMP/mm_io.h"
+#include "SpMP/Utils.hpp"
 
-bool isPerm(int *perm, int n)
-{
-  int *temp = new int[n];
-  memcpy(temp, perm, sizeof(int)*n);
-  std::sort(temp, temp + n);
-  int *last = std::unique(temp, temp + n);
-  if (last != temp + n) {
-    memcpy(temp, perm, sizeof(int)*n);
-    std::sort(temp, temp + n);
-
-    for (int i = 0; i < n; ++i) {
-      if (temp[i] == i - 1) {
-        printf("%d duplicated\n", i - 1);
-        assert(false);
-        return false;
-      }
-      else if (temp[i] != i) {
-        printf("%d missed\n", i);
-        assert(false);
-        return false;
-      }
-    }
-  }
-  delete[] temp;
-  return true;
-}
+using namespace SpMP;
 
 /* Expected output
 
@@ -61,7 +37,7 @@ int main(int argc, char *argv[])
     int *aj, *ai;
     int is_symmetric;
     bool one_based_CSR = false;
-    load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz, one_based_CSR);
+    load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz, one_based_CSR, true /*force-symmetric*/);
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
     double bytes = (double)nnz*4;
 
@@ -117,8 +93,8 @@ int main(int argc, char *argv[])
       t += omp_get_wtime();
       printf("Constructing permutation takes %f (%f GB/s)\n", t, bytes/t/1e9);
 
-      isPerm(perm, m);
-      isPerm(inversePerm, m);
+      SpMP::isPerm(perm, m);
+      SpMP::isPerm(inversePerm, m);
 
       t = -omp_get_wtime();
       CSR_Permute(A, A2, perm, inversePerm);

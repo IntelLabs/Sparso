@@ -120,6 +120,7 @@ void findConnectedComponents_(
     int xx = WITH_BIT_VECTOR ? nodesToFind[x] : x;
     for (int j = A->rowPtr[xx] - BASE; j < A->rowPtr[xx + 1] - BASE; ++j) {
       int y = A->colIdx[j];
+      assert(!WITH_BIT_VECTOR || !bv->get(y));
       if (p[xx] != p[y]) {
         // union
         int r_x = xx, r_y = y;
@@ -154,6 +155,7 @@ void findConnectedComponents_(
     int r = ii;
     while (p[r] != r) {
       r = p[r];
+      assert(!WITH_BIT_VECTOR || !bv->get(r));
     }
     p[ii] = r;
     if (r == ii) ++compId;
