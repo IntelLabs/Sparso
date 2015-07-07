@@ -1594,6 +1594,9 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
         reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, nothing, nothing)
         body_reconstructed = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
         funcAST.args[3].args = body_reconstructed
+    
+        flush(STDOUT::IO)
+    
         return funcAST
     end
 
@@ -1630,6 +1633,8 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     
     body_reconstructed   = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
     funcAST.args[3].args = body_reconstructed
+
+    flush(STDOUT::IO)
     
     funcAST
 end

@@ -31,17 +31,68 @@ end
 const UPDATED_NONE = Set()
 ia(args ...) = Set(Any[args ...])
 
-PointwiseMultiply_Desc = FunctionDescription(
+const PointwiseMultiply_Desc = FunctionDescription(
     "SparseAccelerator", 
-    "PointwiseMultiply",
-    (AbstractVector, AbstractVector), # The two parameters must be two vectors
+    "PointwiseMultiply",              # SparseAccelerator.PointwiseMultiply(x::Vector, y::Vector)
+    (AbstractVector, AbstractVector), # The parameters must be vectors
     UPDATED_NONE,                     # No parameter is updated
     true,                             # The function is distributive
     ia(Set(0, 1, 2))                  # The return value (0) and the two parameters (1, 2) are inter-dependent
 )
 
-function_descriptions  = [
-    PointwiseMultiply_Desc
+const PointwiseMultiply!_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "PointwiseMultiply!",             # SparseAccelerator.PointwiseMultiply!(w::Vector, x::Vector, y::Vector)
+    (AbstractVector, AbstractVector, AbstractVector), # The parameters must be vectors
+    Set(1),                           # Parameter 1 (w) is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2, 3))               # The return value (0) and the parameters (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
+)
+
+const PointwiseDivide_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "PointwiseDivide",                # SparseAccelerator.PointwiseDivide(x::Vector, y::Vector)
+    (AbstractVector, AbstractVector), # The parameters must be vectors
+    UPDATED_NONE,                     # No parameter is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2))                  # The return value (0) and the two parameters (1, 2) are inter-dependent
+)
+
+const PointwiseDivide!_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "PointwiseDivide!",               # SparseAccelerator.PointwiseDivide!(w::Vector, x::Vector, y::Vector)
+    (AbstractVector, AbstractVector, AbstractVector), # The parameters must be vectors
+    Set(1),                           # Parameter 1 (w) is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2, 3))               # The return value (0) and the parameters (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
+)
+
+const SpMV_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV",                           # SparseAccelerator.SpMV(A::SparseMatrixCSC, x::AbstractVector)
+    (SparseMatrixCSC, AbstractVector),# The parameters must be vectors
+    UPDATED_NONE,                     # No parameter is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2))                  # The return value (0) and the parameters (1, 2) are inter-dependent
+)
+
+const function_descriptions  = [
+    PointwiseMultiply_Desc,
+    PointwiseMultiply!_Desc,
+    PointwiseDivide_Desc,
+    PointwiseDivide!_Desc,
+    SpMV_Desc
 ]
 
-println(",,,,,, here is :", function_descriptions)
+function show_function_descriptions()
+    println("Function descriptions: ", function_descriptions)
+end
+
+function lookup_function_description(module_name :: String, function_name :: String)
+    for desc in function_descriptions
+        if module_name == desc.module_name  && function_name == desc.function_name
+            return desc
+        end
+    end
+    return nothing
+end
