@@ -2,7 +2,9 @@ include("../src/SparseAccelerator.jl")
 using SparseAccelerator
 
 m = 10
-A = sprand(m, m, 0.1)
+A = SparseMatrixCSC{Cdouble, Cint}(sprand(m, m, 0.1))
+println("**** Type of A is ", typeof(A))
+
 for i = 1:m for j = 1:m A[i, j] = 0.0 end end
 A[6 ,  1]  =  0.662534
 A[10,  1]  =  0.123341
