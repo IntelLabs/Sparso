@@ -6,7 +6,7 @@ include("alias-analysis.jl")
 include("function-description.jl")
 
 # Remove this and enable using function description once all functions are described
-const ENABLE_FUNC_DESC = 0
+const ENABLE_FUNC_DESC = false
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
