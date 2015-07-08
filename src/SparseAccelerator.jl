@@ -3,6 +3,10 @@ module SparseAccelerator
 using CompilerTools
 
 include("alias-analysis.jl")
+include("function-description.jl")
+
+# Remove this and enable using function description once all functions are described
+const ENABLE_FUNC_DESC = false
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
@@ -102,6 +106,7 @@ end
 #   AbstractSparseMatrix, Matrix, Vector, Array, Bool, Number, Nothing
 
 function checkDistributivityForCall(head, args, symbolInfo, distributive)
+# TOENABLE: use functioin-description for all the functions here.
 #  println("\t**** checkDistributivityForCall ", head, " ", args)
   if head == :(*) || head == :SpMV
     # "*" can have 2 or 3 operands. Example: [:*,:α,:A,:p]
@@ -225,12 +230,26 @@ function checkDistributivityForCall(head, args, symbolInfo, distributive)
       dprintln(1, head.args[1], " type = ", typeof(head.args[1]))
       if isa(head.args[1], TopNode)
         dprintln(1, "TopNode ", head.args[1:end])
-        if head.args[2] == :SparseAccelerator
-          return distributive
-        end 
+        
+        if ENABLE_FUNC_DESC
+            assert(typeof(head.args[2]) == Symbol)
+            assert(typeof(head.args[3]) == QuoteNode)
+            assert(typeof(head.args[3].value) == Symbol)
+            fd = lookup_function_description(string(head.args[2]), string(head.args[3].value))
+            if fd != nothing
+                return fd.distributive
+            else
+                return false
+            end 
+        else
+            if head.args[2] == :SparseAccelerator
+                return distributive
+            end
+        end
       end
     end
   end
+  
 #  if head == Top
 #    println("getfield ", args[1], " ", args[2], " ", typeof(args[1]), " " , typeof(args[2]))
 #    #return distributive
@@ -352,6 +371,16 @@ function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributi
       elseif (asttyp.parameters[2] == 2) #2-dimensonal array is matrix
           typ = Matrix
       end
+
+
+      if ENABLE_FUNC_DESC
+          # There can be such arrays like [:(((top(getfield))(SparseAccelerator,:SpMV))(A,x)]
+          # So we have to check each element of the array.
+          for element in  ast
+                distributive = checkDistributivity(element, symbolInfo, distributive)
+          end
+      end
+      
       dprintln(2, "\tArray ", distributive)
       return distributive
   else
@@ -518,6 +547,7 @@ function PointwiseDivide!(w::Vector, x::Vector, y::Vector)
   else
     w = x./y
   end
+  w
 end
 
 function PointwiseDivide(x::Vector, y::Vector)
@@ -536,6 +566,7 @@ function PointwiseMultiply!(w::Vector, x::Vector, y::Vector)
   else
     w = x.*y
   end
+  w
 end
 
 function PointwiseMultiply(x::Vector, y::Vector)

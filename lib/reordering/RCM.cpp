@@ -578,6 +578,10 @@ private :
 
 void CSR::getRCMPermutation(int *perm, int *inversePerm, bool pseudoDiameterSourceSelection /*= true*/)
 {
+  if (m != n) {
+    fprintf(stderr, "BFS permutation only supports square matrices\n");
+    exit(-1);
+  }
   assert(isSymmetric(false)); // check structural symmetry
 
   int oldBase = base;
@@ -878,6 +882,12 @@ void CSR::getRCMPermutation(int *perm, int *inversePerm, bool pseudoDiameterSour
 
 void CSR::getBFSPermutation(int *perm, int *inversePerm)
 {
+  if (m != n) {
+    fprintf(stderr, "BFS permutation only supports square matrices\n");
+    exit(-1);
+  }
+  assert(isSymmetric(false)); // check structural symmetry
+
   int oldBase = base;
   make0BasedIndexing();
 

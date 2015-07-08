@@ -1,4 +1,4 @@
-#include "CSR.hpp"
+#include "SpMP/CSR.hpp"
 #include "CSR_Interface.h"
 #include <assert.h>
 
@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <omp.h>
 #endif
+
+using namespace SpMP;
 
 extern "C" {
 
@@ -29,29 +31,8 @@ int CSR_GetNumCols(CSR_Handle *A)
 
 int CSR_GetNumNonZeros(CSR_Handle *A)
 {
-  return ((CSR *)A)->rowPtr[((CSR *)A)->m];
+  return ((CSR *)A)->rowptr[((CSR *)A)->m];
 }
-
-void CSR_MultiplyWithVector(
-  double *w,
-  double alpha, const CSR_Handle *A, const double *x,
-  double beta, const double *y,
-  double gamma)
-{
-  ((CSR *)A)->multiplyWithVector(w, alpha, x, beta, y, gamma);
-}
-
-#ifdef USE_BOOST
-void CSR_BoostGetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
-{
-  ((CSR *)A)->boostGetRCMPermutation(perm, inversePerm);
-}
-
-void CSR_BoostGetRCMPermutationWithSource(const CSR_Handle *A, int *perm, int *inversePerm, int source)
-{
-  ((CSR *)A)->boostGetRCMPermutation(perm, inversePerm, source);
-}
-#endif
 
 void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
 {
@@ -70,23 +51,13 @@ void CSR_GetBFSPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
 
 void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, const int *rowInversePerm)
 {
-  ((CSR *)A)->permute((CSR *)out, columnPerm, rowInversePerm);
+  ((CSR *)A)->permuteRowptr((CSR *)out, rowInversePerm);
+  ((CSR *)A)->permuteMain((CSR *)out, columnPerm, rowInversePerm);
 }
 
 int CSR_GetBandwidth(CSR_Handle *A)
 {
   return ((CSR *)A)->getBandwidth();
-}
-
-void CSR_PrintInDense(CSR_Handle *A)
-{
-  ((CSR *)A)->printInDense();
-}
-
-void CSR_PrintSomeValues(int numRows, int numCols, int *i, int *j, double *v, int distance, bool is_1_based)
-{
-  CSR *A = new CSR(numRows, numCols, i, j, v, is_1_based ? 1 : 0);
-  A->printSomeValues(distance);
 }
 
 void CSR_Destroy(CSR_Handle *A)
@@ -138,7 +109,8 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 #endif
 
     CSR *newA = new CSR(numRows, numCols, i1, j1, v1, oneBasedInput ? 1 : 0);
-    A->permute(newA, perm, inversePerm);
+    A->permuteRowptr(newA, inversePerm);
+    A->permuteMain(newA, perm, inversePerm);
     
 #ifdef PERF_TUNE
     int rcm_bw = newA->getBandwidth();

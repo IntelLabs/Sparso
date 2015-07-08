@@ -1690,6 +1690,9 @@ function reorder(funcAST,
         reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, nothing, nothing)
         body_reconstructed = CompilerTools.CFGs.createFunctionBody(lives.cfg)
         funcAST.args[3].args = body_reconstructed
+    
+        flush(STDOUT::IO)
+    
         return funcAST
     end
 
@@ -1726,6 +1729,8 @@ function reorder(funcAST,
     
     body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
     funcAST.args[3].args = body_reconstructed
+
+    flush(STDOUT::IO)
     
     funcAST
 end
