@@ -17,11 +17,12 @@ sparse_pass = OptFramework.optPass(checkDistributivity, true)
 OptFramework.setOptPasses([sparse_pass])
 SparseAccelerator.set_debug_level(2)
 
-function call_SpMV(A, x)
-    return SparseAccelerator.SpMV(A, x)
+function test(A, x)
+    v = SparseAccelerator.SpMV(A, x)
+    v = A * x
 end
 
 m = 10
 A = sprand(m, m, 0.1)
 x = repmat([1/m], m)
-@acc call_SpMV(A, x)
+@acc test(A, x)

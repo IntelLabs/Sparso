@@ -21,7 +21,7 @@
 immutable FunctionDescription
     module_name     :: String # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
     function_name   :: String # Name of the function
-    parameter_types :: Tuple  # Tuple of the function parameters' types
+    argument_types  :: Tuple  # Tuple of the function parameters' types
     output          :: Set    # The parameters updated by the function
     distributive    :: Bool   # Is this function distributive?
     IA              :: Set    # A set. Each element itself is a set of inter-dependent parameters. E.g. 
@@ -76,21 +76,63 @@ const SpMV_Desc = FunctionDescription(
     ia(Set(0, 1, 2))                  # The return value (0) and the parameters (1, 2) are inter-dependent
 )
 
+const star_Desc = FunctionDescription(
+    "", 
+    "*",                              # *(A::SparseMatrixCSC, x::AbstractVector)
+    (SparseMatrixCSC, AbstractVector),
+    UPDATED_NONE,                     # No parameter is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2))                  # The return value (0) and the parameters (1, 2) are inter-dependent
+)
+
+const Dot_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "Dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
+    (AbstractVector, AbstractVector), # The parameters must be vectors
+    UPDATED_NONE,                     # No parameter is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2))                  # The return value (0) and the parameters (1, 2) are inter-dependent
+)
+
+const WAXPBY_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "WAXPBY",                         # SparseAccelerator.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
+    (Number, AbstractVector, Number, AbstractVector), 
+    UPDATED_NONE,                     # No parameter is updated
+    true,                             # The function is distributive
+    ia(Set(0, 2, 4))                  # The return value (0) and the two parameters (2, 4) are inter-dependent
+)
+
+const WAXPBY!_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "WAXPBY!",                         # SparseAccelerator.WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
+    (AbstractVector, Number, AbstractVector, Number, AbstractVector), 
+    Set(1),                           # Parameter 1 (w) is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 3, 5))               # The return value (0) and the parameters 1, 3, 5 are inter-dependent. In fact, 0 and 1 are the same array
+)
+
 const function_descriptions  = [
     PointwiseMultiply_Desc,
     PointwiseMultiply!_Desc,
     PointwiseDivide_Desc,
     PointwiseDivide!_Desc,
-    SpMV_Desc
+    SpMV_Desc,
+    star_Desc,
+    Dot_Desc,
+    WAXPBY_Desc,
+    WAXPBY!_Desc
+    
 ]
 
 function show_function_descriptions()
     println("Function descriptions: ", function_descriptions)
 end
 
-function lookup_function_description(module_name :: String, function_name :: String)
+function lookup_function_description(module_name :: String, function_name :: String, argument_types :: Tuple)
     for desc in function_descriptions
-        if module_name == desc.module_name  && function_name == desc.function_name
+        if module_name == desc.module_name  && function_name == desc.function_name &&
+            argument_types <: desc.argument_types
             return desc
         end
     end

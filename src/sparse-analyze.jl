@@ -703,6 +703,8 @@ function DFSGrowRegion(first_BB, current_BB, start_stmt_idx, lives, in_loop, vis
     last_stmt_idx = length(current_BB.statements)
     for stmt_idx = start_stmt_idx : last_stmt_idx
         expr = current_BB.statements[stmt_idx].expr
+println(".. cur expr is ", expr)
+flush(STDOUT::IO)        
         if expr.head == :return
             if loop_expected_on_every_path && !has_loop[current_BB.label]
                 return false, nothing

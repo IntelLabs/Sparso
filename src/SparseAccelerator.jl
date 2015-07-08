@@ -6,7 +6,7 @@ include("alias-analysis.jl")
 include("function-description.jl")
 
 # Remove this and enable using function description once all functions are described
-const ENABLE_FUNC_DESC = false
+const ENABLE_FUNC_DESC = true
 
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
@@ -30,6 +30,7 @@ function dprintln(level,msgs...)
 end
 
 include("sparse-analyze.jl")
+include("exceptions.jl")
 
 testing_mode = false
 function enable_testing_mode()
@@ -72,15 +73,41 @@ function findAllInvariants(domloops, uniqSet::Set{Symbol}, bbs)
   return invariants
 end
 
+function is_assignment(expr :: Expr)
+    head = expr.head
+    return head == :(=) || head == :(+=) || head == :(-=) || head == :(*=) || 
+           head == :(/=) || head == :(\=) || head == :(%=) || head == :(^=) ||
+           head == :(&=) || head == :(|=) || head == :($=) || head == :(>>>=) ||
+           head == :(>>=) || head == :(<<=)
+end
+
+function memoize_GenSym_types(ast, symbolInfo, top_level_number, is_top_level, read)
+                println("memoize for ast: ", ast)
+    if typeof(ast) == Expr && is_assignment(ast) && typeof(ast.args[1]) == GenSym 
+        symbolInfo[ast.args[1]] = typeof(ast.args[2])
+                println("Expr is: ", ast)
+                println("Add symbolInfo for GenSym: ", ast.args[1], "==>", typeof(ast.args[2]))
+                flush(STDOUT::IO)
+#        dprintln(2,"Add symbolInfo for GenSym: ", ast.args[1], "==>", typeof(ast.args[2]))
+    end
+    return ast
+end
+
 function initSymbol2TypeDict(expr)
+println("initsym2type")
     assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
 
     local types = expr.args[2][2]
-    symbolInfo = Dict{Symbol, Any}()
+    symbolInfo = Dict{Union(Symbol, GenSym), Any}()
     for i = 1:length(types)
         symbolInfo[types[i][1]] = types[i][2]
         dprintln(4,"Add symbolInfo: ", types[i][1], "==>", symbolInfo[types[i][1]])
     end
+    
+println("astwoalk gensym")
+    # Add GenSym's types
+    CompilerTools.AstWalker.AstWalk(expr.args[3], memoize_GenSym_types, symbolInfo)
+    
     symbolInfo
 end
 
@@ -102,172 +129,78 @@ function typeOfNode(ast, symbolInfo)
   end
 end
 
-# Our type inference annotates Expr or SymbolNode with the following types:
-#   AbstractSparseMatrix, Matrix, Vector, Array, Bool, Number, Nothing
-
-function checkDistributivityForCall(head, args, symbolInfo, distributive)
-# TOENABLE: use functioin-description for all the functions here.
-#  println("\t**** checkDistributivityForCall ", head, " ", args)
-  if head == :(*) || head == :SpMV
-    # "*" can have 2 or 3 operands. Example: [:*,:α,:A,:p]
-    if length(args) == 3
-        distributive = checkDistributivity(args[1], symbolInfo, distributive)
-        return checkDistributivityForCall(head, args[2:end], symbolInfo, distributive)
-    end 
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
-        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix) || (typeOfNode(args[2], symbolInfo) <: Number)
-            return distributive
-        elseif (typeOfNode(args[2], symbolInfo) <: Vector)
-            return distributive
-        else
-            return false
-        end
-    end
-    if typeOfNode(args[1], symbolInfo) <: Number
-        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix)
-            return distributive
-        elseif (typeOfNode(args[2], symbolInfo) <: Vector)
-            return distributive
-        else
-            return false
-        end
-    end
-  end
-  if head == :(+) || head == :(-) # Arithmetic operators
-    if (length(args) == 1) 
-        return checkDistributivity(args[1], symbolInfo, distributive)
-    end
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
-        if (typeOfNode(args[2], symbolInfo) <: AbstractSparseMatrix) 
-            return distributive
-        else
-            return false
-        end
-    end
-    if typeOfNode(args[1], symbolInfo) <: Vector
-        if (typeOfNode(args[2], symbolInfo) <: Vector)
-            return distributive
-        elseif (typeOfNode(args[2], symbolInfo) <: Number)
-            return distributive 
-        else
-            return false
-        end
-    end
-  end
-  if head == :(\)
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    if typeOfNode(args[1], symbolInfo) <: AbstractSparseMatrix
-        if (typeOfNode(args[2], symbolInfo) <: Vector)
-            return distributive
-        else 
-            return false
-        end
-    end
-  end
-  if head == :dot
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    if (typeOfNode(args[1], symbolInfo) <: Vector) && (typeOfNode(args[2], symbolInfo) <: Vector) 
-        return distributive
-    else
-        return false
-    end        
-  end
-  if head == :(==) || head == :(!=) || head == :(<) || head == :(<=) || 
-     head == :(>) || head == :(>=) # Numeric comparison 
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    return distributive
-  end
-  if head == :(~) # Bitwise operator
-    return checkDistributivity(args[1], symbolInfo, distributive)
-  end
-  if head == :(&) || head == :(|) || head == :($)
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    return distributive
-  end
-  if head == :(>>>) || head == :(>>) || head == :(<<) # Bitwise operators
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    return distributive
-  end
-  if head == :(+) || head == :(-) || head == :(*) || head == :(/) || head == :(\) ||
-     head == :(^) || head == :(%) # Arithmetic operators
-    # "+" and "-" have been tested before as unary operations. Here handle binary op case
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    return distributive
-  end
-  if head == :(.+) || head == :(.-) || head == :(.*) || head == :(./) || head == :(.\) ||
-     head == :(.^) || head == :(.==) || head == :(.!=) || head == :(.<) ||
-     head == :(.<=) || head == :(.>) || head == :(.>=) # Bitwise operators
-    distributive = checkDistributivityForBinaryOP(args, symbolInfo, distributive)
-    return distributive
-  end
-  if head == :(!) # Negation on bool
-    return checkDistributivity(args[1], symbolInfo, distributive)
-  end
-  if head == :norm 
-    return checkDistributivityForCall(:dot, [args[1], args[1]], symbolInfo, distributive)
-  end
-  if head == :sqrt
-    return checkDistributivity(args[1], symbolInfo, distributive)   
-  end
-  if isa(head, TopNode)
-    return checkDistributivityForCall(head.name, args, symbolInfo, distributive)
-  end
-  if head == :copy
-    return checkDistributivity(args[1], symbolInfo, distributive)
-  end
-  if head == :diag
-    return distributive
-  end
-  if head == :Array
-    return distributive
-  end
-  if isa(head, Expr)
-    dprintln(1, "head.head = ", head.head)
-    if head.head == :call
-      dprintln(1, "call")
-      dprintln(1, head.args[1], " type = ", typeof(head.args[1]))
-      if isa(head.args[1], TopNode)
-        dprintln(1, "TopNode ", head.args[1:end])
-        
-        if ENABLE_FUNC_DESC
-            assert(typeof(head.args[2]) == Symbol)
-            assert(typeof(head.args[3]) == QuoteNode)
-            assert(typeof(head.args[3].value) == Symbol)
-            fd = lookup_function_description(string(head.args[2]), string(head.args[3].value))
-            if fd != nothing
-                return fd.distributive
-            else
+function result_and_args_are_scalars(result_type, arg_types)
+    if result_type <: Number
+        for t in arg_types
+            if !(t <: Number)
                 return false
-            end 
-        else
-            if head.args[2] == :SparseAccelerator
-                return distributive
             end
         end
-      end
+        return true
     end
-  end
-  
-#  if head == Top
-#    println("getfield ", args[1], " ", args[2], " ", typeof(args[1]), " " , typeof(args[2]))
-#    #return distributive
-#  end
-  # This is to quickly pass pagerank. However, we need a more general machenism. we cannot
-  # write all kinds of functions tediously.
-  # TODO: a general mechanism to handle functions
-   if head == :max || head == :vec || head == :sum || head == :colon || head == :start || head == :done || head == :next || head == :tupleref || head == :toc || head == :tic || head == :time || head == :clock_now || head == :println ||
-      head == :spones ||  # spones,Any[:(A::Union((Int64,Int64,Int64,Any,Any,Any),Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))]
-      head == :size || # size,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),1]
-      head == :repmat || # repmat,Any[:((top(vect))(1 / m::Int64::Float64)::Array{Float64,1}),:(m::Int64)]
-      head == :scale || # scale,Any[:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}),:(1 ./ d::Array{Float64,1}::Array{Float64,1})]
-      head == :getfield
-    return distributive
-  end
+    return false
+end
 
-  println("head type = ", typeof(head)) 
-  throw(string("checkDistributivityForCall: unknown AST (", head, ",", args, ")"))
+function name_of_module_or_function(arg)
+    if typeof(arg) == Symbol
+        return string(arg)
+    elseif typeof(arg) == QuoteNode && typeof(arg.value) == Symbol
+        return string(arg.value)
+    else
+        throw(UnhandledModuleOrFunctionName(arg))
+    end
+end
+
+function resolve_module_function_names(call_args)
+    assert(length(call_args) > 0)
+    module_name, function_name = "", ""
+    if typeof(call_args[1]) == Symbol # Example: :*
+        function_name = string(call_args[1])
+    elseif isa(call_args[1], TopNode) && # Example: top(getfield), SparseAccelerator,:SpMV
+            length(call_args) == 3 
+        if call_args[1] == TopNode(:getfield)
+            module_name = name_of_module_or_function(call_args[2])
+            function_name = name_of_module_or_function(call_args[3])
+        else
+            function_name = name_of_module_or_function(call_args[1].name)
+        end
+    elseif  isa(call_args[1], Expr) &&
+            call_args[1].head == :call # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
+        return resolve_module_function_names(call_args[1].args)
+    end
+    module_name, function_name
+end
+
+function checkDistributivityForCall(expr, symbolInfo, distributive)
+    head = expr.head
+    args = expr.args
+        
+    # A typical call are in the following forms
+    #   Expr(:call, :*, :A, :x)
+    #   Expr(:call, :(:call, top(getfield), SparseAccelerator,:SpMV), :A, :x)
+    # So the first argument is the function, the others are the arguments for it.
+        
+    arg_types = ntuple(length(args) - 1, i-> typeOfNode(args[i+1], symbolInfo))
+    if result_and_args_are_scalars(expr.typ, arg_types)
+        # Result and args are all scalars. This function is distributive.
+        # In case some args are trees themselves, we should check the args further
+        for x in args[2 : end]
+            distributive = checkDistributivity(x, symbolInfo, distributive)
+        end
+        # ISSUE: what if an arg is an array element? It is a scalar, but it involves an array.
+        return distributive
+    end
+
+    module_name, function_name = resolve_module_function_names(args)
+    if function_name == ""
+        throw(UnresolvedFunction(head, args[1]))
+    end
+    fd = lookup_function_description(module_name, function_name, arg_types)
+    if fd != nothing
+        return fd.distributive
+    else
+        throw(UndescribedFunction(module_name, function_name, arg_types))
+    end
 end
 
 function checkDistributivityForBinaryOP(ast, symbolInfo, distributive)
@@ -309,7 +242,7 @@ end
 # reordering distributivity      
 # TODO: if only for reordering purpose, once we know distributive is false, we
 # can stop inferring types, since we cannot do reordering optimization anyway.
-function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributive::Bool)
+function checkDistributivity(ast::Any, symbolInfo::Dict, distributive::Bool)
   local asttyp = typeof(ast)
   dprintln(2,"checkDistributivity typeof=", asttyp, " typeOfNode=", typeOfNode(ast, symbolInfo), " ", ast)
 
@@ -326,10 +259,7 @@ function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributi
     elseif head == :body
         distributive = checkDistributivityForExprs(args, symbolInfo, distributive)
         dprintln(2, "\tBody ", distributive)
-    elseif head == :(=) || head == :(+=) || head == :(-=) || head == :(*=) || 
-           head == :(/=) || head == :(\=) || head == :(%=) || head == :(^=) ||
-           head == :(&=) || head == :(|=) || head == :($=) || head == :(>>>=) ||
-           head == :(>>=) || head == :(<<=)  # Updating operators
+    elseif is_assignment(ast)  # Updating operators
         assert(length(args) == 2)
         local lhs = args[1]
         local rhs = args[2]
@@ -339,7 +269,7 @@ function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributi
         distributive = checkDistributivity(args, symbolInfo, distributive)
         dprintln(2, "\tReturn ", distributive)
     elseif head == :call || head == :call1
-        distributive = checkDistributivityForCall(args[1], args[2:end], symbolInfo, distributive)
+        distributive = checkDistributivityForCall(ast, symbolInfo, distributive)
         dprintln(2, "\tCall ", distributive)
     elseif head == :gotoifnot
         distributive = checkDistributivityForIf(args, symbolInfo, distributive)
@@ -352,7 +282,7 @@ function checkDistributivity(ast::Any, symbolInfo::Dict{Symbol, Any}, distributi
   elseif asttyp == SymbolNode
     dprintln(2, "\tSymbolNode ", distributive)
     return distributive
-  elseif asttyp == Symbol
+  elseif asttyp == Symbol || asttyp == GenSym
     dprintln(2, "\tSymbol ", distributive)
     return distributive
   elseif asttyp == LabelNode ||
