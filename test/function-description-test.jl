@@ -7,6 +7,8 @@ include("../Src/SparseAccelerator.jl")
 include("./MatrixMarket.jl")
 using SparseAccelerator
 
+include("./utils.jl")
+
 sparse_pass = OptFramework.optPass(SparseAccelerator.SparseOptimize, true)
 OptFramework.setOptPasses([sparse_pass])
 SparseAccelerator.set_debug_level(2)
@@ -20,8 +22,8 @@ function test_SpMV(A, x)
 end
 
 m = 10
-A = sprand(m, m, 0.1)
-# Make A symmetric, which is the assumption of reordering for now
-for i = 1:m for j = 1:m A[i, j] = A[j, i] end end
+A = generate_sparse_matrix(m)
+check_symmetry(A)
+
 x = repmat([1/m], m)
 @acc test_SpMV(A, x)
