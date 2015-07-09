@@ -1454,7 +1454,7 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
         mmread_stmt.expr.args[1] = T
         mmread_stmt.expr.args[2].args[1].args[3] = QuoteNode(:mmread_reorder) # change mmread to mmread_reorder
         
-        stmt = Expr(:(=), root, Expr(:call, TopNode(:tupleref), T, 1))
+        stmt = Expr(:(=), M, Expr(:call, TopNode(:tupleref), T, 1))
         push!(new_stmts_before_region, stmt)
         
         stmt = Expr(:(=), P, Expr(:call, TopNode(:tupleref), T, 2))

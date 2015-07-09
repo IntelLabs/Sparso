@@ -82,32 +82,31 @@ function is_assignment(expr :: Expr)
 end
 
 function memoize_GenSym_types(ast, symbolInfo, top_level_number, is_top_level, read)
-                println("memoize for ast: ", ast)
     if typeof(ast) == Expr && is_assignment(ast) && typeof(ast.args[1]) == GenSym 
         symbolInfo[ast.args[1]] = typeof(ast.args[2])
-                println("Expr is: ", ast)
-                println("Add symbolInfo for GenSym: ", ast.args[1], "==>", typeof(ast.args[2]))
-                flush(STDOUT::IO)
-#        dprintln(2,"Add symbolInfo for GenSym: ", ast.args[1], "==>", typeof(ast.args[2]))
+        dprintln(2,"Add symbolInfo for GenSym: ", ast.args[1], "==>", typeof(ast.args[2]))
     end
-    return ast
+    return nothing
 end
 
 function initSymbol2TypeDict(expr)
-println("initsym2type")
     assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
 
-    local types = expr.args[2][2]
-    symbolInfo = Dict{Union(Symbol, GenSym), Any}()
-    for i = 1:length(types)
-        symbolInfo[types[i][1]] = types[i][2]
-        dprintln(4,"Add symbolInfo: ", types[i][1], "==>", symbolInfo[types[i][1]])
+    local varinfo = expr.args[2][2]
+    symbolInfo = Dict{Union(Symbol, Integer), Any}()
+    for i = 1:length(varinfo)
+        symbolInfo[varinfo[i][1]] = varinfo[i][2]
+        dprintln(4,"Add symbolInfo: ", varinfo[i][1], "==>", symbolInfo[varinfo[i][1]])
     end
     
-println("astwoalk gensym")
-    # Add GenSym's types
-    CompilerTools.AstWalker.AstWalk(expr.args[3], memoize_GenSym_types, symbolInfo)
-    
+    # Add GenSym's types. We do not have to walk the AST. Instead, lambda has that info
+    # CompilerTools.AstWalker.AstWalk(expr.args[3], memoize_GenSym_types, symbolInfo)
+    local gensym_types = expr.args[2][4]
+    for id = 1:length(gensym_types)
+        symbolInfo[id - 1] = gensym_types[id] # GenSym id starts from 0
+        dprintln(4,"Add GenSym symbolInfo: ", id - 1, "==>", symbolInfo[id - 1])
+    end
+
     symbolInfo
 end
 
@@ -124,21 +123,29 @@ function typeOfNode(ast, symbolInfo)
   elseif asttyp == Symbol
     # use get() instead [] in case the key (like Symbol "*") does not exist
     return get(symbolInfo, ast, Nothing)
+  elseif asttyp == GenSym
+    return get(symbolInfo, ast.id, Nothing)
   else
     return asttyp
   end
 end
 
-function result_and_args_are_scalars(result_type, arg_types)
-    if result_type <: Number
-        for t in arg_types
-            if !(t <: Number)
-                return false
-            end
-        end
-        return true
+function analyze_type(typ)
+    is_number = (typ <: Number)
+    # ASSUMPTION: we assume the user program does not use range 
+    # for any array computation, although Range is a subtype of AbstractArray
+    is_array  = (typ <: AbstractArray && !(typ <: Range))
+    is_number, is_array
+end
+
+function analyze_types(result_type, arg_types :: Tuple)
+    all_numbers, some_arrays = analyze_type(result_type)
+    for t in arg_types
+        is_number, is_array = analyze_type(t)
+        all_numbers =  all_numbers && is_number
+        some_arrays = some_arrays || is_array
     end
-    return false
+    all_numbers, some_arrays
 end
 
 function name_of_module_or_function(arg)
@@ -181,26 +188,33 @@ function checkDistributivityForCall(expr, symbolInfo, distributive)
     # So the first argument is the function, the others are the arguments for it.
         
     arg_types = ntuple(length(args) - 1, i-> typeOfNode(args[i+1], symbolInfo))
-    if result_and_args_are_scalars(expr.typ, arg_types)
-        # Result and args are all scalars. This function is distributive.
-        # In case some args are trees themselves, we should check the args further
+    all_numbers, some_arrays = analyze_types(expr.typ, arg_types)
+    if all_numbers || !some_arrays
+        # Result and args are all numbers, or there may be other types (like 
+        # Range{UInt64}) but no regular arrays. This function is distributive.
+        # Do nothing
+    else
+        module_name, function_name = resolve_module_function_names(args)
+        if function_name == ""
+            throw(UnresolvedFunction(head, args[1]))
+        end
+        fd = lookup_function_description(module_name, function_name, arg_types)
+        if fd != nothing
+            distributive = distributive && fd.distributive
+        else
+            throw(UndescribedFunction(module_name, function_name, arg_types))
+        end
+    end
+    
+    if distributive
+        # In case some args are trees themselves (even if the args' result types are
+        # Number), we should check the args further
         for x in args[2 : end]
             distributive = checkDistributivity(x, symbolInfo, distributive)
         end
         # ISSUE: what if an arg is an array element? It is a scalar, but it involves an array.
-        return distributive
     end
-
-    module_name, function_name = resolve_module_function_names(args)
-    if function_name == ""
-        throw(UnresolvedFunction(head, args[1]))
-    end
-    fd = lookup_function_description(module_name, function_name, arg_types)
-    if fd != nothing
-        return fd.distributive
-    else
-        throw(UndescribedFunction(module_name, function_name, arg_types))
-    end
+    return distributive
 end
 
 function checkDistributivityForBinaryOP(ast, symbolInfo, distributive)
@@ -382,7 +396,7 @@ function DestroyCSR(A::Ptr{Void})
 end
 
 # w = alpha*A*x + beta*y + gamma
-function SpMV!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector, gamma::Number)
+function SpMV!(w::Vector, alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector, gamma::Number)
     assert(length(w) == length(y))
 
     if DEFAULT_LIBRARY == PCL_LIB
@@ -398,9 +412,9 @@ function SpMV!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::Abstract
 end
 
 # y = A*x
-SpMV!(y::AbstractVector, A::SparseMatrixCSC, x::AbstractVector) = SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)))
+SpMV!(y::Vector, A::SparseMatrixCSC, x::Vector) = SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)))
 
-function PageRank!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector, gamma::Number, z::AbstractVector)
+function PageRank!(w::Vector, alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector, gamma::Number, z::Vector)
     assert(length(w) == length(y))
     assert(length(w) == length(z))
 
@@ -417,14 +431,14 @@ function PageRank!(w::AbstractVector, alpha::Number, A::SparseMatrixCSC, x::Abst
 end
 
 # alpha*A*x + beta*y + gamma
-function SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector, gamma::Number)
+function SpMV(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector, gamma::Number)
   w = Array(Cdouble, length(x))
   SpMV!(w, alpha, A, x, beta, y, gamma)
   w
 end
 
 # A*x
-SpMV(A::SparseMatrixCSC, x::AbstractVector) = SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
+SpMV(A::SparseMatrixCSC, x::Vector) = SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
 
 function WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
   assert(length(x) == length(y))
@@ -516,7 +530,7 @@ end
 
 end   # end of module
 
-#function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector)
+#function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector)
 #  SparseAccelerator.SpMV(alpha, A, x, beta, y)
 #end
 
