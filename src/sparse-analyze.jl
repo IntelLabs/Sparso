@@ -22,10 +22,17 @@ export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 #end
 
 const LIB_PATH = "../lib/libcsr.so"
+#const LIB_PATH = "/home/taanders/.julia/v0.4/SparseAccelerator/lib/libcsr.so"
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
-function CSR_ReorderMatrix(A::SparseMatrixCSC, newA::SparseMatrixCSC, P::Vector, Pprime::Vector, getPermutation::Bool, oneBasedInput::Bool, oneBasedOutput::Bool)
+function CSR_ReorderMatrix(A :: SparseMatrixCSC, 
+                           newA :: SparseMatrixCSC, 
+                           P :: Vector, 
+                           Pprime :: Vector, 
+                           getPermutation :: Bool, 
+                           oneBasedInput :: Bool, 
+                           oneBasedOutput :: Bool)
   ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
@@ -243,6 +250,15 @@ function isWaxpby(node)
   return (false, nothing, nothing)
 end
 
+function isSpMV(node)
+  if typeof(node)         == Expr && node.head         == :call && 
+     typeof(node.args[1]) == Expr && node.args[1].head == :call && 
+     node.args[1].args[1] == TopNode(:getfield) && node.args[1].args[2] == :SparseAccelerator && node.args[1].args[3] == QuoteNode(:SpMV)
+    return true
+  end 
+  return false
+end
+
 function getSName(ssn)
   stype = typeof(ssn)
   if stype == Symbol
@@ -262,6 +278,7 @@ end
 
 function optimize_calls(ast, state, top_level_number, is_top_level, read)
   asttyp = typeof(ast)
+  dprintln(3,"optimize_calls ast = ", ast, " type = ", typeof(ast))
   if asttyp == Expr && ast.head == :call
     dprintln(3,"optimize_calls found call expr ", ast)
     if ast.args[1] == :A_mul_B!
@@ -298,86 +315,89 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:Dot))
       end
       return ast
-    elseif ast.args[1] == :(+)
-      if length(ast.args) == 3
-        dprintln(3,"optimize_calls found +")
-        ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-        ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
-        arg1 = ast.args[2]
-        arg2 = ast.args[3]
+    elseif ast.args[1] == :(+) || ast.args[1] == :(-)
+      dprintln(3,"optimize_calls found + or -")
+      for i = 2:length(ast.args)
+        ast.args[i] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[i], optimize_calls, nothing))
+      end
+      num_operands = length(ast.args) - 1
+      num_replaced = 0
+      for rawi = 2 : num_operands
+        i = rawi - num_replaced
+        arg1 = ast.args[i]
+        arg2 = ast.args[i+1]
         dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
         if deepType(arg1) <: Vector && deepType(arg2) <: Vector 
           (is_mul1, scalar1, vec1) = isMul(arg1)
           (is_mul2, scalar2, vec2) = isMul(arg2)
           dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
-          if is_mul1 || is_mul2 || true
-            orig_args = ast.args
-            ast.args = Array(Any,5)
+          if is_mul1 || is_mul2
+            replacement = Expr(:call)
+            replacement.args = Array(Any,5)
             dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
-            ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
+            replacement.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
             if is_mul1
-              ast.args[2] = scalar1
-              ast.args[3] = vec1
+              replacement.args[2] = scalar1
+              replacement.args[3] = vec1
             else
-              ast.args[2] = 1
-              ast.args[3] = arg1
+              replacement.args[2] = 1
+              replacement.args[3] = arg1
             end
             if is_mul2
-              ast.args[4] = scalar2
-              ast.args[5] = vec2
+              if ast.args[1] == :(+)
+                replacement.args[4] = scalar2
+              else
+                replacement.args[4] = CompilerTools.LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
+              end
+              replacement.args[5] = vec2
             else
-              ast.args[4] = 1
-              ast.args[5] = arg2
+              if ast.args[1] == :(+)
+                replacement.args[4] = 1
+              else
+                replacement.args[4] = -1
+              end
+              replacement.args[5] = arg2
             end
+            ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1, arg2); ast.args[i+2:length(ast.args)]]
+            num_replaced = num_replaced + 1
+          elseif isSpMV(arg1) && length(arg1.args) == 4 # 4 = SpMV of the form alpha*A*x
+            if ast.args[1] == :(+)
+              ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1.args[2], arg1.args[3], arg1.args[4], arg2); ast.args[i+2:length(ast.args)]]
+            else
+              # Do I need to type "-1" in some way here?
+              ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1.args[2], arg1.args[3], arg1.args[4], -1, arg2); ast.args[i+2:length(ast.args)]]
+            end
+            num_replaced = num_replaced + 1
           end
         end
-        return ast
       end
-    elseif ast.args[1] == :(-)
-      if length(ast.args) == 3
-        dprintln(3,"optimize_calls found -")
-        ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-        ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
-        arg1 = ast.args[2]
-        arg2 = ast.args[3]
-        dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
-        if deepType(arg1) <: Vector && deepType(arg2) <: Vector 
-          (is_mul1, scalar1, vec1) = isMul(arg1)
-          (is_mul2, scalar2, vec2) = isMul(arg2)
-          dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
-          if is_mul1 || is_mul2 || true
-            orig_args = ast.args
-            ast.args = Array(Any,5)
-            dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
-            ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
-            if is_mul1
-              ast.args[2] = scalar1
-              ast.args[3] = vec1
-            else
-              ast.args[2] = 1
-              ast.args[3] = arg1
-            end
-            if is_mul2
-              ast.args[4] = CompilerTools.LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
-              ast.args[5] = vec2
-            else
-              ast.args[4] = -1
-              ast.args[5] = arg2
-            end
-          end
-        end
-        return ast
+      if length(ast.args) == 2
+        dprintln(3,"optimize_calls up-leveling the SpMV call")
+        ast.args = ast.args[2].args
       end
+      return ast
     elseif ast.args[1] == :(*)
       dprintln(3,"optimize_calls found *")
-      ast.args[2] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[2], optimize_calls, nothing))
-      ast.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[3], optimize_calls, nothing))
-      arg1 = ast.args[2]
-      arg2 = ast.args[3]
-      dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
-      if deepType(arg1) <: SparseMatrixCSC && deepType(arg2) <: Vector
-        dprintln(3,"optimize_calls converting to SparseAccelerator.SpMV")
-        ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV))
+      for i = 2:length(ast.args)
+        ast.args[i] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[i], optimize_calls, nothing))
+      end
+      num_operands = length(ast.args) - 1
+      for i = num_operands : -1 : 2
+        arg1 = ast.args[i]
+        arg2 = ast.args[i+1]
+        dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
+        if deepType(arg1) <: SparseMatrixCSC && deepType(arg2) <: Vector
+          ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1, arg2); ast.args[i+2:length(ast.args)]]
+          dprintln(3,"optimize_calls converting to 2 argument SparseAccelerator.SpMV, length = ", length(ast.args))
+        elseif deepType(arg1) <: Number && isSpMV(arg2) && length(arg2.args) == 3  # 3 = SpMV + two arguments
+          ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1, arg2.args[2], arg2.args[3]); ast.args[i+2:length(ast.args)]]
+          dprintln(3,"optimize_calls converting to 3 argument SparseAccelerator.SpMV, length = ", length(ast.args))
+        end
+      end 
+      # If the length of ast.args has been shortened to 2 then we can no longer use the "*" node so we elevate ast.args[1] up one level.
+      if length(ast.args) == 2
+        dprintln(3,"optimize_calls up-leveling the SpMV call")
+        ast.args = ast.args[2].args
       end
       return ast
     end
@@ -438,10 +458,10 @@ function reorderLoop(L, M, lives, symbolInfo)
     # Build inter-dependent arrays
     IAs = Dict{Any, Set}()    
     for bbnum in L.members
-        for stmt_index = 1:length(bbs[bbnum].statements)
+        for stmt_index = 1:length(bbs[lives.cfg.basic_blocks[bbnum]].statements)
             # Replace calls to optimized versions provided in SparseAccelerator module.
-            bbs[bbnum].statements[stmt_index].expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(bbs[bbnum].statements[stmt_index].expr, optimize_calls, nothing))
-            stmt = bbs[bbnum].statements[stmt_index]
+            bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].tls.expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].tls.expr, optimize_calls, nothing))
+            stmt = bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index]
             IAs[stmt] = Set{Any}()
             seeds = Set{Any} ()
             push!(seeds, stmt.expr)
@@ -465,7 +485,7 @@ function reorderLoop(L, M, lives, symbolInfo)
     while changed
         changed = false
         for bbnum in L.members
-            for stmt in bbs[bbnum].statements
+            for stmt in bbs[lives.cfg.basic_blocks[bbnum]].statements
                 for IA in IAs[stmt]
                     if ⊈(IA, reordered)
                         if !isempty(intersect(IA, reordered))
@@ -560,18 +580,22 @@ function reorderLoop(L, M, lives, symbolInfo)
     end
 
     # Now actually change the CFG.
-    (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBefore(lives, L.head, true, L.back_edge)
+    (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, L.head, true, L.back_edge)
+    lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
     for stmt in new_stmts_before_L
-        CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+        CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, stmt)
+        # Do we need to create the statement in the LivenessAnalysis block as well?
     end
     if new_goto_stmt != nothing
       push!(new_bb.statements, new_goto_stmt)
+      # Do we need to create the statement in the LivenessAnalysis block as well?
     end
     
     for (pred, succ, new_stmts) in new_stmts_after_L
-        (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, pred, succ)
+        (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBetween(lives.cfg, pred, succ)
+        lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
         for stmt in new_stmts
-            CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, stmt)
+            CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, stmt)
         end
         if new_goto_stmt != nothing
           push!(new_bb.statements, new_goto_stmt)
@@ -585,9 +609,10 @@ function reorderLoop(L, M, lives, symbolInfo)
 end
 
 # Map each BB to a Bool: true if the BB in any loop 
-function BBsInLoop(lives, loop_info)
+function BBsInLoop(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                   loop_info :: CompilerTools.Loops.DomLoops)
     in_loop = Dict{Int, Bool}()
-    for (j,bb) in lives.basic_blocks
+    for (j,bb) in lives.cfg.basic_blocks
         in_loop[bb.label] = false
     end
 
@@ -599,9 +624,9 @@ function BBsInLoop(lives, loop_info)
     return in_loop
 end
 
-function findMmread(lives, in_loop)
+function findMmread(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, in_loop :: Dict{Int,Bool})
     # Look for such a statement outside any loop: e.g. A = ((top(getfield))(MatrixMarket,:mmread))("b.mtx")
-    for (j,bb) in lives.basic_blocks
+    for (j,bb) in lives.cfg.basic_blocks
         if in_loop[bb.label] 
             continue
         end
@@ -663,13 +688,13 @@ module Base
     end
 end
 
-function show_interval(interval::RegionInterval, level)
+function show_interval(interval :: RegionInterval, level)
     for i = 1:level print("  ") end
-    println("BB ", interval.BB.label, " stmts ", interval.from_stmt_idx, "(", 
+    println("BB ", interval.BB.cfgbb.label, " stmts ", interval.from_stmt_idx, "(", 
         1 <= interval.from_stmt_idx && interval.from_stmt_idx <= length(interval.BB.statements) ?
-        interval.BB.statements[interval.from_stmt_idx].index : "", ") : ", interval.to_stmt_idx, "(",
+        interval.BB.statements[interval.from_stmt_idx].tls.index : "", ") : ", interval.to_stmt_idx, "(",
         1 <= interval.to_stmt_idx && interval.to_stmt_idx <= length(interval.BB.statements) ?
-        interval.BB.statements[interval.to_stmt_idx].index : "", ")")
+        interval.BB.statements[interval.to_stmt_idx].tls.index : "", ")")
 end
 
 # Note: to be sure of profitability, we should require each path to pass through a loop. 
@@ -686,34 +711,46 @@ end
 # This is because we do not have analysis to tell us that -1-->3 is an infeasible path.
 # For now, give up with the requirement of having a loop.
 # TODO: enforce the requirement after some analysis like DCE is implemented
-function DFSGrowRegion(first_BB, current_BB, start_stmt_idx, lives, in_loop, visited, has_loop, bb_interval, exits, intervals, symbolInfo, loop_info, loop_bbs)
+function DFSGrowRegion(first_BB :: CompilerTools.LivenessAnalysis.BasicBlock, 
+                       current_BB :: CompilerTools.LivenessAnalysis.BasicBlock, 
+                       start_stmt_idx :: Int64, 
+                       lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                       in_loop :: Dict{Int,Bool}, 
+                       visited :: Dict{Int,Bool}, 
+                       has_loop :: Dict{Int,Bool}, 
+                       bb_interval :: Dict{Int,RegionInterval}, 
+                       exits :: Set{ExitEdge}, 
+                       intervals :: Vector{RegionInterval}, 
+                       symbolInfo :: Dict{Symbol, Any}, 
+                       loop_info :: CompilerTools.Loops.DomLoops, 
+                       loop_bbs)
     if (DEBUG_LVL >= 2)
-        println("\n\nDFSGrowRegion from BB ", current_BB.label, " stmt ", start_stmt_idx, "(", 
+        println("\n\nDFSGrowRegion from BB ", current_BB.cfgbb.label, " stmt ", start_stmt_idx, "(", 
             1 <= start_stmt_idx && start_stmt_idx <= length(current_BB.statements) ? 
-            current_BB.statements[start_stmt_idx].index : "", ")");
+            current_BB.statements[start_stmt_idx].tls.index : "", ")");
     end
     
     # Disable the requirement of having a loop.
     # TODO: enable it in future
     loop_expected_on_every_path = false
     
-    assert(!visited[current_BB.label])
-    visited[current_BB.label]  = true
-    has_loop[current_BB.label] = in_loop[current_BB.label]
+    assert(!visited[current_BB.cfgbb.label])
+    visited[current_BB.cfgbb.label]  = true
+    has_loop[current_BB.cfgbb.label] = in_loop[current_BB.cfgbb.label]
     last_stmt_idx = length(current_BB.statements)
     for stmt_idx = start_stmt_idx : last_stmt_idx
-        expr = current_BB.statements[stmt_idx].expr
+        expr = current_BB.statements[stmt_idx].tls.expr
 println(".. cur expr is ", expr)
 flush(STDOUT::IO)        
         if expr.head == :return
-            if loop_expected_on_every_path && !has_loop[current_BB.label]
+            if loop_expected_on_every_path && !has_loop[current_BB.cfgbb.label]
                 return false, nothing
             end
             exit = ExitEdge(current_BB, stmt_idx - 1, current_BB, stmt_idx)
             push!(exits, exit)
             interval = RegionInterval(current_BB, start_stmt_idx, stmt_idx - 1)
             push!(intervals, interval)
-            bb_interval[current_BB.label] = interval
+            bb_interval[current_BB.cfgbb.label] = interval
             return true, interval
         end
         if expr.head == :throw
@@ -722,7 +759,7 @@ flush(STDOUT::IO)
         end
         distributive = checkDistributivity(expr, symbolInfo, true)
         if !distributive
-            if loop_expected_on_every_path && !has_loop[current_BB.label]
+            if loop_expected_on_every_path && !has_loop[current_BB.cfgbb.label]
                 return false, nothing
             end
             if loop_bbs != nothing
@@ -733,23 +770,24 @@ flush(STDOUT::IO)
             push!(exits, exit)
             interval = RegionInterval(current_BB, start_stmt_idx, stmt_idx - 1)
             push!(intervals, interval)
-            bb_interval[current_BB.label] = interval
+            bb_interval[current_BB.cfgbb.label] = interval
             return true, interval
         end
     end
     interval = RegionInterval(current_BB, start_stmt_idx, last_stmt_idx) 
     push!(intervals, interval)
-    bb_interval[current_BB.label] = interval
+    bb_interval[current_BB.cfgbb.label] = interval
     
     # Current BB's statements have been scanned. Now successors
-    for succ_BB in current_BB.succs
+    for succ_BBcfg in current_BB.cfgbb.succs
+        succ_BB = lives.basic_blocks[succ_BBcfg]
         if (DEBUG_LVL >= 2)
-            println("looking at succ BB ", succ_BB.label, " whose dominators are ", loop_info.dom_dict[succ_BB.label])
+            println("looking at succ BB ", succ_BB.cfgbb.label, " whose dominators are ", loop_info.dom_dict[succ_BB.cfgbb.label])
         end
         
-        if succ_BB.label == -2 || # the pseudo exit of the function
-            (loop_bbs != nothing && !in(succ_BB.label, loop_bbs)) # out of loop TODO: allow region to include bbs out of loop. Just make sure it covers the whole loop, not part of it.
-            if loop_expected_on_every_path && !has_loop[current_BB.label]
+        if succ_BB.cfgbb.label == -2 || # the pseudo exit of the function
+            (loop_bbs != nothing && !in(succ_BB.cfgbb.label, loop_bbs)) # out of loop TODO: allow region to include bbs out of loop. Just make sure it covers the whole loop, not part of it.
+            if loop_expected_on_every_path && !has_loop[current_BB.cfgbb.label]
                 return false, interval
             end
             exit = ExitEdge(current_BB, last_stmt_idx + 1, succ_BB, 0)
@@ -757,12 +795,12 @@ flush(STDOUT::IO)
             continue
         end            
         
-        if !in(first_BB.label, loop_info.dom_dict[succ_BB.label])
+        if !in(first_BB.cfgbb.label, loop_info.dom_dict[succ_BB.cfgbb.label])
             # first_BB does not dominate succ BB
-            if loop_expected_on_every_path && !has_loop[current_BB.label]
+            if loop_expected_on_every_path && !has_loop[current_BB.cfgbb.label]
                 return false, interval
             end
-            if in_loop[succ_BB.label]
+            if in_loop[succ_BB.cfgbb.label]
                 # we are going to insert reverse reodering on a new block between current and succ BB.
                 # If succ BB is in a loop, the new block is also in a loop. We cannot affort that cost 
                 return false, interval
@@ -773,10 +811,10 @@ flush(STDOUT::IO)
             continue
         end
         
-        if (visited[succ_BB.label])
-            has_loop[current_BB.label] = has_loop[current_BB.label] || has_loop[succ_BB.label]
-            push!(interval.succs, bb_interval[succ_BB.label])
-            push!(bb_interval[succ_BB.label].preds, interval)
+        if (visited[succ_BB.cfgbb.label])
+            has_loop[current_BB.cfgbb.label] = has_loop[current_BB.cfgbb.label] || has_loop[succ_BB.cfgbb.label]
+            push!(interval.succs, bb_interval[succ_BB.cfgbb.label])
+            push!(bb_interval[succ_BB.cfgbb.label].preds, interval)
             continue
         end
         
@@ -791,11 +829,17 @@ flush(STDOUT::IO)
     return true, interval
 end
 
-function growRegion(first_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_info, loop_bbs)
+function growRegion(first_BB :: CompilerTools.CFGs.BasicBlock, 
+                    mmread_stmt_idx :: Int64, 
+                    lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                    in_loop :: Dict{Int,Bool}, 
+                    symbolInfo :: Dict{Symbol, Any}, 
+                    loop_info :: CompilerTools.Loops.DomLoops, 
+                    loop_bbs)
     visited  = Dict{Int, Bool}() # BB has been visited?
     has_loop = Dict{Int, Bool}() # Every path starting from the BB crosses a loop?
     bb_interval = Dict{Int, RegionInterval}()
-    for (j,bb) in lives.basic_blocks 
+    for (j,bb) in lives.cfg.basic_blocks 
         visited[bb.label]  = false
         has_loop[bb.label] = false
     end
@@ -803,8 +847,8 @@ function growRegion(first_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_
     # Imagine there are always two invisible statements in any BB, whose statement indices are 0 and last_stmt_idx+1
     # So any real statement always has a statement before and after it. That is why we can do mmread_stmt_idx + 1 here
     # Similary, we can do any stmt_indx -1 as well.
-    region = Region(first_BB, mmread_stmt_idx, Set{ExitEdge}(), RegionInterval[])
-    success, interval = DFSGrowRegion(first_BB, first_BB, mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, bb_interval, region.exits, region.intervals, symbolInfo, loop_info, loop_bbs)
+    region = Region(lives.basic_blocks[first_BB], mmread_stmt_idx, Set{ExitEdge}(), RegionInterval[])
+    success, interval = DFSGrowRegion(lives.basic_blocks[first_BB], lives.basic_blocks[first_BB], mmread_stmt_idx + 1, lives, in_loop, visited, has_loop, bb_interval, region.exits, region.intervals, symbolInfo, loop_info, loop_bbs)
 
     if (DEBUG_LVL >= 2)
         println("DFSGrowRegion successful?: ", success)
@@ -829,7 +873,9 @@ function growRegion(first_BB, mmread_stmt_idx, lives, in_loop, symbolInfo, loop_
     end
 end
 
-function regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
+function regionFormationBasedOnMmread(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                                      loop_info :: CompilerTools.Loops.DomLoops, 
+                                      symbolInfo :: Dict{Symbol, Any})
     in_loop = BBsInLoop(lives, loop_info)
     mmread_BB, mmread_stmt_idx = findMmread(lives, in_loop)
     if mmread_BB == nothing
@@ -840,7 +886,7 @@ end
 
 function regionFormationBasedOnLoop(L, lives, loop_info, symbolInfo)
     in_loop = BBsInLoop(lives, loop_info)
-    return growRegion(lives.basic_blocks[L.head], 0, lives, in_loop, symbolInfo, loop_info, L.members)
+    return growRegion(lives.cfg.basic_blocks[L.head], 0, lives, in_loop, symbolInfo, loop_info, L.members)
 end
 
 # Old version, not differentiating LHS and RHS symbols. To remove
@@ -903,7 +949,16 @@ function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArra
     end
 end
 
-function findInterDependentArrays(region::Region, symbolInfo)
+function optimizeRegionCalls(region :: Region)
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = 1 : length(BB.cfgbb.statements)
+            BB.cfgbb.statements[stmt_index].expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(BB.cfgbb.statements[stmt_index].expr, optimize_calls, nothing))
+        end
+    end 
+end
+
+function findInterDependentArrays(region :: Region, symbolInfo :: Dict{Symbol, Any})
     # Build inter-dependent arrays
     IAs = Dict{Any, Set}()
     for interval in region.intervals
@@ -912,7 +967,7 @@ function findInterDependentArrays(region::Region, symbolInfo)
             stmt = BB.statements[stmt_index]
             IAs[stmt] = Set{Any}()
             seeds = Set{Tuple{Any, Bool}} ()
-            push!(seeds, tuple(stmt.expr, false))
+            push!(seeds, tuple(stmt.tls.expr, false))
             while !isempty(seeds)
                 seed = pop!(seeds)
                 IA = InterDependentArrays()
@@ -1023,9 +1078,9 @@ function show_RMD_node(node::RMDNode, lives)
         println(")")
         
         if node.kind == RMD_NODE_NORMAL
-            BB = lives.basic_blocks[node.bbnum]
+            BB = lives.basic_blocks[lives.cfg.basic_blocks[node.bbnum]]
             stmt = BB.statements[node.stmt_idx]
-            println("\t", stmt)
+            println("\t", stmt, " ", stmt.tls)
         end
 end
 
@@ -1076,7 +1131,7 @@ function forward_transfer(B::RMDNode, S::Set, IAs, lives)
         return copy(S)
     end
     
-    BB = lives.basic_blocks[B.bbnum]
+    BB = lives.basic_blocks[lives.cfg.basic_blocks[B.bbnum]]
     stmt = BB.statements[B.stmt_idx]
     if isempty(IAs[stmt])
         return copy(S)
@@ -1111,7 +1166,7 @@ function backward_transfer(B::RMDNode, S::Set, IAs, lives)
         return copy(S)
     end
     
-    BB = lives.basic_blocks[B.bbnum]
+    BB = lives.basic_blocks[lives.cfg.basic_blocks[B.bbnum]]
     stmt = BB.statements[B.stmt_idx]
     if isempty(IAs[stmt])
         return copy(S)
@@ -1205,21 +1260,27 @@ function intervalsAreAdjacent(pred_interval::RegionInterval, interval::RegionInt
     end
 end
 
-function makeConnectPredOutsideNode(interval::RegionInterval, predBB, pred_stmt_idx, first_node, outside_nodes)
-    outside_node = RMDNode(predBB.label, pred_stmt_idx, RMD_NODE_OUTSIDE)
+function makeConnectPredOutsideNode(interval :: RegionInterval, predBB :: CompilerTools.LivenessAnalysis.BasicBlock, pred_stmt_idx, first_node, outside_nodes)
+    outside_node = RMDNode(predBB.cfgbb.label, pred_stmt_idx, RMD_NODE_OUTSIDE)
     push!(outside_nodes, outside_node)
     push!(first_node[interval].preds, outside_node)
     push!(outside_node.succs, first_node[interval])
 end
 
-function makeConnectSuccOutsideNode(interval::RegionInterval, succBB, succ_stmt_idx, last_node, outside_nodes)
-    outside_node = RMDNode(succBB.label, succ_stmt_idx, RMD_NODE_OUTSIDE)
+function makeConnectSuccOutsideNode(interval::RegionInterval, succBB :: CompilerTools.LivenessAnalysis.BasicBlock, succ_stmt_idx, last_node, outside_nodes)
+    outside_node = RMDNode(succBB.cfgbb.label, succ_stmt_idx, RMD_NODE_OUTSIDE)
     push!(outside_nodes, outside_node)
     push!(last_node[interval].succs, outside_node)
     push!(outside_node.preds, last_node[interval])
 end
 
-function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, root)
+function reorderableMatrixDiscovery(
+                       lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                       loop_info :: CompilerTools.Loops.DomLoops, 
+                       region :: Region, 
+                       bb_interval :: Dict{Int, RegionInterval}, 
+                       IAs :: Dict{Any,Set},
+                       root)
     if isempty(region.intervals) 
         return nothing, nothing, nothing
     end
@@ -1238,13 +1299,13 @@ function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, 
     for interval in region.intervals
         if interval.from_stmt_idx > interval.to_stmt_idx
             # Empty interval. Make a pseudo node
-            node = RMDNode(interval.BB.label, interval.from_stmt_idx, RMD_NODE_EMPTY)
+            node = RMDNode(interval.BB.cfgbb.label, interval.from_stmt_idx, RMD_NODE_EMPTY)
             push!(nodes, node)
             first_node[interval] = last_node[interval] = node
         else
             prev = nothing    
             for stmt_idx in interval.from_stmt_idx : interval.to_stmt_idx
-                node = RMDNode(interval.BB.label, stmt_idx, RMD_NODE_NORMAL)
+                node = RMDNode(interval.BB.cfgbb.label, stmt_idx, RMD_NODE_NORMAL)
                 push!(nodes, node)
                 
                 if stmt_idx == interval.from_stmt_idx
@@ -1280,12 +1341,13 @@ function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, 
             # represented all its predecessors except the backedge one. So we need only to
             # build the predecessor on the backedge.
             BB_is_loop_head = ((region.first_BB == BB) && (region.mmread_stmt_idx == 0))
-            for pred in BB.preds
-                if BB_is_loop_head && !in(BB.label, loop_info.dom_dict[pred.label])
+            for predcfg in BB.cfgbb.preds
+                pred = lives.basic_blocks[predcfg]
+                if BB_is_loop_head && !in(BB.cfgbb.label, loop_info.dom_dict[pred.cfgbb.label])
                     continue
                 end
-                if haskey(bb_interval, pred.label)
-                    pred_interval = bb_interval[pred.label]
+                if haskey(bb_interval, pred.cfgbb.label)
+                    pred_interval = bb_interval[pred.cfgbb.label]
                     if intervalsAreAdjacent(pred_interval, interval)
                         push!(last_node[pred_interval].succs, first_node[interval])
                         push!(first_node[interval].preds, last_node[pred_interval])
@@ -1305,9 +1367,10 @@ function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, 
         
         if interval.to_stmt_idx == length(BB.statements)
             # interval covers the end of the BB. Connect to successors
-            for succ in BB.succs
-                if haskey(bb_interval, succ.label)
-                    succ_interval = bb_interval[succ.label]
+            for succcfg in BB.cfgbb.succs
+                succ = lives.basic_blocks[succcfg]
+                if haskey(bb_interval, succ.cfgbb.label)
+                    succ_interval = bb_interval[succ.cfgbb.label]
                     if intervalsAreAdjacent(interval, succ_interval)
                         push!(last_node[interval].succs, first_node[succ_interval])
                         push!(first_node[succ_interval].preds, last_node[interval])
@@ -1371,7 +1434,12 @@ function reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, 
     return nodes, entry, outside_nodes
 end
 
-function insertStatementsOnEdge(lives, new_stmts, node::RMDNode, node_BB, succ::RMDNode, succ_BB)
+function insertStatementsOnEdge(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                                new_stmts, 
+                                node::RMDNode, 
+                                node_BB :: CompilerTools.LivenessAnalysis.BasicBlock, 
+                                succ::RMDNode, 
+                                succ_BB :: CompilerTools.LivenessAnalysis.BasicBlock)
     assert(node.kind != RMD_NODE_ENTRY) # Reordering from entry to the first BB has been processed specially. Not here.
 
     if isempty(new_stmts)
@@ -1386,16 +1454,21 @@ function insertStatementsOnEdge(lives, new_stmts, node::RMDNode, node_BB, succ::
         assert(node.stmt_idx + 1 == succ.stmt_idx)
         assert(succ.stmt_idx >= 1)
         assert(succ.stmt_idx <= length(succ_BB.statements) + 1)
-        BB = node_BB
+        BB = node_BB.cfgbb
         insert_at = succ.stmt_idx
     else
-        (BB, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBetween(lives, node.bbnum, succ.bbnum)
+        (BB, new_goto_stmt) = CompilerTools.CFGs.insertBetween(lives.cfg, node.bbnum, succ.bbnum)
+        lives.basic_blocks[BB] = CompilerTools.LivenessAnalysis.BasicBlock(BB)
         insert_at = 1
     end
     
+    assert(typeof(BB) == CompilerTools.CFGs.BasicBlock)
+
     i = 0
     for new_stmt in new_stmts
-        insert!(BB.statements, insert_at + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
+        insert!(BB.statements, insert_at + i, CompilerTools.CFGs.TopLevelStatement(0, new_stmt))
+        #insert!(BB.statements, insert_at + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))
+        #CompilerTools.CFGs.insertat!(BB.statements, CompilerTools.CFGs.TopLevelStatement(0, new_stmt), insert_at + i)
         i += 1
     end
     if new_goto_stmt != nothing
@@ -1403,7 +1476,7 @@ function insertStatementsOnEdge(lives, new_stmts, node::RMDNode, node_BB, succ::
     end
 end
 
-function nodeLiveIn(node::RMDNode, BB)
+function nodeLiveIn(node::RMDNode, BB :: CompilerTools.LivenessAnalysis.BasicBlock)
     if node.stmt_idx < 1
         assert(node.stmt_idx == 0)
         return BB.live_in
@@ -1416,13 +1489,21 @@ function nodeLiveIn(node::RMDNode, BB)
     end
 end
 
-function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_interval, IAs, M, back_edge)
+function regionTransformation(funcAST, 
+                       lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                       loop_info :: CompilerTools.Loops.DomLoops, 
+                       symbolInfo :: Dict{Symbol, Any}, 
+                       region :: Region, 
+                       bb_interval :: Dict{Int, RegionInterval}, 
+                       IAs :: Dict{Any,Set},
+                       M, 
+                       back_edge)
     # The region is based on either a mmread(), in which case LHS of the statement will be the root symbol, 
     # or a loop, in which case the root symbol is identified from the function's argument list
     assert(region.mmread_stmt_idx != 0 || M != nothing)
     
     if region.mmread_stmt_idx != 0
-        mmread_stmt = region.first_BB.statements[ region.mmread_stmt_idx] 
+        mmread_stmt = region.first_BB.statements[ region.mmread_stmt_idx ] 
         M = mmread_stmt.expr.args[1]
     end 
         
@@ -1497,9 +1578,10 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
             i += 1
         end
     else 
-        (new_bb, new_goto_stmt) = CompilerTools.LivenessAnalysis.insertBefore(lives, region.first_BB.label, true, back_edge)
+        (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, true, back_edge)
+        lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
         for new_stmt in new_stmts_before_region
-            CompilerTools.LivenessAnalysis.addStatementToEndOfBlock(lives, new_bb, new_stmt)
+            CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, new_stmt)
         end
         if new_goto_stmt != nothing
           push!(new_bb.statements, new_goto_stmt)
@@ -1527,9 +1609,9 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
         end
         # an inside node must have at least one successor
         assert(node.kind == RMD_NODE_OUTSIDE || !isempty(node.succs))
-        BB = lives.basic_blocks[node.bbnum]
+        BB = lives.basic_blocks[lives.cfg.basic_blocks[node.bbnum]]
         for succ in node.succs
-            succ_BB = lives.basic_blocks[succ.bbnum]
+            succ_BB = lives.basic_blocks[lives.cfg.basic_blocks[succ.bbnum]]
             succ_live_in = nodeLiveIn(succ, succ_BB)
             
             # compute what to be reorder on this edge
@@ -1564,15 +1646,26 @@ function regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_
     end 
 end
 
-function reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, M, back_edge)
+function reorderRegion(funcAST, 
+                       lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                       loop_info :: CompilerTools.Loops.DomLoops, 
+                       symbolInfo :: Dict{Symbol, Any}, 
+                       region :: Region, 
+                       bb_interval :: Dict{Int, RegionInterval}, 
+                       M, 
+                       back_edge)
     IAs = findInterDependentArrays(region, symbolInfo)
     if (DEBUG_LVL >= 2)
         show_IAs(region, IAs, "Inter-dependent arrays")
     end
     regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_interval, IAs, M, back_edge)
+    optimizeRegionCalls(region)
 end
 
-function reorder(funcAST, lives, loop_info, symbolInfo)
+function reorder(funcAST, 
+                 lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                 loop_info :: CompilerTools.Loops.DomLoops, 
+                 symbolInfo :: Dict{Symbol, Any})
     if (DEBUG_LVL >= 2)
         println("******** CFG before reorder: ********")
         show(lives);
@@ -1594,7 +1687,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
     region, bb_interval = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     if region != nothing 
         reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, nothing, nothing)
-        body_reconstructed = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
+        body_reconstructed = CompilerTools.CFGs.createFunctionBody(lives.cfg)
         funcAST.args[3].args = body_reconstructed
     
         flush(STDOUT::IO)
@@ -1633,7 +1726,7 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
         end
     end
     
-    body_reconstructed   = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
+    body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
     funcAST.args[3].args = body_reconstructed
 
     flush(STDOUT::IO)
@@ -1642,13 +1735,17 @@ function reorder(funcAST, lives, loop_info, symbolInfo)
 end
 
 # Try to insert knobs to an expression
-function insert_knobs_to_statement(expr:: Expr, lives, loop_info)
+function insert_knobs_to_statement(expr :: Expr, 
+                                   lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                                   loop_info :: CompilerTools.Loops.DomLoops)
     return expr
 end
 
 # Analyze the sparse library function calls in the AST of a function, 
 # and insert knobs(context-sensitive info)
-function insert_knobs(ast, lives, loop_info)	
+function insert_knobs(ast, 
+                      lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                      loop_info :: CompilerTools.Loops.DomLoops)
   if isa(ast, LambdaStaticData)
       ast = uncompressed_ast(ast)
   end
@@ -1662,7 +1759,10 @@ end
 
 # Try reordering, then insert knobs.
 # TODO: combine the two together so that we scan AST only once.
-function sparse_analyze(ast, lives, loop_info, symbolInfo)
+function sparse_analyze(ast, 
+                        lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                        loop_info :: CompilerTools.Loops.DomLoops, 
+                        symbolInfo)
   dprintln(2, "***************** Sparse analyze *****************")
 
   ast1 = reorder(ast, lives, loop_info, symbolInfo)

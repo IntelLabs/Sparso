@@ -360,7 +360,7 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
     body_reconstructed.args = CompilerTools.LivenessAnalysis.createFunctionBody(lives)
     dprintln(3,"reconstructed_body type = ", typeof(body_reconstructed.args), "\n", body_reconstructed)
   end
-  loop_info  = CompilerTools.Loops.compute_dom_loops(lives)
+  loop_info = CompilerTools.Loops.compute_dom_loops(lives.cfg)
 
   analyze_res = sparse_analyze(ast, lives, loop_info, symbolInfo)
   dprintln(3,"result after sparse_analyze\n", analyze_res, " type = ", typeof(analyze_res))
@@ -436,6 +436,15 @@ function SpMV(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vec
   SpMV!(w, alpha, A, x, beta, y, gamma)
   w
 end
+
+# alpha*A*x + beta*y
+SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector) = SpMV(alpha, A, x, beta, y, zero(eltype(x)))
+
+# alpha*A*x + y
+SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, y::AbstractVector) = SpMV(alpha, A, x, one(eltype(y)), y, zero(eltype(x)))
+
+# alpha*A*x
+SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector) = SpMV(alpha, A, x, zero(eltype(x)), x, zero(eltype(x)))
 
 # A*x
 SpMV(A::SparseMatrixCSC, x::Vector) = SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
