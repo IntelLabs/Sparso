@@ -441,7 +441,7 @@ function reorderLoop(L, M, lives, symbolInfo)
 
     if(DEBUG_LVL >= 2)
         println("******** CFG before reordering: ********")
-        show(lives);
+        show(lives.cfg);
     end 
 
     # If we reorder M inside L, consequently, some other matrices or vectors
@@ -460,7 +460,7 @@ function reorderLoop(L, M, lives, symbolInfo)
     for bbnum in L.members
         for stmt_index = 1:length(bbs[lives.cfg.basic_blocks[bbnum]].statements)
             # Replace calls to optimized versions provided in SparseAccelerator module.
-            bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].tls.expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].tls.expr, optimize_calls, nothing))
+            bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].tls.expr, optimize_calls, nothing))
             stmt = bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index]
             IAs[stmt] = Set{Any}()
             seeds = Set{Any} ()
@@ -604,7 +604,7 @@ function reorderLoop(L, M, lives, symbolInfo)
 
     if(DEBUG_LVL >= 2)
         println("******** CFG after reordering: ********")
-        show(lives);
+        show(lives.cfg);
     end 
 end
 
@@ -721,7 +721,7 @@ function DFSGrowRegion(first_BB :: CompilerTools.LivenessAnalysis.BasicBlock,
                        bb_interval :: Dict{Int,RegionInterval}, 
                        exits :: Set{ExitEdge}, 
                        intervals :: Vector{RegionInterval}, 
-                       symbolInfo :: Dict{Symbol, Any}, 
+                       symbolInfo :: Dict{Union(Symbol,Integer),Any}, 
                        loop_info :: CompilerTools.Loops.DomLoops, 
                        loop_bbs)
     if (DEBUG_LVL >= 2)
@@ -737,11 +737,12 @@ function DFSGrowRegion(first_BB :: CompilerTools.LivenessAnalysis.BasicBlock,
     assert(!visited[current_BB.cfgbb.label])
     visited[current_BB.cfgbb.label]  = true
     has_loop[current_BB.cfgbb.label] = in_loop[current_BB.cfgbb.label]
-    last_stmt_idx = length(current_BB.statements)
+    last_stmt_idx = length(current_BB.cfgbb.statements)
     for stmt_idx = start_stmt_idx : last_stmt_idx
-        expr = current_BB.statements[stmt_idx].tls.expr
-println(".. cur expr is ", expr)
-flush(STDOUT::IO)        
+        expr = current_BB.cfgbb.statements[stmt_idx].expr
+        if typeof(expr) != Expr
+            continue
+        end
         if expr.head == :return
             if loop_expected_on_every_path && !has_loop[current_BB.cfgbb.label]
                 return false, nothing
@@ -833,7 +834,7 @@ function growRegion(first_BB :: CompilerTools.CFGs.BasicBlock,
                     mmread_stmt_idx :: Int64, 
                     lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                     in_loop :: Dict{Int,Bool}, 
-                    symbolInfo :: Dict{Symbol, Any}, 
+                    symbolInfo :: Dict{Union(Symbol,Integer),Any}, 
                     loop_info :: CompilerTools.Loops.DomLoops, 
                     loop_bbs)
     visited  = Dict{Int, Bool}() # BB has been visited?
@@ -875,7 +876,7 @@ end
 
 function regionFormationBasedOnMmread(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                                       loop_info :: CompilerTools.Loops.DomLoops, 
-                                      symbolInfo :: Dict{Symbol, Any})
+                                      symbolInfo :: Dict{Union(Symbol,Integer),Any})
     in_loop = BBsInLoop(lives, loop_info)
     mmread_BB, mmread_stmt_idx = findMmread(lives, in_loop)
     if mmread_BB == nothing
@@ -958,7 +959,7 @@ function optimizeRegionCalls(region :: Region)
     end 
 end
 
-function findInterDependentArrays(region :: Region, symbolInfo :: Dict{Symbol, Any})
+function findInterDependentArrays(region :: Region, symbolInfo :: Dict{Union(Symbol,Integer),Any})
     # Build inter-dependent arrays
     IAs = Dict{Any, Set}()
     for interval in region.intervals
@@ -1492,7 +1493,7 @@ end
 function regionTransformation(funcAST, 
                        lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                        loop_info :: CompilerTools.Loops.DomLoops, 
-                       symbolInfo :: Dict{Symbol, Any}, 
+                       symbolInfo :: Dict{Union(Symbol,Integer),Any}, 
                        region :: Region, 
                        bb_interval :: Dict{Int, RegionInterval}, 
                        IAs :: Dict{Any,Set},
@@ -1504,7 +1505,7 @@ function regionTransformation(funcAST,
     
     if region.mmread_stmt_idx != 0
         mmread_stmt = region.first_BB.statements[ region.mmread_stmt_idx ] 
-        M = mmread_stmt.expr.args[1]
+        M = mmread_stmt.tls.expr.args[1]
     end 
         
     nodes, entry, outside_nodes = reorderableMatrixDiscovery(lives, loop_info, region, bb_interval, IAs, M)
@@ -1532,8 +1533,8 @@ function regionTransformation(funcAST,
         Pprime = gensym("Pprime")
         
         # TODO: change the type of the original RHS to the right type
-        mmread_stmt.expr.args[1] = T
-        mmread_stmt.expr.args[2].args[1].args[3] = QuoteNode(:mmread_reorder) # change mmread to mmread_reorder
+        mmread_stmt.tls.expr.args[1] = T
+        mmread_stmt.tls.expr.args[2].args[1].args[3] = QuoteNode(:mmread_reorder) # change mmread to mmread_reorder
         
         stmt = Expr(:(=), M, Expr(:call, TopNode(:tupleref), T, 1))
         push!(new_stmts_before_region, stmt)
@@ -1574,7 +1575,7 @@ function regionTransformation(funcAST,
     if region.mmread_stmt_idx != 0
         i = 1
         for new_stmt in new_stmts_before_region
-            insert!(region.first_BB.statements, region.mmread_stmt_idx + i, CompilerTools.LivenessAnalysis.TopLevelStatement(0, new_stmt))    
+            insert!(region.first_BB.cfgbb.statements, region.mmread_stmt_idx + i, CompilerTools.CFGs.TopLevelStatement(0, new_stmt))    
             i += 1
         end
     else 
@@ -1641,15 +1642,15 @@ function regionTransformation(funcAST,
     end
 
     if (DEBUG_LVL >= 2)
-        println("******** CFG after mmread_reorder: ********")
-        show(lives);
+        println("******** CFG after region transformation: ********")
+        show(lives.cfg);
     end 
 end
 
 function reorderRegion(funcAST, 
                        lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                        loop_info :: CompilerTools.Loops.DomLoops, 
-                       symbolInfo :: Dict{Symbol, Any}, 
+                       symbolInfo :: Dict{Union(Symbol,Integer),Any}, 
                        region :: Region, 
                        bb_interval :: Dict{Int, RegionInterval}, 
                        M, 
@@ -1665,10 +1666,10 @@ end
 function reorder(funcAST, 
                  lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                  loop_info :: CompilerTools.Loops.DomLoops, 
-                 symbolInfo :: Dict{Symbol, Any})
+                 symbolInfo :: Dict{Union(Symbol,Integer),Any})
     if (DEBUG_LVL >= 2)
         println("******** CFG before reorder: ********")
-        show(lives);
+        show(lives.cfg);
     end 
     
     assert(funcAST.head == :lambda)
@@ -1762,7 +1763,7 @@ end
 function sparse_analyze(ast, 
                         lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                         loop_info :: CompilerTools.Loops.DomLoops, 
-                        symbolInfo)
+                        symbolInfo :: Dict{Union(Symbol,Integer),Any})
   dprintln(2, "***************** Sparse analyze *****************")
 
   ast1 = reorder(ast, lives, loop_info, symbolInfo)
