@@ -316,66 +316,68 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
       end
       return ast
     elseif ast.args[1] == :(+) || ast.args[1] == :(-)
-      dprintln(3,"optimize_calls found + or -")
-      for i = 2:length(ast.args)
-        ast.args[i] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[i], optimize_calls, nothing))
-      end
-      num_operands = length(ast.args) - 1
-      num_replaced = 0
-      for rawi = 2 : num_operands
-        i = rawi - num_replaced
-        arg1 = ast.args[i]
-        arg2 = ast.args[i+1]
-        dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
-        if deepType(arg1) <: Vector && deepType(arg2) <: Vector 
-          (is_mul1, scalar1, vec1) = isMul(arg1)
-          (is_mul2, scalar2, vec2) = isMul(arg2)
-          dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
-          if is_mul1 || is_mul2
-            replacement = Expr(:call)
-            replacement.args = Array(Any,5)
-            dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
-            replacement.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
-            if is_mul1
-              replacement.args[2] = scalar1
-              replacement.args[3] = vec1
-            else
-              replacement.args[2] = 1
-              replacement.args[3] = arg1
-            end
-            if is_mul2
-              if ast.args[1] == :(+)
-                replacement.args[4] = scalar2
+      if length(ast.args) > 2   # exclude processing for unary -
+        dprintln(3,"optimize_calls found + or -")
+        for i = 2:length(ast.args)
+          ast.args[i] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(ast.args[i], optimize_calls, nothing))
+        end
+        num_operands = length(ast.args) - 1
+        num_replaced = 0
+        for rawi = 2 : num_operands
+          i = rawi - num_replaced
+          arg1 = ast.args[i]
+          arg2 = ast.args[i+1]
+          dprintln(3,"arg1 = ", arg1, " arg2 = ", arg2, " arg1.typ = ", deepType(arg1), " arg2.typ = ", deepType(arg2))
+          if deepType(arg1) <: Vector && deepType(arg2) <: Vector 
+            (is_mul1, scalar1, vec1) = isMul(arg1)
+            (is_mul2, scalar2, vec2) = isMul(arg2)
+            dprintln(3,"optimize_calls found vector/vector +. mul1 = ", is_mul1, " mul2 = ", is_mul2)
+            if is_mul1 || is_mul2
+              replacement = Expr(:call)
+              replacement.args = Array(Any,5)
+              dprintln(3,"optimize_calls converting to SparseAccelerator.WAXPBY")
+              replacement.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY))
+              if is_mul1
+                replacement.args[2] = scalar1
+                replacement.args[3] = vec1
               else
-                replacement.args[4] = CompilerTools.LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
+                replacement.args[2] = 1
+                replacement.args[3] = arg1
               end
-              replacement.args[5] = vec2
-            else
-              if ast.args[1] == :(+)
-                replacement.args[4] = 1
+              if is_mul2
+                if ast.args[1] == :(+)
+                  replacement.args[4] = scalar2
+                else
+                  replacement.args[4] = CompilerTools.LivenessAnalysis.TypedExpr(deepType(scalar2), :call, :(-), scalar2)
+                end
+                replacement.args[5] = vec2
               else
-                replacement.args[4] = -1
+                if ast.args[1] == :(+)
+                  replacement.args[4] = 1
+                else
+                  replacement.args[4] = -1
+                end
+                replacement.args[5] = arg2
               end
-              replacement.args[5] = arg2
+              ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1, arg2); ast.args[i+2:length(ast.args)]]
+              num_replaced = num_replaced + 1
+            elseif isSpMV(arg1) && length(arg1.args) == 4 # 4 = SpMV of the form alpha*A*x
+              if ast.args[1] == :(+)
+                ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1.args[2], arg1.args[3], arg1.args[4], arg2); ast.args[i+2:length(ast.args)]]
+              else
+                # Do I need to type "-1" in some way here?
+                ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1.args[2], arg1.args[3], arg1.args[4], -1, arg2); ast.args[i+2:length(ast.args)]]
+              end
+              num_replaced = num_replaced + 1
             end
-            ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1, arg2); ast.args[i+2:length(ast.args)]]
-            num_replaced = num_replaced + 1
-          elseif isSpMV(arg1) && length(arg1.args) == 4 # 4 = SpMV of the form alpha*A*x
-            if ast.args[1] == :(+)
-              ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1.args[2], arg1.args[3], arg1.args[4], arg2); ast.args[i+2:length(ast.args)]]
-            else
-              # Do I need to type "-1" in some way here?
-              ast.args = [ast.args[1:i-1]; Expr(:call, CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)), arg1.args[2], arg1.args[3], arg1.args[4], -1, arg2); ast.args[i+2:length(ast.args)]]
-            end
-            num_replaced = num_replaced + 1
           end
         end
+        if length(ast.args) == 2
+          dprintln(3,"optimize_calls up-leveling the SpMV call")
+          ast.args = ast.args[2].args
+        end
+        return ast
       end
-      if length(ast.args) == 2
-        dprintln(3,"optimize_calls up-leveling the SpMV call")
-        ast.args = ast.args[2].args
-      end
-      return ast
     elseif ast.args[1] == :(*)
       dprintln(3,"optimize_calls found *")
       for i = 2:length(ast.args)
