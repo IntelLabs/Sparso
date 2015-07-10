@@ -5,14 +5,20 @@ using CompilerTools
 include("alias-analysis.jl")
 include("function-description.jl")
 
-# Remove this and enable using function description once all functions are described
-const ENABLE_FUNC_DESC = true
-
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
 
+# If true, keep analyzing, transformation, and execution as far as possible, 
+# even when there is an error. This is to expose as many issues as possible, so
+# that we can fix them collectively.
+KEEP_GOING = false
+
 function set_debug_level(x)
     global DEBUG_LVL = x
+end
+
+function set_keep_going(x :: Bool)
+    global KEEP_GOING = x
 end
  
 # A debug print routine.
@@ -316,13 +322,10 @@ function checkDistributivity(ast::Any, symbolInfo::Dict, distributive::Bool)
           typ = Matrix
       end
 
-
-      if ENABLE_FUNC_DESC
-          # There can be such arrays like [:(((top(getfield))(SparseAccelerator,:SpMV))(A,x)]
-          # So we have to check each element of the array.
-          for element in  ast
-                distributive = checkDistributivity(element, symbolInfo, distributive)
-          end
+      # There can be such arrays like [:(((top(getfield))(SparseAccelerator,:SpMV))(A,x)]
+      # So we have to check each element of the array.
+      for element in  ast
+          distributive = checkDistributivity(element, symbolInfo, distributive)
       end
       
       dprintln(2, "\tArray ", distributive)

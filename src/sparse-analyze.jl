@@ -935,18 +935,63 @@ function addToInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArr
     end 
 end
 
-function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, i)
-#   printSpaces(i)
+function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, level)
+#   printSpaces(level)
 #   println("findIA: ", currentNode)
     addToInterDependentArrays(currentNode, LHS, IA, symbolInfo)
     if typeof(currentNode) <: Expr
+        head = currentNode.head
+        if head == :call || head == :call1
+            head = currentNode.head
+            args = currentNode.args
+
+            # The first argument is the function, the others are the arguments for it.
+            arg_types = ntuple(length(args) - 1, i-> typeOfNode(args[i+1], symbolInfo))
+            all_numbers, some_arrays = analyze_types(currentNode.typ, arg_types)
+            if all_numbers || !some_arrays
+                # Result and args are all numbers, or there may be other types (like 
+                # Range{UInt64}) but no regular arrays. No inter-dependent arrays.
+                # Do nothing
+            else
+                module_name, function_name = resolve_module_function_names(args)
+                if function_name == ""
+                    if KEEP_GOING
+                        show(UnresolvedFunction(head, args[1]))
+                        @goto look_at_args
+                    else
+                        throw(UnresolvedFunction(head, args[1]))
+                    end
+                end
+                fd = lookup_function_description(module_name, function_name, arg_types)
+                if fd != nothing
+                    for S in fd.IA
+                        for x in S
+                            if x == 0 # result of the function call
+                                #findInterDependentArrays(currentNode, LHS, IA, seeds, symbolInfo, level+1)
+                            else 
+                                findInterDependentArrays(currentNode.args[x + 1], LHS, IA, seeds, symbolInfo, level+1)
+                            end
+                        end
+                    end
+                else
+                    if KEEP_GOING
+                        show(UndescribedFunction(module_name, function_name, arg_types))
+                        @goto look_at_args
+                    else
+                        throw(UndescribedFunction(module_name, function_name, arg_types))
+                    end
+                end
+            end
+        end
+        
+@label look_at_args
         for c in currentNode.args
-#            printSpaces(i+1)
+#            printSpaces(level+1)
 #            println("c=", c, " type=", typeOfNode(c, symbolInfo))
             if typeOfNode(c, symbolInfo) <: Number
                 push!(seeds, tuple(c, LHS))
             else
-                findInterDependentArrays(c, LHS, IA, seeds, symbolInfo, i+1)
+                findInterDependentArrays(c, LHS, IA, seeds, symbolInfo, level+1)
             end
         end
     end
@@ -985,7 +1030,7 @@ function findInterDependentArrays(region :: Region, symbolInfo :: Dict{Union(Sym
                     push!(IAs[stmt], IA)
                 end
             end
-#            println("###Stmt: ", stmt.expr)
+#            println("###Stmt: ", stmt.tls.expr)
 #            println("  IAs:", IAs[stmt])        
         end
     end
