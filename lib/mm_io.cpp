@@ -35,7 +35,14 @@ void load_matrix_market_step2 (char *file, T *a, int *j, int *i, int *sizes, boo
   int m = sizes[1];
   int n = sizes[2];
 
-  CSR csr(m, n, i, j, a, one_based_CSR ? 1 : 0);
+  CSR csr;
+  csr.m = m;
+  csr.n = n;
+  csr.rowptr = i;
+  csr.colidx = j;
+  csr.values = a;
+  csr.base = one_based_CSR ? 1 : 0;
+
   dcoo2crs(&coo, &csr, false /* don't create separate diag data*/);
 }
 
