@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     int *aj, *ai;
     int is_symmetric;
     bool one_based_CSR = false;
-    load_matrix_market(argv[1], &a, &aj, &ai, &is_symmetric, &m, &n, &nnz, one_based_CSR, true /*force-symmetric*/);
+    load_matrix_market(argv[1], &ai, &aj, &a, &is_symmetric, &m, &n, &nnz, one_based_CSR, true /*force-symmetric*/);
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
     double bytes = (double)nnz*4;
 

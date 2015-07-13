@@ -2,7 +2,7 @@ CXX=icpc
 
 SPMP_DIR=$(HOME)/SpMP
 
-CFLAGS = -I. -I$(SPMP_DIR)/.. -fopenmp --std=c++11
+CFLAGS = -I. -I$(SPMP_DIR)/.. -fopenmp --std=c++11 -Wall
 
 ifeq (yes, $(DBG))
   CFLAGS += -g -O0
