@@ -21,7 +21,9 @@ export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 #    end 
 #end
 
-const LIB_PATH = "../lib/libcsr.so"
+const LIB_PATH = libcsr
+#const LIB_PATH = "libcsr.so"
+#const LIB_PATH = "../lib/libcsr.so"
 #const LIB_PATH = "/home/taanders/.julia/v0.4/SparseAccelerator/lib/libcsr.so"
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
