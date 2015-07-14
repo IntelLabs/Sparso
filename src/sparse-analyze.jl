@@ -1910,7 +1910,7 @@ function sparse_analyze(ast,
     dprintln(2, "***************** Sparse analyze *****************")
 
     reorder(ast, lives, loop_info, symbolInfo)
-    insert_knobs(ast, lives, loop_info, symbolInfo)
+    #insert_knobs(ast, lives, loop_info, symbolInfo)
 
     body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
     ast.args[3].args = body_reconstructed
