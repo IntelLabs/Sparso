@@ -22,9 +22,6 @@ export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 #end
 
 const LIB_PATH = libcsr
-#const LIB_PATH = "libcsr.so"
-#const LIB_PATH = "../lib/libcsr.so"
-#const LIB_PATH = "/home/taanders/.julia/v0.4/SparseAccelerator/lib/libcsr.so"
 
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
@@ -628,6 +625,19 @@ function BBsInLoop(lives :: CompilerTools.LivenessAnalysis.BlockLiveness,
     return in_loop
 end
 
+# Map each statement to a Bool: true if the statement in any loop 
+function statementsInLoop(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
+                   loop_info :: CompilerTools.Loops.DomLoops)
+    BB_in_loop = BBsInLoop(lives, loop_info)
+    stmt_BB = Dict{CompilerTools.CFGs.TopLevelStatement, Int}
+    for (j, bb) in lives.cfg.basic_blocks
+        for stmt in bb.statements
+            stmt_BB[stmt] = bb.label
+        end
+    end
+    return BB_in_loop, stmt_BB
+end
+
 function findMmread(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, in_loop :: Dict{Int,Bool})
     # Look for such a statement outside any loop: e.g. A = ((top(getfield))(MatrixMarket,:mmread))("b.mtx")
     for (j,bb) in lives.cfg.basic_blocks
@@ -937,18 +947,63 @@ function addToInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArr
     end 
 end
 
-function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, i)
-#   printSpaces(i)
+function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArrays, seeds, symbolInfo, level)
+#   printSpaces(level)
 #   println("findIA: ", currentNode)
     addToInterDependentArrays(currentNode, LHS, IA, symbolInfo)
     if typeof(currentNode) <: Expr
+        head = currentNode.head
+        if head == :call || head == :call1
+            head = currentNode.head
+            args = currentNode.args
+
+            # The first argument is the function, the others are the arguments for it.
+            arg_types = ntuple(length(args) - 1, i-> typeOfNode(args[i+1], symbolInfo))
+            all_numbers, some_arrays = analyze_types(currentNode.typ, arg_types)
+            if all_numbers || !some_arrays
+                # Result and args are all numbers, or there may be other types (like 
+                # Range{UInt64}) but no regular arrays. No inter-dependent arrays.
+                # Do nothing
+            else
+                module_name, function_name = resolve_module_function_names(args)
+                if function_name == ""
+                    if KEEP_GOING
+                        show(UnresolvedFunction(head, args[1]))
+                        @goto look_at_args
+                    else
+                        throw(UnresolvedFunction(head, args[1]))
+                    end
+                end
+                fd = lookup_function_description(module_name, function_name, arg_types)
+                if fd != nothing
+                    for S in fd.IA
+                        for x in S
+                            if x == 0 # result of the function call
+                                #findInterDependentArrays(currentNode, LHS, IA, seeds, symbolInfo, level+1)
+                            else 
+                                findInterDependentArrays(currentNode.args[x + 1], LHS, IA, seeds, symbolInfo, level+1)
+                            end
+                        end
+                    end
+                else
+                    if KEEP_GOING
+                        show(UndescribedFunction(module_name, function_name, arg_types))
+                        @goto look_at_args
+                    else
+                        throw(UndescribedFunction(module_name, function_name, arg_types))
+                    end
+                end
+            end
+        end
+        
+@label look_at_args
         for c in currentNode.args
-#            printSpaces(i+1)
+#            printSpaces(level+1)
 #            println("c=", c, " type=", typeOfNode(c, symbolInfo))
             if typeOfNode(c, symbolInfo) <: Number
                 push!(seeds, tuple(c, LHS))
             else
-                findInterDependentArrays(c, LHS, IA, seeds, symbolInfo, i+1)
+                findInterDependentArrays(c, LHS, IA, seeds, symbolInfo, level+1)
             end
         end
     end
@@ -987,7 +1042,7 @@ function findInterDependentArrays(region :: Region, symbolInfo :: Dict{Union(Sym
                     push!(IAs[stmt], IA)
                 end
             end
-#            println("###Stmt: ", stmt.expr)
+#            println("###Stmt: ", stmt.tls.expr)
 #            println("  IAs:", IAs[stmt])        
         end
     end
@@ -1691,13 +1746,8 @@ function reorder(funcAST,
     # identifying IAs, and region transformation. So should unify the two cases.
     region, bb_interval = regionFormationBasedOnMmread(lives, loop_info, symbolInfo)
     if region != nothing 
-        reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, nothing, nothing)
-        body_reconstructed = CompilerTools.CFGs.createFunctionBody(lives.cfg)
-        funcAST.args[3].args = body_reconstructed
-    
-        flush(STDOUT::IO)
-    
-        return funcAST
+        reorderRegion(funcAST, lives, loop_info, symbolInfo, region, bb_interval, nothing, nothing)    
+        return
     end
 
     local param = args[1]
@@ -1730,36 +1780,123 @@ function reorder(funcAST,
             end
         end
     end
-    
-    body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
-    funcAST.args[3].args = body_reconstructed
-
-    flush(STDOUT::IO)
-    
-    funcAST
 end
 
-# Try to insert knobs to an expression
-function insert_knobs_to_statement(expr :: Expr, 
-                                   lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
-                                   loop_info :: CompilerTools.Loops.DomLoops)
-    return expr
+type ReferencePoints
+    matrix 
+    symbolInfo :: Dict
+    arguments :: Set
+    
+    ReferencePoints(M, symInfo) = new (M, symInfo, Set())
+end
+
+function context_may_help(ast, ref_points :: ReferencePoints, top_level_number, is_top_level, read)
+    if typeof(ast) <: Expr
+        head = ast.head
+        if head == :call || head == :call1
+            args = ast.args
+            module_name, function_name = resolve_module_function_names(args)
+            if module_name == "" && function_name == "\\" &&
+                length(args) == 3 && 
+                args[2] == ref_points.M &&
+                typeOfNode(args[3], symbolInfo) == Vector
+                    push!(ref_points.arguments, args)
+            end
+        end
+    end
+    return nothing
+end
+
+function insert_knob_initialization(M, body)
+    knob = gensym(string("MKnob", string(M)))
+    stmt = Expr(:(=), knob,
+                Expr(:call, GlobalRef(SparseAccelerator, :create_knob), M))
+    insert!(body.args, 1, stmt)
+    knob
+end
+
+function insert_knob_update(knob, stmt, stmt_BB)
+    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :update_knob), knob)
+    BB = stmt_BB[stmt]
+    for index = 1 : length(BB.cfgbb.statements)
+        if BB.cfgbb.statements[index] == stmt
+            insert!(BB.cfgbb.statements, index, new_stmt)
+            return
+        end
+    end
+    assert(false)
+end
+
+function insert_knob_reference(knob, args)
+    push!(args, knob)
 end
 
 # Analyze the sparse library function calls in the AST of a function, 
 # and insert knobs(context-sensitive info)
-function insert_knobs(ast, 
+function insert_knobs(funcAST, 
                       lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
-                      loop_info :: CompilerTools.Loops.DomLoops)
-  if isa(ast, LambdaStaticData)
-      ast = uncompressed_ast(ast)
-  end
-  assert(isa(ast, Expr) && is(ast.head, :lambda))
-  body = ast.args[3]
-  assert(isa(body, Expr) && is(body.head, :body))
-  for i = 1:length(body.args)
-	insert_knobs_to_statement(body.args[i], lives, loop_info)    
-  end
+                      loop_info :: CompilerTools.Loops.DomLoops,
+                      symbolInfo :: Dict{Union(Symbol,Integer),Any})
+    if (DEBUG_LVL >= 2)
+        println("******** CFG before insert_knobs: ********")
+        show(lives.cfg);
+    end 
+    
+    assert(funcAST.head == :lambda)
+    args = funcAST.args
+    assert(length(args) == 3)
+    assert(typeof(args[3]) == Expr && args[3].head == :body)
+
+    body = funcAST.args[3]
+
+    # Scan all the matrices' defs and uses statements, and build up knobs for 
+    # those related with routines that may take advantage of the context info,
+    # like triangular solver, etc. 
+    defs = Dict{Any, Set} # Map from a variable to a set of statements defining it
+    uses = Dict{Any, Set{Tuple}} # Map from a variable to a set of (statement, args) tuples using it
+    matrices = Set() # The matrices (variables) that should have context info
+    BB_in_loop, stmt_BB = statementsInLoop(lives, loop_info)
+    for stmt in body.args
+        for d in stmt.def
+            if typeOfNode(d, symbolInfo) <: AbstractSparseMatrix
+                push!(defs[d], stmt)
+            end
+        end
+        
+        # Only care about the reference points inside a loop: only there, library
+        # can show benefit of reusing (every iteration)
+        if BB_in_loop(stmt_BB[stmt]) # the stmt' BB is in a loop
+            for u in stmt.use
+                if typeOfNode(u, symbolInfo) <: AbstractSparseMatrix
+                    ref_points = ReferencePoints(u, symbolInfo)
+                    CompilerTools.AstWalker.AstWalk(stmt, context_may_help, ref_points)
+                    if !isempty(ref_points.arguments)
+                        push!(uses[u], (stmt, ref_points.arguments))
+                        push!(matrices, u)
+                    end
+                end
+            end
+        end
+    end 
+
+    for M in matrices
+        # Insert knob initialization at the beginning of the function
+        knob = insert_knob_initialization(M, body)
+
+        # Insert knob update before every statement that defines the matrix
+        for stmt in defs[M]
+            insert_knob_update(knob, stmt, stmt_BB)
+        end
+
+        # Insert knob reference before every statement that uses the matrix
+        for (stmt, arguments) in uses[M]
+            for args in arguments
+                insert_knob_reference(knob, args)
+            end
+        end
+    end
+    
+    funcAST
 end
 
 # Try reordering, then insert knobs.
@@ -1768,9 +1905,15 @@ function sparse_analyze(ast,
                         lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                         loop_info :: CompilerTools.Loops.DomLoops, 
                         symbolInfo :: Dict{Union(Symbol,Integer),Any})
-  dprintln(2, "***************** Sparse analyze *****************")
+    dprintln(2, "***************** Sparse analyze *****************")
 
-  ast1 = reorder(ast, lives, loop_info, symbolInfo)
-#  ast2 = insert_knobs(ast1, lives, loop_info)
-  return ast1
+    reorder(ast, lives, loop_info, symbolInfo)
+    #insert_knobs(ast, lives, loop_info, symbolInfo)
+
+    body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
+    ast.args[3].args = body_reconstructed
+
+    flush(STDOUT::IO)
+    
+    return ast
 end

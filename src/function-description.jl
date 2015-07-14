@@ -126,6 +126,15 @@ const Dot_Desc = FunctionDescription(
     ia(Set([0; 1; 2]))                  # The return value (0) and the arguments (1, 2) are inter-dependent
 )
 
+const dot_Desc = FunctionDescription(
+    "", 
+    "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
+    (Vector, Vector),                 # The arguments must be vectors
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2))                  # The return value (0) and the arguments (1, 2) are inter-dependent
+)
+
 const WAXPBY_Desc = FunctionDescription(
     "SparseAccelerator", 
     "WAXPBY",                         # SparseAccelerator.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
@@ -261,6 +270,15 @@ const eltype_Desc = FunctionDescription(
     IA_NONE                           # No inter-dependent arrays
 )
 
+const inverse_divide_Desc = FunctionDescription(
+    "", 
+    "\\",                              
+    (AbstractSparseMatrix, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    ia(Set(0, 1, 2))                     # The return value (0) and the arguments are inter-dependent
+)
+
 function_descriptions  = [
     PointwiseMultiply_Desc,
     PointwiseMultiply!_Desc,
@@ -272,6 +290,7 @@ function_descriptions  = [
     star1_Desc,
     star2_Desc,
     Dot_Desc,
+    dot_Desc,
     WAXPBY_Desc,
     WAXPBY!_Desc,
     add_vector_Desc,
@@ -286,7 +305,8 @@ function_descriptions  = [
     scale_Desc,
     sum_Desc,
     convert_Desc,
-    eltype_Desc
+    eltype_Desc,
+    inverse_divide_Desc
 ]
 
 function show_function_descriptions()
