@@ -29,6 +29,9 @@ function dprintln(level,msgs...)
     end
 end
 
+# Create a path to libcsr.
+const libcsr = joinpath(dirname(@__FILE__), "..", "lib", "libcsr.so")
+
 include("sparse-analyze.jl")
 include("exceptions.jl")
 
@@ -187,7 +190,7 @@ function checkDistributivityForCall(expr, symbolInfo, distributive)
     #   Expr(:call, :(:call, top(getfield), SparseAccelerator,:SpMV), :A, :x)
     # So the first argument is the function, the others are the arguments for it.
         
-    arg_types = ntuple(length(args) - 1, i-> typeOfNode(args[i+1], symbolInfo))
+    arg_types = ntuple(i-> typeOfNode(args[i+1], symbolInfo), length(args) - 1)
     all_numbers, some_arrays = analyze_types(expr.typ, arg_types)
     if all_numbers || !some_arrays
         # Result and args are all numbers, or there may be other types (like 
