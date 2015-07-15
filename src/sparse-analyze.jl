@@ -464,7 +464,7 @@ function reorderLoop(L, M, lives, symbolInfo)
             bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index].tls.expr, optimize_calls, nothing))
             stmt = bbs[lives.cfg.basic_blocks[bbnum]].statements[stmt_index]
             IAs[stmt] = Set{Any}()
-            seeds = Set{Any} ()
+            seeds = Set{Any}()
             push!(seeds, stmt.expr)
             while !isempty(seeds)
                 seed = pop!(seeds)
@@ -913,7 +913,7 @@ function findIAs(region::Region, symbolInfo)
         for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
             stmt = BB.statements[stmt_index]
             IAs[stmt] = Set{Any}()
-            seeds = Set{Any} ()
+            seeds = Set{Any}()
             push!(seeds, stmt.expr)
             while !isempty(seeds)
                 seed = pop!(seeds)
@@ -1026,7 +1026,7 @@ function findInterDependentArrays(region :: Region, symbolInfo :: Dict{Union(Sym
         for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
             stmt = BB.statements[stmt_index]
             IAs[stmt] = Set{Any}()
-            seeds = Set{Tuple{Any, Bool}} ()
+            seeds = Set{Tuple{Any, Bool}}()
             push!(seeds, tuple(stmt.tls.expr, false))
             while !isempty(seeds)
                 seed = pop!(seeds)
@@ -1787,7 +1787,7 @@ type ReferencePoints
     symbolInfo :: Dict
     arguments :: Set
     
-    ReferencePoints(M, symInfo) = new (M, symInfo, Set())
+    ReferencePoints(M, symInfo) = new(M, symInfo, Set())
 end
 
 function context_may_help(ast, ref_points :: ReferencePoints, top_level_number, is_top_level, read)
