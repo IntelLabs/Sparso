@@ -14,7 +14,7 @@ ifeq (yes, $(SEP))
   CFLAGS += -DSEP -I$(SEP_BASE_DIR)/../include $(SEP_BASE_DIR)/libprog_api.so
 endif
 
-lib: CSR_Interface.cpp Vector.cpp mm_io.cpp SpMV.cpp PageRank.cpp $(SPMP_DIR)/libspmp.a
+lib: CSR_Interface.cpp Vector.cpp mm_io.cpp SpMV.cpp PageRank.cpp knob.cpp $(SPMP_DIR)/libspmp.a
 	$(CXX) $(CFLAGS) -shared -Wl,-soname,libcsr.so  -o libcsr.so -fopenmp -g -I. -fPIC $^
 
 test/CSR_test: CSR_Interface.cpp Vector.cpp mm_io.cpp SpMV.cpp PageRank.cpp test/CSR_test.c $(SPMP_DIR)/libspmp.a
