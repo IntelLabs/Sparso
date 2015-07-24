@@ -3,9 +3,11 @@
 #include <vector>
 #include <assert.h>
 #include "CSR_Interface.h"
+#include "triSolve.hpp"
 #include "SpMP/mm_io.h"
 #include "SpMP/Utils.hpp"
 #include "SpMP/LevelSchedule.hpp"
+#include "SpMP/synk/barrier.hpp"
 
 using namespace SpMP;
 
@@ -66,7 +68,7 @@ private:
 
     friend void ForwardTriangularSolve(
         int numrows, int numcols, int* colptr, int* rowval, double* nzval,
-        const double *y, const double *b, void* fknob);
+        double *y, const double *b, void* fknob);
 };
 
 /**************************** Usage of knobs *****************************/
@@ -110,11 +112,18 @@ void DeleteForwardTriangularSolveKnob(void* fknob)
     ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
     delete f;
 }
-
+  
 void ForwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
-    const double *y, const double *b, void* fknob)
+    double *y, const double *b, void* fknob)
 {
+    synk::Barrier *bar;
+#ifdef __MIC__
+    bar = new synk::Barrier(omp_get_max_threads()/4, 4);
+#else
+    bar = new synk::Barrier(omp_get_max_threads(), 1);
+#endif
+
     CSR *A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
@@ -139,5 +148,5 @@ void ForwardTriangularSolve(
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    //forwardSolve(*A, y, b, *schedule, invPerm);
+    forwardSolve(*A, y, b, *schedule, invPerm, bar);
 }
