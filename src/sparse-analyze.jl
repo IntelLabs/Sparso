@@ -23,6 +23,40 @@ export CSR_ReorderMatrix, reorderVector, reverseReorderVector
 
 const LIB_PATH = libcsr
 
+function fwdTriSolve!(A::SparseMatrixCSC, B::AbstractVecOrMat, fknob)
+  ccall((:ForwardTriangularSolve, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(B), pointer(B), fknob == nothing ? C_NULL : pointer(fknob))
+  return B
+end
+    
+function new_matrix_knob
+  return ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
+end
+
+function increment_matrix_version
+  return ccall((:IncrementMatrixVersion, LIB_PATH), Ptr{Void}, ())
+end
+
+function delete_matrix_knob(mknob)
+    ccall((:DeleteMatrixKnob, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+function add_matrix_knob(fknob, mknob)
+  ccall((:AddMatrixKnob, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), 
+    pointer(fknob), pointer(mkob))
+end
+
+function new_function_knob(fknob_creator)
+  return ccall(fknob_creator, Ptr{Void}, ())
+end
+
+function delete_function_knob(fknob_deletor, fknob)
+    ccall(fknob_deletor, Void, (Ptr{Void},), fknob)
+end
+
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
 function CSR_ReorderMatrix(A :: SparseMatrixCSC, 
@@ -1782,53 +1816,90 @@ function reorder(funcAST,
     end
 end
 
-type ReferencePoints
-    matrix 
-    symbolInfo :: Dict
-    arguments :: Set
-    
-    ReferencePoints(M, symInfo) = new(M, symInfo, Set())
+type CallSite
+    args # args of the call
+    matrices :: Set # matrices in the arguments of the call. They are symbols or GenSym's
+    fknob_creator # A library call to create a function knob for this call site
+    fknob_deletor # A library call to delete the function knob for this call site
 end
 
-function context_may_help(ast, ref_points :: ReferencePoints, top_level_number, is_top_level, read)
+type CallSites
+    sites :: Set{CallSite}
+    symbolInfo :: Dict
+end
+
+function context_may_help(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
     if typeof(ast) <: Expr
         head = ast.head
         if head == :call || head == :call1
             args = ast.args
             module_name, function_name = resolve_module_function_names(args)
-            if module_name == "" && function_name == "\\" &&
+            if module_name == "" && function_name == "fwdTriSolve!" &&
                 length(args) == 3 && 
-                args[2] == ref_points.M &&
-                typeOfNode(args[3], symbolInfo) == Vector
-                    push!(ref_points.arguments, args)
+                typeOfNode(args[2], call_sites.symbolInfo) == SparseMatrixCSC &&
+                typeOfNode(args[3], call_sites.symbolInfo) == Vector
+                    fknob_creator = (:NewForwardTriangularSolveKnob, LIB_PATH)
+                    fknob_deletor = (:DeleteForwardTriangularSolveKnob, LIB_PATH)
+                    site = new CallSite(args, Set(), fknob_creator, fknob_deletor)
+                    if typeof(args[2]) == SymbolNode
+                        push!(site.matrices, args[2].name)
+                    else
+                        push!(site.matrices, args[2])
+                    end
+                    push!(call_sites, site) 
             end
         end
     end
     return nothing
 end
 
-function insert_knob_initialization(M, body)
-    knob = gensym(string("MKnob", string(M)))
-    stmt = Expr(:(=), knob,
-                Expr(:call, GlobalRef(SparseAccelerator, :create_knob), M))
-    insert!(body.args, 1, stmt)
-    knob
-end
-
-function insert_knob_update(knob, stmt, stmt_BB)
-    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :update_knob), knob)
-    BB = stmt_BB[stmt]
+function index_of_stmt(BB, stmt)
     for index = 1 : length(BB.cfgbb.statements)
         if BB.cfgbb.statements[index] == stmt
-            insert!(BB.cfgbb.statements, index, new_stmt)
-            return
+            return index
         end
     end
-    assert(false)
+    return -1
 end
 
-function insert_knob_reference(knob, args)
-    push!(args, knob)
+function insert_new_stmt_before(new_stmt, BB, stmt)
+    index = index_of_stmt(BB, stmt)
+    assert(index > 0)
+    insert!(BB.cfgbb.statements, index, new_stmt)
+end
+
+function insert_new_matrix_knob(M, func_entry_BB, insert_at)
+    mknob = gensym(string("mknob", string(M)))
+    new_stmt = Expr(:(=), mknob,
+                Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob)))
+    insert!(func_entry_BB.statements, insert_at, CompilerTools.CFGs.TopLevelStatement(0, new_stmt))
+    mknob
+end
+
+function insert_increment_matrix_version(mknob, stmt, stmt_BB)
+    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :increment_matrix_version), mknob)
+    insert_new_stmt_before(new_stmt, stmt_BB, stmt)
+end
+
+function insert_new_function_knob(call_site, func_entry_BB, matrix_knobs, insert_at)
+    fknob = GenSym("fknob")
+    new_stmt = Expr(:(=), fknob, 
+                Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob), 
+                    call_site.fknob_creator)
+               )
+    insert!(func_entry_BB.statements, insert_at, CompilerTools.CFGs.TopLevelStatement(0, new_stmt))
+    push!(call_site.args, fknob)
+    fknob
+end
+
+function delete_function_knob(fknob_deletor, fknob, exit_BB, exit_stmt)
+    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob), fknob_deletor, fknob)
+    insert_new_stmt_before(new_stmt, exit_BB, exit_stmt)
+end
+
+function delete_matrix_knob(mknob, exit_BB, exit_stmt)
+    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_matrix_knob), mknob)
+    insert_new_stmt_before(new_stmt, exit_BB, exit_stmt)
 end
 
 # Analyze the sparse library function calls in the AST of a function, 
@@ -1855,7 +1926,9 @@ function insert_knobs(funcAST,
     defs = Dict{Any, Set} # Map from a variable to a set of statements defining it
     uses = Dict{Any, Set{Tuple}} # Map from a variable to a set of (statement, args) tuples using it
     matrices = Set() # The matrices (variables) that should have context info
+    call_sites = CallSites(Set(), symbolInfo)
     BB_in_loop, stmt_BB = statementsInLoop(lives, loop_info)
+    exits = Set()
     for stmt in body.args
         for d in stmt.def
             if typeOfNode(d, symbolInfo) <: AbstractSparseMatrix
@@ -1866,33 +1939,52 @@ function insert_knobs(funcAST,
         # Only care about the reference points inside a loop: only there, library
         # can show benefit of reusing (every iteration)
         if BB_in_loop(stmt_BB[stmt]) # the stmt' BB is in a loop
-            for u in stmt.use
-                if typeOfNode(u, symbolInfo) <: AbstractSparseMatrix
-                    ref_points = ReferencePoints(u, symbolInfo)
-                    CompilerTools.AstWalker.AstWalk(stmt, context_may_help, ref_points)
-                    if !isempty(ref_points.arguments)
-                        push!(uses[u], (stmt, ref_points.arguments))
-                        push!(matrices, u)
-                    end
-                end
-            end
+            CompilerTools.AstWalker.AstWalk(stmt, context_may_help, call_sites)
+        end
+        
+        expr = stmt.expr
+        if typeof(expr) == Expr && (expr.head == :return || expr.head == :throw)
+            push!(exits, stmt)
         end
     end 
 
-    for M in matrices
-        # Insert knob initialization at the beginning of the function
-        knob = insert_knob_initialization(M, body)
+    func_entry_BB = lives.basic_blocks[-1]
+    insert_at = 1
+    matrix_knobs = Dict()
+    for call_site in call_sites
+        for M in call_site.matrices
+            if !haskey(matrix_knobs, M)
+                # Insert knob initialization at the beginning of the function
+                mknob = insert_new_matrix_knob(M, func_entry_BB, insert_at)
+                insert_at = insert_at + 1
+                matrix_knobs[M] = mknob
 
-        # Insert knob update before every statement that defines the matrix
-        for stmt in defs[M]
-            insert_knob_update(knob, stmt, stmt_BB)
-        end
-
-        # Insert knob reference before every statement that uses the matrix
-        for (stmt, arguments) in uses[M]
-            for args in arguments
-                insert_knob_reference(knob, args)
+                # Insert knob update before every statement that defines the matrix
+                for stmt in defs[M]
+                    insert_increment_matrix_version(mknob, stmt, stmt_BB)
+                end
             end
+        end
+    end
+    
+    function_knobs = Set()
+    for call_site in call_sites
+        fknob = insert_new_function_knob(call_site, func_entry_BB, matrix_knobs, insert_at)
+        insert_at = insert_at + 1
+        push!(function_knobs, (fknob, call_site.fnob_deletor))
+        for M in call_site.matrices
+            add_matrix_knob(fknob, matrix_knobs[M])
+        end
+    end
+    
+    # Delete all the knobs at each exit of the function
+    for exit_stmt in exits
+        exit_BB = stmt_BB[exit_stmt]
+        for (fknob, fnob_deletor) in function_knobs
+            delete_function_knob(fnob_deletor, fknob, exit_BB, exit_stmt)
+        end
+        for mknob in values(matrix_knobs)
+            delete_matrix_knob(mknob, exit_BB, exit_stmt)
         end
     end
     
@@ -1908,7 +2000,7 @@ function sparse_analyze(ast,
     dprintln(2, "***************** Sparse analyze *****************")
 
     reorder(ast, lives, loop_info, symbolInfo)
-    #insert_knobs(ast, lives, loop_info, symbolInfo)
+    insert_knobs(ast, lives, loop_info, symbolInfo)
 
     body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
     ast.args[3].args = body_reconstructed

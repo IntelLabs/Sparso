@@ -9,6 +9,7 @@ extern "C" {
 
 void* NewMatrixKnob();
 void  IncrementMatrixVersion(void* mknob);
+void  DeleteMatrixKnob(void* mknob);
 
 void  AddMatrixKnob(void* fknob, void* mknob);
 
@@ -17,7 +18,7 @@ void  DeleteForwardTriangularSolveKnob(void* fknob);
 
 void ForwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
-    const double *y, const double *b, void* fknob);
+    double *y, const double *b, void* fknob);
 
 /******************************************************************************/
 
