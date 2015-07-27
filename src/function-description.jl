@@ -135,6 +135,15 @@ const dot_Desc = FunctionDescription(
     ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
 )
 
+const copy_Desc = FunctionDescription(
+    "", 
+    "copy",                           # 
+    (Vector, ),                       # The arguments must be a vector
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    ia(Set([0; 1]))                   # The return value (0) and the argument are inter-dependent
+)
+
 const WAXPBY_Desc = FunctionDescription(
     "SparseAccelerator", 
     "WAXPBY",                         # SparseAccelerator.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
@@ -279,6 +288,24 @@ const inverse_divide_Desc = FunctionDescription(
     ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
 )
 
+const fwdTriSolve!_Desc = FunctionDescription(
+    "", 
+    "fwdTriSolve!",                              
+    (AbstractSparseMatrix, Vector),
+    Set(2),                           # Argument 2 (the vector) is updated
+    true,                             # The function is distributive
+    ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
+)
+
+const bwdTriSolve!_Desc = FunctionDescription(
+    "", 
+    "bwdTriSolve!",                              
+    (AbstractSparseMatrix, Vector),
+    Set(2),                           # Argument 2 (the vector) is updated
+    true,                             # The function is distributive
+    ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
+)
+
 function_descriptions  = [
     PointwiseMultiply_Desc,
     PointwiseMultiply!_Desc,
@@ -306,7 +333,10 @@ function_descriptions  = [
     sum_Desc,
     convert_Desc,
     eltype_Desc,
-    inverse_divide_Desc
+    inverse_divide_Desc,
+    copy_Desc,
+    fwdTriSolve!_Desc,
+    bwdTriSolve!_Desc
 ]
 
 function show_function_descriptions()
