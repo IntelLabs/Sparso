@@ -32,13 +32,13 @@ function fwdTriSolve!(A::SparseMatrixCSC, B::AbstractVecOrMat, fknob)
   return B
 end
     
-function new_matrix_knob
-  return ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
-end
+#function new_matrix_knob
+#  return ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
+#end
 
-function increment_matrix_version
-  return ccall((:IncrementMatrixVersion, LIB_PATH), Ptr{Void}, ())
-end
+#function increment_matrix_version
+#  return ccall((:IncrementMatrixVersion, LIB_PATH), Ptr{Void}, ())
+#end
 
 function delete_matrix_knob(mknob)
     ccall((:DeleteMatrixKnob, LIB_PATH), Void, (Ptr{Void},), mknob)
@@ -1840,7 +1840,7 @@ function context_may_help(ast, call_sites :: CallSites, top_level_number, is_top
                 typeOfNode(args[3], call_sites.symbolInfo) == Vector
                     fknob_creator = (:NewForwardTriangularSolveKnob, LIB_PATH)
                     fknob_deletor = (:DeleteForwardTriangularSolveKnob, LIB_PATH)
-                    site = new CallSite(args, Set(), fknob_creator, fknob_deletor)
+                    site::CallSite = CallSite(args, Set(), fknob_creator, fknob_deletor)
                     if typeof(args[2]) == SymbolNode
                         push!(site.matrices, args[2].name)
                     else
