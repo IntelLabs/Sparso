@@ -663,7 +663,7 @@ end
 function statementsInLoop(lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                    loop_info :: CompilerTools.Loops.DomLoops)
     BB_in_loop = BBsInLoop(lives, loop_info)
-    stmt_BB = Dict{CompilerTools.CFGs.TopLevelStatement, Int}
+    stmt_BB = Dict{CompilerTools.CFGs.TopLevelStatement, Int}()
     for (j, bb) in lives.cfg.basic_blocks
         for stmt in bb.statements
             stmt_BB[stmt] = bb.label
@@ -1926,7 +1926,7 @@ function insert_knobs(funcAST,
     defs = Dict{Any, Set} # Map from a variable to a set of statements defining it
     uses = Dict{Any, Set{Tuple}} # Map from a variable to a set of (statement, args) tuples using it
     matrices = Set() # The matrices (variables) that should have context info
-    call_sites = CallSites(Set(), symbolInfo)
+    call_sites = CallSites(Set{CallSite}(), symbolInfo)
     BB_in_loop, stmt_BB = statementsInLoop(lives, loop_info)
     exits = Set()
     for stmt in body.args
@@ -1946,7 +1946,7 @@ function insert_knobs(funcAST,
         if typeof(expr) == Expr && (expr.head == :return || expr.head == :throw)
             push!(exits, stmt)
         end
-    end 
+    end
 
     func_entry_BB = lives.basic_blocks[-1]
     insert_at = 1
