@@ -35,10 +35,6 @@ $(SPMP_DIR)/libspmp.a:
 all:	test/CSR_test lib
 libs:	lib
 
-# By some reason, -O3 doesn't work for SpGEMM (FIXME)
-SpGEMM.o: SpGEMM.cpp
-	$(CXX) $(CFLAGS) -O0 -fPIC -c $< -o $@
-
 %.o: %.cpp
 	$(CXX) $(CFLAGS) -fPIC -c $< -o $@
 
