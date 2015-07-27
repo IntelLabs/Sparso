@@ -5,127 +5,161 @@
 using namespace std;
 using namespace SpMP;
 
-template<typename T>
+template<typename T, int BASE = 0>
 void adb_(
-  const T *A_data, const int *A_i, const int *A_j, int nrows_A, int ncols_A,
-  const T *B_data, const int *B_i, const int *B_j, int nrows_B, int ncols_B,
+  const T *A_values, const int *A_rowptr, const int *A_colidx, int A_m, int A_n,
+  const T *B_values, const int *B_rowptr, const int *B_colidx, int B_m, int B_n,
   const double *d,
-  T *C_data, int *C_i, int *C_j, int *cnnz)
+  T *C_data, const int *C_i, const int *C_j)
 {
-  int         ia, ib, ic, ja, jb, num_nonzeros=0;
-  int	       row_start, counter;
-  T              a_entry, b_entry;
-  int         *B_marker;
-
-  if (ncols_A != nrows_B)
+  if (A_n != B_m)
   {
     printf("Warning! incompatible matrix dimensions!\n");
     return;
   }
 
-  B_marker = new int[ncols_B];
+  T *C_temp_array = new T[B_n*omp_get_max_threads()];
 
-  for (ib = 0; ib < ncols_B; ib++)
-    B_marker[ib] = -1;
-
-  C_i[0] = 0;
-  for (ic = 0; ic < nrows_A; ic++)
+#pragma omp parallel
   {
-    for (ia = A_i[ic]; ia < A_i[ic+1]; ia++)
+  int tid = omp_get_thread_num();
+  T *C_temp = C_temp_array + tid*B_n;
+
+#pragma omp for
+  for (int i = 0; i < A_m; i++)
+  {
+    for (int j = C_i[i] - BASE; j < C_i[i + 1] - BASE; j++) {
+      C_temp[C_j[j] - BASE] = 0;
+    }
+    for (int j = A_rowptr[i] - BASE; j < A_rowptr[i + 1] - BASE; j++)
     {
-      ja = A_j[ia];
-      for (ib = B_i[ja]; ib < B_i[ja+1]; ib++)
+      int jcol = A_colidx[j] - BASE;
+      T a_entry = A_values[j]*d[jcol];
+      for (int k = B_rowptr[jcol] - BASE; k < B_rowptr[jcol + 1] - BASE; k++)
       {
-        jb = B_j[ib];
-        if (B_marker[jb] != ic)
-        {
-          B_marker[jb] = ic;
-          num_nonzeros++;
+        int kcol = B_colidx[k] - BASE;
+        C_temp[kcol] += a_entry*B_values[k];
+      }
+    }
+    for (int j = C_i[i] - BASE; j < C_i[i + 1] - BASE; j++) {
+      C_data[j] = C_temp[C_j[j] - BASE];
+    }
+  } // for each row
+  } // omp parallel
+
+  delete[] C_temp_array;
+} // adb_
+
+extern "C" {
+
+CSR_Handle *CSR_ADBInspect(const CSR_Handle *A, const CSR_Handle *B)
+{
+  const int BASE = 1;
+
+  CSR *Acsr = (CSR *)A;
+  CSR *Bcsr = (CSR *)B;
+
+  assert(Acsr->base == BASE);
+  assert(Bcsr->base == BASE);
+
+  if (Acsr->n != Bcsr->m)
+  {
+    printf("Warning! incompatible matrix dimensions!\n");
+    return NULL;
+  }
+
+  CSR *C = new CSR;
+  C->m = Acsr->m;
+  C->n = Bcsr->n;
+  C->rowptr = new int[C->m + 1];
+  C->rowptr[0] = BASE;
+  C->base = BASE;
+
+  int *marker_array = new int[C->n*omp_get_max_threads()];
+
+  int *marker = marker_array; 
+  for (int i = 0; i < C->n; ++i) {
+    marker[i] = -1;
+  }
+
+  int counter = 0;
+  for (int i = 0; i < Acsr->m; i++) {
+    for (int j = Acsr->rowptr[i] - BASE; j < Acsr->rowptr[i + 1] - BASE; j++) {
+      int jcol = Acsr->colidx[j] - BASE;
+      for (int k = Bcsr->rowptr[jcol] - BASE; k < Bcsr->rowptr[jcol + 1] - BASE; k++) {
+        int kcol = Bcsr->colidx[k] - BASE;
+        if (kcol == 1036) {
+          int k = 0;
+        }
+        if (marker[kcol] != i) {
+          marker[kcol] = i;
+          ++counter;
         }
       }
     }
-    C_i[ic+1] = num_nonzeros;
+    C->rowptr[i + 1] = counter + BASE;
+  } // for each row
+
+  C->colidx = new int[counter];
+  C->values = new double[counter];
+
+  for (int i = 0; i < C->n; ++i) {
+    marker[i] = -1;
   }
 
-  *cnnz = num_nonzeros;
-
-  for (ib = 0; ib < ncols_B; ib++)
-    B_marker[ib] = -1;
-
   counter = 0;
-  for (ic = 0; ic < nrows_A; ic++)
-  {
-    row_start = C_i[ic];
-    for (ia = A_i[ic]; ia < A_i[ic+1]; ia++)
-    {
-      ja = A_j[ia];
-      a_entry = A_data[ia]*d[ja];
-      for (ib = B_i[ja]; ib < B_i[ja+1]; ib++)
-      {
-        jb = B_j[ib];
-        b_entry = B_data[ib];
-        if (B_marker[jb] < row_start)
-        {
-          B_marker[jb] = counter;
-          C_j[B_marker[jb]] = jb;
-          C_data[B_marker[jb]] = a_entry*b_entry;
-          counter++;
+  for (int i = 0; i < Acsr->m; i++) {
+    for (int j = Acsr->rowptr[i] - BASE; j < Acsr->rowptr[i + 1] - BASE; j++) {
+      int jcol = Acsr->colidx[j] - BASE;
+      for (int k = Bcsr->rowptr[jcol] - BASE; k < Bcsr->rowptr[jcol + 1] - BASE; k++) {
+        int kcol = Bcsr->colidx[k] - BASE;
+        if (marker[kcol] != i) {
+          marker[kcol] = i;
+          C->colidx[counter] = kcol + BASE;
+          ++counter;
         }
-        else {
-          C_data[B_marker[jb]] += a_entry*b_entry;
-        }
-
       }
     }
 
     bool SORT = true;
     if (SORT) {
-      for (int j = row_start + 1; j < counter; ++j) {
-        int c = C_j[j];
-        double v = C_data[j];
+      for (int j = C->rowptr[i] + 1 - BASE; j < C->rowptr[i + 1] - BASE; j++) {
+        int c = C->colidx[j];
+        double v = C->values[j];
 
         int k = j - 1;
-        while (k >= row_start && C_j[k] > c) {
-          C_j[k + 1] = C_j[k];
-          C_data[k + 1] = C_data[k];
+        while (k >= C->rowptr[i] - BASE && C->colidx[k] > c) {
+          C->colidx[k + 1] = C->colidx[k];
+          C->values[k + 1] = C->values[k];
           --k;
         }
 
-        C_j[k + 1] = c;
-        C_data[k + 1] = v;
+        C->colidx[k + 1] = c;
+        C->values[k + 1] = v;
       }
-    } // SORT
+    }
   } // for each row
 
-  delete[] B_marker;
-} // adb_
+  delete[] marker;
 
-extern "C" {
+  return (CSR_Handle *)C;
+}
 
 void CSR_ADB(CSR_Handle *C, const CSR_Handle *A, const CSR_Handle *B, const double *d)
 {
   CSR *Ccsr = (CSR *)C;
-  int nnzEstimated = Ccsr->rowptr[Ccsr->m] - 1;
-
   CSR *Acsr = (CSR *)A;
   CSR *Bcsr = (CSR *)B;
 
-  Acsr->make0BasedIndexing();
-  Bcsr->make0BasedIndexing();
-  Ccsr->make0BasedIndexing();
+  assert(Ccsr->base == 1);
+  assert(Acsr->base == 1);
+  assert(Bcsr->base == 1);
 
-  int nnzActual = -1;
-  adb_(
+  adb_<double, 1>(
     Acsr->values, Acsr->rowptr, Acsr->colidx, Acsr->m, Acsr->n,
     Bcsr->values, Bcsr->rowptr, Bcsr->colidx, Bcsr->m, Bcsr->n,
     d,
-    Ccsr->values, Ccsr->rowptr, Ccsr->colidx, &nnzActual);
-
-  Acsr->make1BasedIndexing();
-  Bcsr->make1BasedIndexing();
-  Ccsr->make1BasedIndexing();
-
-  assert(nnzActual == nnzEstimated);
+    Ccsr->values, Ccsr->rowptr, Ccsr->colidx);
 }
 
-}
+} // extern "C"
