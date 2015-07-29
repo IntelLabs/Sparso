@@ -180,11 +180,4 @@ void CSR_Make1BasedIndexing(CSR_Handle *A)
   ((CSR *)A)->make1BasedIndexing();
 }
 
-#include "mkl.h"
-
-int CSR_DSS_Create(void *handle, int const *opt)
-{
-  return dss_create(handle, *opt);
-}
-
 } // extern "C"
