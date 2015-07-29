@@ -392,7 +392,7 @@ end
 function CreateCSR(A::SparseMatrixCSC)
   ccall((:CSR_Create, LIB_PATH), Ptr{Void},
        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-       A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+       A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
 end
 
 function DestroyCSR(A::Ptr{Void})

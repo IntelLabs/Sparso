@@ -16,7 +16,16 @@ extern "C" {
 
 CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v, int base)
 {
-  return (CSR_Handle *)(new CSR(numRows, numCols, i, j, v, base));
+  CSR *ret = new CSR;
+
+  ret->m = numRows;
+  ret->n = numCols;
+  ret->rowptr = i;
+  ret->colidx = j;
+  ret->values = v;
+  ret->base = base;
+  
+  return (CSR_Handle *)ret;
 }
 
 int CSR_GetNumRows(CSR_Handle *A)
@@ -32,6 +41,21 @@ int CSR_GetNumCols(CSR_Handle *A)
 int CSR_GetNumNonZeros(CSR_Handle *A)
 {
   return ((CSR *)A)->rowptr[((CSR *)A)->m];
+}
+
+int *CSR_GetRowPtr(CSR_Handle *A)
+{
+  return ((CSR *)A)->rowptr;
+}
+
+int *CSR_GetColIdx(CSR_Handle *A)
+{
+  return ((CSR *)A)->colidx;
+}
+
+double *CSR_GetValues(CSR_Handle *A)
+{
+  return ((CSR *)A)->values;
 }
 
 void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)
@@ -144,5 +168,23 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 #endif
 
 #endif
-    }
 }
+
+void CSR_Make0BasedIndexing(CSR_Handle *A)
+{
+  ((CSR *)A)->make0BasedIndexing();
+}
+
+void CSR_Make1BasedIndexing(CSR_Handle *A)
+{
+  ((CSR *)A)->make1BasedIndexing();
+}
+
+#include "mkl.h"
+
+int CSR_DSS_Create(void *handle, int const *opt)
+{
+  return dss_create(handle, *opt);
+}
+
+} // extern "C"
