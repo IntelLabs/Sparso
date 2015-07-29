@@ -31,6 +31,15 @@ function fwdTriSolve!(A::SparseMatrixCSC, B::AbstractVecOrMat, fknob)
                pointer(B), pointer(B), fknob == nothing ? C_NULL : pointer(fknob))
   return B
 end
+
+function bwdTriSolve!(A::SparseMatrixCSC, B::AbstractVecOrMat, fknob)
+  ccall((:BackwardTriangularSolve, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(B), pointer(B), fknob == nothing ? C_NULL : pointer(fknob))
+  return B
+end
     
 function new_matrix_knob()
   mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
@@ -1835,7 +1844,8 @@ function context_may_help(ast, call_sites :: CallSites, top_level_number, is_top
         if head == :call || head == :call1
             args = ast.args
             module_name, function_name = resolve_module_function_names(args)
-            if module_name == "" && function_name == "fwdTriSolve!" &&
+            if module_name == "" && 
+                (function_name == "fwdTriSolve!" || function_name == "bwdTriSolve!") &&
                 length(args) == 3 && 
                 typeOfNode(args[2], call_sites.symbolInfo) <: SparseMatrixCSC &&
                 typeOfNode(args[3], call_sites.symbolInfo) <: Vector

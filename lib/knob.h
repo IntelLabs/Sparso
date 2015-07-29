@@ -16,7 +16,14 @@ void  AddMatrixKnob(void* fknob, void* mknob);
 void* NewForwardTriangularSolveKnob();
 void  DeleteForwardTriangularSolveKnob(void* fknob);
 
+void* NewBackwardTriangularSolveKnob();
+void  DeleteBackwardTriangularSolveKnob(void* fknob);
+
 void ForwardTriangularSolve(
+    int numrows, int numcols, int* colptr, int* rowval, double* nzval,
+    double *y, const double *b, void* fknob);
+
+void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob);
 

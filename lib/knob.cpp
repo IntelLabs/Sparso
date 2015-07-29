@@ -71,6 +71,38 @@ private:
         double *y, const double *b, void* fknob);
 };
 
+class BackwardTriangularSolveKnob : public FunctionKnob {
+public:
+    BackwardTriangularSolveKnob() {
+        matrix_version = INVALID_VERSION; // No valid private info built yet
+        schedule = NULL;
+    }
+    
+    ~BackwardTriangularSolveKnob() {
+        if (schedule != NULL) {
+            delete schedule;
+        }
+    }
+
+    void UpdateMatrixVersion(int new_version) {
+        matrix_version = new_version;
+        
+        // Free all info based on the old matrix
+        if (schedule != NULL) {
+            delete schedule;
+        }
+    }
+
+private:
+    // Info private to the backward triangular solver.
+    int            matrix_version; // version of the matrix when the private info is built
+    LevelSchedule* schedule;
+
+    friend void BackwardTriangularSolve(
+        int numrows, int numcols, int* colptr, int* rowval, double* nzval,
+        double *y, const double *b, void* fknob);
+};
+
 /**************************** Usage of knobs *****************************/
 void* NewMatrixKnob()
 {
@@ -113,6 +145,18 @@ void DeleteForwardTriangularSolveKnob(void* fknob)
     delete f;
 }
 
+void* NewBackwardTriangularSolveKnob()
+{
+    BackwardTriangularSolveKnob* f = new BackwardTriangularSolveKnob;
+    return (void*)f;
+}
+
+void DeleteBackwardTriangularSolveKnob(void* fknob)
+{
+    BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
+    delete f;
+}
+
 synk::Barrier *bar;
   
 void ForwardTriangularSolve(
@@ -149,4 +193,40 @@ void ForwardTriangularSolve(
         
     int* invPerm = schedule->threadContToOrigPerm;
     forwardSolve(*A, y, b, *schedule, invPerm, bar);
+}
+
+void BackwardTriangularSolve(
+    int numrows, int numcols, int* colptr, int* rowval, double* nzval,
+    double *y, const double *b, void* fknob)
+{
+#ifdef __MIC__
+    bar = new synk::Barrier(omp_get_max_threads()/4, 4);
+#else
+    bar = new synk::Barrier(omp_get_max_threads(), 1);
+#endif
+    CSR *A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+    LevelSchedule * schedule;
+    if (fknob == NULL) {
+        schedule = new LevelSchedule;
+        schedule->constructTaskGraph(*A);
+    } else {
+        BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
+        assert(size(f->mknobs) == 1);
+        MatrixKnob* m = f->mknobs[0];
+        assert(m != NULL);
+    
+        if ((f->matrix_version == m->matrix_version) &&
+            (f->schedule != NULL)) {
+            schedule = f->schedule;
+        } else {
+            // Either no schedule, or is out of date
+            f->UpdateMatrixVersion(m->matrix_version);
+            schedule = new LevelSchedule;
+            schedule->constructTaskGraph(*A);
+            f->schedule = schedule;
+        }
+    }
+        
+    int* invPerm = schedule->threadContToOrigPerm;
+    backwardSolve(*A, y, b, *schedule, invPerm, bar);
 }
