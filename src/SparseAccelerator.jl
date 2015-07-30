@@ -13,12 +13,20 @@ DEBUG_LVL=0
 # that we can fix them collectively.
 KEEP_GOING = false
 
+# if true, for a loop region containing no other more expensive sparse matrix operations
+# than SpMV, turn on reordering only when spmv is likely to be sped up by reordering 
+USE_SPMV_REORDERING_POTENTIAL_MODEL = false
+
 function set_debug_level(x)
     global DEBUG_LVL = x
 end
 
 function set_keep_going(x :: Bool)
     global KEEP_GOING = x
+end
+
+function set_use_spmv_reordering_potential_model(x :: Bool)
+    global USE_SPMV_REORDERING_POTENTIAL_MODEL = x
 end
  
 # A debug print routine.
@@ -392,7 +400,7 @@ end
 function CreateCSR(A::SparseMatrixCSC)
   ccall((:CSR_Create, LIB_PATH), Ptr{Void},
        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-       A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+       A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
 end
 
 function DestroyCSR(A::Ptr{Void})
@@ -454,6 +462,32 @@ SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector) = SpMV(alpha, A, x, z
 
 # A*x
 SpMV(A::SparseMatrixCSC, x::Vector) = SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
+
+function SpMV_conditional_reordering(A::SparseMatrixCSC, x::Vector, reorder_done, beneficial)
+    if reorder_done
+        return SpMV(A, x)
+    end
+    time1 = time()
+    y = SpMV(A, x)
+    time2 = time()
+    nnz = size(A.nzval, 1)
+    rows = A.m
+    SpMV_bandwidth = (nnz * 12 + rows * 3 * 8) / (time2 - time1) * 128 / 10 ^ 9
+    machine_peak_bandwidth = 60
+    if abs(SpMV_bandwidth - machine_peak_bandwidth) > 15
+        beneficial[1] = true
+    end
+    return y
+end
+
+function init_conditional_reordering(beneficial, reorder_done)
+    # Benefical can be just a scalar var. But we will treat it as a 1-element array
+    # so that we do not have difficulty in changing it in calling 
+    # SpMV_conditional_reordering
+    beneficial = Vector{Bool}()
+    push!(beneficial, false)
+    reorder_done = false
+end
 
 function WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
   assert(length(x) == length(y))

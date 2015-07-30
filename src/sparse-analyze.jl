@@ -1593,6 +1593,36 @@ function nodeLiveIn(node::RMDNode, BB :: CompilerTools.LivenessAnalysis.BasicBlo
     end
 end
 
+function discover_SpMVs(lives, loop_info, symbolInfo, region)
+    BB_in_loop = BBsInLoop(lives, loop_info)
+    SpMVs = CallSites(Set{CallSite}(), symbolInfo)
+    for interval in region.intervals
+        BB = interval.BB
+        for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
+            stmt = BB.statements[stmt_index]
+            expr = stmt.expr
+            if typeof(expr) != Expr
+                continue
+            end
+            
+            # Only care about the reference points inside a loop: only there, library
+            # can show benefit of reordering
+            if BB_in_loop[BB.label] # the stmt' BB is in a loop
+                CompilerTools.AstWalker.AstWalk(expr, catch_SpMVs, SpMVs)
+            end
+        end
+    end
+    SpMVs
+end
+
+function add_reordering_conditions_to_SpMVs(SpMVs, reorder_done, beneficial)
+    for site in SpMVs.sites
+        func = CompilerTools.LivenessAnalysis.TypedExpr(Function, 
+            :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
+        site.ast.args = [func, site.ast.args[2:3], reorder_done, beneficial]
+    end
+end
+
 function regionTransformation(funcAST, 
                        lives :: CompilerTools.LivenessAnalysis.BlockLiveness, 
                        loop_info :: CompilerTools.Loops.DomLoops, 
@@ -1675,6 +1705,22 @@ function regionTransformation(funcAST,
         end
     end
 
+    beneficial = gensym("beneficial")
+    reorder_done = gensym("reorder_done")
+    conditional_reordering = false
+    if region.mmread_stmt_idx == 0  # A loop region
+        if USE_SPMV_REORDERING_POTENTIAL_MODEL
+            SpMVs = discover_SpMVs(lives, loop_info, symbolInfo, region)
+            if !isempty(SpMVs)
+                # TODO: turn on conditional reordering only when SpMVs are dominating
+                # the execution time of the loop region, for example, when there is no other 
+                # more expensive matrix operations than SpMVs
+                conditional_reordering = true
+                add_reordering_conditions_to_SpMVs(SpMVs, reorder_done, beneficial)
+            end            
+        end
+    end
+
     if region.mmread_stmt_idx != 0
         i = 1
         for new_stmt in new_stmts_before_region
@@ -1682,13 +1728,46 @@ function regionTransformation(funcAST,
             i += 1
         end
     else 
-        (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, true, back_edge)
-        lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
-        for new_stmt in new_stmts_before_region
-            CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, new_stmt)
-        end
-        if new_goto_stmt != nothing
-          push!(new_bb.statements, new_goto_stmt)
+        # if turning on the spmv potential model, we have to conditionally turn reordering on at the 
+        # start of the loop body. Before the loop, initialize the conditions 
+        if conditional_reordering
+            # Make a new BB before the loop for initializing conditions
+            exclude_back_edge = true # make the new BB to be outside the loop body
+            (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, exclude_back_edge, back_edge)
+            lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
+            new_init_stmt = TopLevelStatement(-1, 
+                Expr(:call, GlobalRef(SparseAccelerator, :init_conditional_reordering), 
+                    beneficial, reorder_done))
+            push!(new_bb.statements, new_init_stmt)
+            if new_goto_stmt != nothing
+              push!(new_bb.statements, new_goto_stmt)
+            end
+            
+            # Make a new BB in the loop for conditional reordering
+            exclude_back_edge = false # make the new BB to be in the loop body
+            (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, exclude_back_edge, back_edge)
+            lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
+
+            new_goto_stmt = TopLevelStatement(-1, Expr(:gotoifnot, 
+                Expr(:&&, Expr(call, TopNode(:arrayref), beneficial, 1), 
+                    Expr(:call, :!, reorder_done)), region.first_BB.cfgbb.label))
+            push!(new_bb.statements, new_goto_stmt)
+            for new_stmt in new_stmts_before_region
+                CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, new_stmt)
+            end
+            reorder_done_stmt = TopLevelStatement(-1, Expr(:=, 
+                reorder_done, true))
+            push!(new_bb.statements, reorder_done_stmt)
+        else
+            exclude_back_edge = true # make the new BB to be outside the loop body
+            (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, exclude_back_edge, back_edge)
+            lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
+            for new_stmt in new_stmts_before_region
+                CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, new_stmt)
+            end
+            if new_goto_stmt != nothing
+              push!(new_bb.statements, new_goto_stmt)
+            end
         end
     end
 
@@ -1728,6 +1807,11 @@ function regionTransformation(funcAST,
                     reorderVector(sym, P, new_stmts)
                 end
             end
+            
+            if conditional_reordering && !isempty(new_stmts)
+                new_stmt = TopLevelStatement(-1, Expr(:gotoifnot, reorder_done, succ.bbnum))
+                insert!(new_stmts, 1, new_stmt)
+            end
             insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
 
             # compute what to be reverse reordered on this edge
@@ -1739,6 +1823,10 @@ function regionTransformation(funcAST,
                 else
                     reverseReorderVector(sym, P, new_stmts)
                 end
+            end
+            if conditional_reordering && !isempty(new_stmts)
+                new_stmt = TopLevelStatement(-1, Expr(:gotoifnot, reorder_done, succ.bbnum))
+                insert!(new_stmts, 1, new_stmt)
             end
             insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
         end
@@ -1827,7 +1915,7 @@ function reorder(funcAST,
 end
 
 type CallSite
-    args # args of the call
+    ast # ast of the call
     matrices :: Set # matrices in the arguments of the call. They are symbols or GenSym's
     fknob_creator # A library call to create a function knob for this call site
     fknob_deletor # A library call to delete the function knob for this call site
@@ -1851,13 +1939,30 @@ function context_may_help(ast, call_sites :: CallSites, top_level_number, is_top
                 typeOfNode(args[3], call_sites.symbolInfo) <: Vector
                     fknob_creator = (:NewForwardTriangularSolveKnob, LIB_PATH)
                     fknob_deletor = (:DeleteForwardTriangularSolveKnob, LIB_PATH)
-                    site::CallSite = CallSite(args, Set(), fknob_creator, fknob_deletor)
+                    site::CallSite = CallSite(ast, Set(), fknob_creator, fknob_deletor)
                     if typeof(args[2]) == SymbolNode
                         push!(site.matrices, args[2].name)
                     else
                         push!(site.matrices, args[2])
                     end
                     push!(call_sites.sites, site) 
+            end
+        end
+    end
+    return nothing
+end
+
+function catch_SpMVs(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
+    if typeof(ast) <: Expr
+        head = ast.head
+        if head == :call || head == :call1
+            args = ast.args
+            module_name, function_name = resolve_module_function_names(args)
+            if module_name == "" && function_name == "*" &&
+                length(args) == 3 && 
+                typeOfNode(args[2], call_sites.symbolInfo) <: SparseMatrixCSC &&
+                typeOfNode(args[3], call_sites.symbolInfo) <: Vector
+                    push!(call_sites.sites, ast) 
             end
         end
     end
@@ -1905,7 +2010,7 @@ function insert_new_function_knob(call_site, func_entry_BB, matrix_knobs, insert
                     call_site.fknob_creator)
                )
     insert!(func_entry_BB.statements, insert_at, CompilerTools.CFGs.TopLevelStatement(0, new_stmt))
-    push!(call_site.args, fknob)
+    call_site.ast.args = [call_site.ast.args[1:length(call_site.ast.args)], fknob]
     fknob
 end
 
