@@ -1,6 +1,7 @@
 module SparseAccelerator
 
 using CompilerTools
+using CompilerTools.LambdaHandling
 
 include("alias-analysis.jl")
 include("function-description.jl")
@@ -109,19 +110,17 @@ end
 function initSymbol2TypeDict(expr)
     assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
 
-    local varinfo = expr.args[2][1]
-    
+    lambdaInfo = lambdaExprToLambdaInfo(expr)
+
     symbolInfo = Dict{Union(Symbol, Integer), Any}()
-    for i = 1:length(varinfo)
-        symbolInfo[varinfo[i][1]] = varinfo[i][2]
-        dprintln(4,"Add symbolInfo: ", varinfo[i][1], "==>", symbolInfo[varinfo[i][1]])
+    for i in lambdaInfo.var_defs
+        symbolInfo[i[2].name] = i[2].typ
+        dprintln(4,"Add symbolInfo: ", i[2].name, "==>", symbolInfo[i[2].name])
     end
     
     # Add GenSym's types. We do not have to walk the AST. Instead, lambda has that info
-    # CompilerTools.AstWalker.AstWalk(expr.args[3], memoize_GenSym_types, symbolInfo)
-    local gensym_types = expr.args[2][4]
-    for id = 1:length(gensym_types)
-        symbolInfo[id - 1] = gensym_types[id] # GenSym id starts from 0
+    for id = 1:length(lambdaInfo.gen_sym_typs)
+        symbolInfo[id - 1] = lambdaInfo.gen_sym_typs[id] # GenSym id starts from 0
         dprintln(4,"Add GenSym symbolInfo: ", id - 1, "==>", symbolInfo[id - 1])
     end
 
