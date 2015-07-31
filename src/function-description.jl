@@ -64,7 +64,7 @@ const PointwiseDivide_Desc = FunctionDescription(
 )
 
 const PointwiseDivide1_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "./",           
     (VECTOR_OR_NUM, Vector),          # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
@@ -91,7 +91,7 @@ const SpMV_Desc = FunctionDescription(
 )
 
 const star_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "*",                              # *(A::SparseMatrixCSC, x::Vector)
     (SparseMatrixCSC, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -100,7 +100,7 @@ const star_Desc = FunctionDescription(
 )
 
 const star1_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "*",                              
     (Number, SparseMatrixCSC, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -109,7 +109,7 @@ const star1_Desc = FunctionDescription(
 )
 
 const star2_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "*",           
     (Number, Vector),                 
     UPDATED_NONE,                     # No argument is updated
@@ -127,7 +127,7 @@ const Dot_Desc = FunctionDescription(
 )
 
 const dot_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
@@ -136,7 +136,7 @@ const dot_Desc = FunctionDescription(
 )
 
 const copy_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "copy",                           # 
     (Vector, ),                       # The arguments must be a vector
     UPDATED_NONE,                     # No argument is updated
@@ -163,7 +163,7 @@ const WAXPBY!_Desc = FunctionDescription(
 )
 
 const add_vector_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "+",                              
     (VECTOR_OR_NUM, VECTOR_OR_NUM),
     UPDATED_NONE,                     # No argument is updated
@@ -172,7 +172,7 @@ const add_vector_Desc = FunctionDescription(
 )
 
 const add_matrix_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "+",                              
     (MATRIX_OR_NUM, MATRIX_OR_NUM),
     UPDATED_NONE,                     # No argument is updated
@@ -181,7 +181,7 @@ const add_matrix_Desc = FunctionDescription(
 )
 
 const sub_vector_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "-",                              
     (VECTOR_OR_NUM, VECTOR_OR_NUM),
     UPDATED_NONE,                     # No argument is updated
@@ -190,7 +190,7 @@ const sub_vector_Desc = FunctionDescription(
 )
 
 const norm_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "norm",                              
     (AbstractArray, ),
     UPDATED_NONE,                     # No argument is updated
@@ -199,7 +199,7 @@ const norm_Desc = FunctionDescription(
 )
 
 const spones_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "spones",                              
     (AbstractSparseMatrix, ),
     UPDATED_NONE,                     # No argument is updated
@@ -208,7 +208,7 @@ const spones_Desc = FunctionDescription(
 )
 
 const size_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "size",                              
     (AbstractArray, Number),
     UPDATED_NONE,                     # No argument is updated
@@ -217,7 +217,7 @@ const size_Desc = FunctionDescription(
 )
 
 const Array_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "Array",                          # Array(Any, Integer)
     (Any, Integer),
     UPDATED_NONE,                     # No argument is updated
@@ -226,7 +226,7 @@ const Array_Desc = FunctionDescription(
 )
 
 const fill!_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "fill!",                          
     (AbstractArray, Number),
     Set(1),                           # argument 1 is updated
@@ -235,7 +235,7 @@ const fill!_Desc = FunctionDescription(
 )
 
 const max_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "max",                          
     (Vector, Number),
     UPDATED_NONE,                     # No argument is updated
@@ -244,7 +244,7 @@ const max_Desc = FunctionDescription(
 )
 
 const scale_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "scale",                          
     (AbstractMatrix, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -253,7 +253,7 @@ const scale_Desc = FunctionDescription(
 )
 
 const sum_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "sum",                          
     (AbstractArray, ),
     UPDATED_NONE,                     # No argument is updated
@@ -262,7 +262,7 @@ const sum_Desc = FunctionDescription(
 )
 
 const convert_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "convert",                          
     (Type{Array{Float64,1}}, Vector), # Cannot use Type{Vector} as Type{Array{Float64,1}} <: Type{Vector} is false! but Type{Array{Float64,1}} <: Type{Array{Float64,1}} is true! Not sure why
     UPDATED_NONE,                     # No argument is updated
@@ -271,7 +271,7 @@ const convert_Desc = FunctionDescription(
 )
 
 const eltype_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "eltype",                          
     (AbstractArray, ), 
     UPDATED_NONE,                     # No argument is updated
@@ -280,7 +280,7 @@ const eltype_Desc = FunctionDescription(
 )
 
 const inverse_divide_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "\\",                              
     (AbstractSparseMatrix, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -289,7 +289,7 @@ const inverse_divide_Desc = FunctionDescription(
 )
 
 const fwdTriSolve!_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "fwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -298,7 +298,7 @@ const fwdTriSolve!_Desc = FunctionDescription(
 )
 
 const bwdTriSolve!_Desc = FunctionDescription(
-    "", 
+    "Main", 
     "bwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -344,13 +344,20 @@ function show_function_descriptions()
 end
 
 function lookup_function_description(module_name :: String, function_name :: String, argument_types :: Tuple)
-    println("lookup_function_description: ", module_name, " ", function_name, " ", argument_types, " ", typeof(argument_types))
     for desc in function_descriptions
-        println("desc: ", desc.module_name, " ", desc.function_name, " ", desc.argument_types, " ", typeof(desc.argument_types))
         if module_name    == desc.module_name   && 
            function_name  == desc.function_name &&
-           argument_types <: desc.argument_types
-            return desc
+           length(argument_types) == length(desc.argument_types)
+            found = true
+            for i in 1:length(argument_types) 
+               if !(argument_types[i] <: desc.argument_types[i])
+                   found = false
+                   break
+                end
+            end
+            if found
+               return desc
+            end
         end
     end
     return nothing

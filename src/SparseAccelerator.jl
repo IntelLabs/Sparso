@@ -109,7 +109,8 @@ end
 function initSymbol2TypeDict(expr)
     assert(expr.head == :lambda) # (:lambda, {param, meta@{localvars, types, freevars}, body})
 
-    local varinfo = expr.args[2][2]
+    local varinfo = expr.args[2][1]
+    
     symbolInfo = Dict{Union(Symbol, Integer), Any}()
     for i = 1:length(varinfo)
         symbolInfo[varinfo[i][1]] = varinfo[i][2]
@@ -191,6 +192,8 @@ function resolve_module_function_names(call_args)
     elseif  isa(call_args[1], Expr) &&
             call_args[1].head == :call # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
         return resolve_module_function_names(call_args[1].args)
+    elseif isdefined(:GlobalRef) && typeof(call_args[1]) == GlobalRef
+        return string(call_args[1].mod), string(call_args[1].name)
     end
     module_name, function_name
 end

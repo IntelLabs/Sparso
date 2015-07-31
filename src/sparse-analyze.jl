@@ -1002,7 +1002,7 @@ function findInterDependentArrays(currentNode, LHS::Bool, IA::InterDependentArra
             args = currentNode.args
 
             # The first argument is the function, the others are the arguments for it.
-            arg_types = ntuple(length(args) - 1, i-> typeOfNode(args[i+1], symbolInfo))
+            arg_types = ntuple(i-> typeOfNode(args[i+1], symbolInfo), length(args) - 1)
             all_numbers, some_arrays = analyze_types(currentNode.typ, arg_types)
             if all_numbers || !some_arrays
                 # Result and args are all numbers, or there may be other types (like 
@@ -1600,14 +1600,14 @@ function discover_SpMVs(lives, loop_info, symbolInfo, region)
         BB = interval.BB
         for stmt_index = interval.from_stmt_idx : interval.to_stmt_idx
             stmt = BB.statements[stmt_index]
-            expr = stmt.expr
+            expr = stmt.tls.expr
             if typeof(expr) != Expr
                 continue
             end
             
             # Only care about the reference points inside a loop: only there, library
             # can show benefit of reordering
-            if BB_in_loop[BB.label] # the stmt' BB is in a loop
+            if BB_in_loop[BB.cfgbb.label] # the stmt' BB is in a loop
                 CompilerTools.AstWalker.AstWalk(expr, catch_SpMVs, SpMVs)
             end
         end
@@ -1618,8 +1618,8 @@ end
 function add_reordering_conditions_to_SpMVs(SpMVs, reorder_done, beneficial)
     for site in SpMVs.sites
         func = CompilerTools.LivenessAnalysis.TypedExpr(Function, 
-            :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
-        site.ast.args = [func, site.ast.args[2:3], reorder_done, beneficial]
+            :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV_conditional_reordering))
+        site.ast.args = [func; site.ast.args[2:3]; reorder_done; beneficial]
     end
 end
 
@@ -1711,7 +1711,7 @@ function regionTransformation(funcAST,
     if region.mmread_stmt_idx == 0  # A loop region
         if USE_SPMV_REORDERING_POTENTIAL_MODEL
             SpMVs = discover_SpMVs(lives, loop_info, symbolInfo, region)
-            if !isempty(SpMVs)
+            if !isempty(SpMVs.sites)
                 # TODO: turn on conditional reordering only when SpMVs are dominating
                 # the execution time of the loop region, for example, when there is no other 
                 # more expensive matrix operations than SpMVs
@@ -1735,7 +1735,7 @@ function regionTransformation(funcAST,
             exclude_back_edge = true # make the new BB to be outside the loop body
             (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, exclude_back_edge, back_edge)
             lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
-            new_init_stmt = TopLevelStatement(-1, 
+            new_init_stmt = CompilerTools.CFGs.TopLevelStatement(-1, 
                 Expr(:call, GlobalRef(SparseAccelerator, :init_conditional_reordering), 
                     beneficial, reorder_done))
             push!(new_bb.statements, new_init_stmt)
@@ -1748,14 +1748,14 @@ function regionTransformation(funcAST,
             (new_bb, new_goto_stmt) = CompilerTools.CFGs.insertBefore(lives.cfg, region.first_BB.cfgbb.label, exclude_back_edge, back_edge)
             lives.basic_blocks[new_bb] = CompilerTools.LivenessAnalysis.BasicBlock(new_bb)
 
-            new_goto_stmt = TopLevelStatement(-1, Expr(:gotoifnot, 
-                Expr(:&&, Expr(call, TopNode(:arrayref), beneficial, 1), 
+            new_goto_stmt = CompilerTools.CFGs.TopLevelStatement(-1, Expr(:gotoifnot, 
+                Expr(:&&, Expr(:call, TopNode(:arrayref), beneficial, 1), 
                     Expr(:call, :!, reorder_done)), region.first_BB.cfgbb.label))
             push!(new_bb.statements, new_goto_stmt)
             for new_stmt in new_stmts_before_region
                 CompilerTools.CFGs.addStatementToEndOfBlock(lives.cfg, new_bb, new_stmt)
             end
-            reorder_done_stmt = TopLevelStatement(-1, Expr(:=, 
+            reorder_done_stmt = CompilerTools.CFGs.TopLevelStatement(-1, Expr(:(=), 
                 reorder_done, true))
             push!(new_bb.statements, reorder_done_stmt)
         else
@@ -1809,7 +1809,7 @@ function regionTransformation(funcAST,
             end
             
             if conditional_reordering && !isempty(new_stmts)
-                new_stmt = TopLevelStatement(-1, Expr(:gotoifnot, reorder_done, succ.bbnum))
+                new_stmt = Expr(:gotoifnot, reorder_done, succ.bbnum)
                 insert!(new_stmts, 1, new_stmt)
             end
             insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
@@ -1825,7 +1825,7 @@ function regionTransformation(funcAST,
                 end
             end
             if conditional_reordering && !isempty(new_stmts)
-                new_stmt = TopLevelStatement(-1, Expr(:gotoifnot, reorder_done, succ.bbnum))
+                new_stmt = Expr(:gotoifnot, reorder_done, succ.bbnum)
                 insert!(new_stmts, 1, new_stmt)
             end
             insertStatementsOnEdge(lives, new_stmts, node, BB, succ, succ_BB)
@@ -1851,7 +1851,7 @@ function reorderRegion(funcAST,
         show_IAs(region, IAs, "Inter-dependent arrays")
     end
     regionTransformation(funcAST, lives, loop_info, symbolInfo, region, bb_interval, IAs, M, back_edge)
-    optimizeRegionCalls(region)
+    #optimizeRegionCalls(region)
 end
 
 function reorder(funcAST, 
@@ -1958,11 +1958,12 @@ function catch_SpMVs(ast, call_sites :: CallSites, top_level_number, is_top_leve
         if head == :call || head == :call1
             args = ast.args
             module_name, function_name = resolve_module_function_names(args)
-            if module_name == "" && function_name == "*" &&
+            if module_name == "Main" && function_name == "*" &&
                 length(args) == 3 && 
                 typeOfNode(args[2], call_sites.symbolInfo) <: SparseMatrixCSC &&
                 typeOfNode(args[3], call_sites.symbolInfo) <: Vector
-                    push!(call_sites.sites, ast) 
+                    site::CallSite = CallSite(ast, Set(), nothing, nothing)
+                    push!(call_sites.sites, site) 
             end
         end
     end
@@ -2135,8 +2136,8 @@ function sparse_analyze(ast,
                         symbolInfo :: Dict{Union(Symbol,Integer),Any})
     dprintln(2, "***************** Sparse analyze *****************")
 
-#    reorder(ast, lives, loop_info, symbolInfo)
-    insert_knobs(ast, lives, loop_info, symbolInfo)
+    reorder(ast, lives, loop_info, symbolInfo)
+    #insert_knobs(ast, lives, loop_info, symbolInfo)
 
     body_reconstructed   = CompilerTools.CFGs.createFunctionBody(lives.cfg)
     ast.args[3].args = body_reconstructed
