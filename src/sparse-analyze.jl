@@ -332,7 +332,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         x = ast.args[4]
         if A.typ <: SparseMatrixCSC && x.typ <: Vector
           ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
-          return ast
+          return [ast]
         end
       elseif length(ast.args) == 6
         alpha = ast.args[2]
@@ -342,7 +342,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         y = ast.args[6]
         if A.typ <: SparseMatrixCSC && x.typ <: Vector
           ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!))
-          return ast
+          return [ast]
         end
       end
     elseif ast.args[1] == :dot
@@ -357,7 +357,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         dprintln(3,"optimize_calls converting to SparseAccelerator.Dot")
         ast.args[1] = CompilerTools.LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:Dot))
       end
-      return ast
+      return [ast]
     elseif ast.args[1] == :(+) || ast.args[1] == :(-)
       if length(ast.args) > 2   # exclude processing for unary -
         dprintln(3,"optimize_calls found + or -")
@@ -419,7 +419,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
           dprintln(3,"optimize_calls up-leveling the SpMV call")
           ast.args = ast.args[2].args
         end
-        return ast
+        return [ast]
       end
     elseif ast.args[1] == :(*)
       dprintln(3,"optimize_calls found *")
@@ -444,7 +444,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
         dprintln(3,"optimize_calls up-leveling the SpMV call")
         ast.args = ast.args[2].args
       end
-      return ast
+      return [ast]
     end
   elseif asttyp == Expr && ast.head == :(=)
     dprintln(3,"optimize_calls found = ", ast)
@@ -459,7 +459,7 @@ function optimize_calls(ast, state, top_level_number, is_top_level, read)
       splice!(ast.args[2].args, 2:5, [ast.args[1]; ast.args[2].args[2:5]])
       ast = ast.args[2]
     end
-    return ast
+    return [ast]
   end
   return nothing
 end
