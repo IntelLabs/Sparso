@@ -7,8 +7,11 @@ typealias CFG        CompilerTools.CFGs.CFG
 typealias Loops      CompilerTools.Loops.DomLoops
 
 # Options controlling debugging, performance (library choice, cost model), etc.
+@doc """ Enable Sparse Accelerator """
+const SA_ENABLE = 1
+
 @doc """ Print verbose dump """
-const SA_VERBOSE = 1
+const SA_VERBOSE = 2
 
 @doc """ Use Jula's default sparse matrix functions """
 const SA_USE_JULIA = 8
@@ -27,6 +30,7 @@ const SA_USE_SPMP = 32
 const SA_REORDER_WHEN_BENEFICIAL = 64
 
 # The internal booleans corresponding to the above options
+sparse_acc_enabled      = false
 verbosity               = 0
 use_Julia               = false
 use_MKL                 = false
@@ -42,8 +46,16 @@ last one of them wins.
 """
 function set_options(args...)
     for arg in args
-        if arg == SA_VERBOSE 
-            global verbosity = 1;
+        if arg == SA_ENABLE
+            if !sparse_acc_enabled
+                # Insert sparse accelerator as 1 pass into the optimization framework
+                sparse_accelerator_pass = OptFramework.optPass(SparseAccelerator.entry, true)
+                OptFramework.setOptPasses([sparse_accelerator_pass])
+            end
+            global sparse_acc_enabled = true
+        elseif arg == SA_VERBOSE 
+            global verbosity = 1
+            OptFramework.set_debug_level(3)
         elseif arg == SA_USE_JULIA 
             global use_Julia = true; global use_MKL = false; global use_SPMP = false
         elseif arg == SA_USE_MKL 
@@ -151,7 +163,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Do all analyses, and put their intended transformation code sequence
         # into a list. Then transform the code with the list.
         actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-        code_transformation(actions)
+        code_transformation(actions, func_ast, symbol_info, liveness, cfg, loop_info)
     catch ex
         # Return the original AST without any change
         func_ast
@@ -159,7 +171,3 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     
     dprintln(1, 0, "**********************************************************************")
 end
-
-# Insert sparse accelerator as 1 pass into the optimization framework
-sparse_accelerator_pass = OptFramework.optPass(SparseAccelerator.entry, true)
-OptFramework.setOptPasses([sparse_accelerator_pass])

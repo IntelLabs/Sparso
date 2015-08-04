@@ -8,7 +8,8 @@ using CompilerTools.LivenessAnalysis
 using CompilerTools.AstWalker
 
 # Options user can set
-export SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, SA_REORDER_WHEN_BENEFICIAL
+export SA_ENABLE, SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, 
+       SA_REORDER_WHEN_BENEFICIAL
 
 # Function interface
 export set_options
