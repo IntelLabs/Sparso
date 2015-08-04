@@ -26,5 +26,6 @@ include("globals.jl")
 #include("code-transformation.jl")
 #include("reordering.jl")
 #include("context.jl")
+include("show.jl")
 
 end
