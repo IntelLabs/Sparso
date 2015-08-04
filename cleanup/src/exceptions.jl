@@ -1,7 +1,7 @@
 # This file describes all the possible exceptions that may be raised during 
-# the execution of Sparse Accelerator, as well as some common exception handling.
-# Usually, the exception handling is to print out a nice diagnostic message, and
-# return to the original user code without optimizing it.
+# the execution of Sparse Accelerator, as well as their handlers.
+# Usually, an exception handler prints out a nice diagnostic message, and
+# returns to the original user code without optimizing it.
 
 type UndescribedFunction <: Exception
     module_name     :: String

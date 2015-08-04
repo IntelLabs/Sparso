@@ -17,15 +17,15 @@ export set_options
 export FunctionDescription
 
 include("globals.jl")
-#include("exceptions.jl")
-#include("function-descriptions.jl")
+include("exceptions.jl")
+include("function-descriptions.jl")
 #include("region-formation.jl")
 #include("distributivity-analysis.jl")
 #include("interdependent-array-analysis.jl")
 #include("reorderable-array-discovery.jl")
-#include("code-transformation.jl")
-#include("reordering.jl")
-#include("context.jl")
+include("code-transformation.jl")
+include("reordering.jl")
+include("context.jl")
 include("show.jl")
 
 end
