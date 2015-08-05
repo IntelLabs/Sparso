@@ -4,7 +4,7 @@ typealias BasicBlock CompilerTools.CFGs.BasicBlock
 typealias Statement  CompilerTools.CFGs.TopLevelStatement
 typealias Liveness   CompilerTools.LivenessAnalysis.BlockLiveness
 typealias CFG        CompilerTools.CFGs.CFG
-typealias Loops      CompilerTools.Loops.DomLoops
+typealias DomLoops   CompilerTools.Loops.DomLoops
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
@@ -55,7 +55,7 @@ function set_options(args...)
             global sparse_acc_enabled = true
         elseif arg == SA_VERBOSE 
             global verbosity = 1
-            OptFramework.set_debug_level(3)
+            #OptFramework.set_debug_level(3)
         elseif arg == SA_USE_JULIA 
             global use_Julia = true; global use_MKL = false; global use_SPMP = false
         elseif arg == SA_USE_MKL 
@@ -85,7 +85,7 @@ function build_symbol_dictionary(func_ast :: Expr)
     
     # Record Symbols' types
     assert(func_ast.head == :lambda)
-    lambda = lambdaExprTolambda(func_ast)
+    lambda = lambdaExprToLambdaInfo(func_ast)
     for i in lambda.var_defs
         symbol_info[i[2].name] = i[2].typ
     end
@@ -132,7 +132,7 @@ function analyses(
     symbol_info :: Dict{Union(Symbol,Integer), Type}, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
-    loop_info   :: Loops)
+    loop_info   :: DomLoops)
     
     actions = Vector{Action}()
     actions = reordering(actions, func_ast, symbol_info, liveness, cfg, loop_info)
@@ -147,27 +147,40 @@ Entry of SparseAccelerator.
 function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     dprintln(1, 0, "******************************* SparseAccelerator ******************************")
     dprintln(1, 0, "Signature:")
-    [i->dprintln(1, 1, func_args[i], "::", func_arg_types[i], " "), length(func_args)]
-    dprintln(1, 0, "AST:")
+    for i = 1 : length(func_args)
+        if i == 1
+            dprint(1, 1, "(", func_args[i], "::", func_arg_types[i]) 
+        else
+            dprint(1, 0, ", ", func_args[i], "::", func_arg_types[i])
+        end 
+    end
+    dprintln(1, 0, ")\nAST:")
     dprintln(1, 1, func_ast)
-    dprintln(1, 0, "")
 
+    new_ast = nothing
     try
         # Build the common facilities: symbols' type dictionary, liveness
         # info, and control flow graph.
         symbol_info = build_symbol_dictionary(func_ast)
         liveness    = LivenessAnalysis.from_expr(func_ast)
         cfg         = liveness.cfg
-        loop_info   = compute_dom_loops(cfg)
+        loop_info   = Loops.compute_dom_loops(cfg)
 
         # Do all analyses, and put their intended transformation code sequence
         # into a list. Then transform the code with the list.
         actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-        code_transformation(actions, func_ast, symbol_info, liveness, cfg, loop_info)
+        new_ast = code_transformation(actions, func_ast, symbol_info, liveness, cfg, loop_info)
+
+        dprintln(1, 0, "\nNew AST:")
+        dprintln(1, 1, new_ast)
     catch ex
+        dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
+        dprintln(1, 1, ex)
+
         # Return the original AST without any change
-        func_ast
+        new_ast = func_ast
+    finally
+        dprintln(1, 0, "********************************************************************************")
+        return new_ast
     end
-    
-    dprintln(1, 0, "**********************************************************************")
 end

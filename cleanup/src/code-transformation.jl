@@ -4,7 +4,7 @@ function code_transformation(
     symbol_info :: Dict{Union(Symbol,Integer), Type}, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
-    loop_info   :: Loops)
+    loop_info   :: DomLoops)
 
     func_ast
 end

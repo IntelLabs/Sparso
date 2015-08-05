@@ -6,6 +6,7 @@ using CompilerTools.LambdaHandling
 using CompilerTools.OptFramework
 using CompilerTools.LivenessAnalysis
 using CompilerTools.AstWalker
+using CompilerTools.Loops
 
 # Options user can set
 export SA_ENABLE, SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, 
