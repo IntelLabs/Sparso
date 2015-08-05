@@ -154,7 +154,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             dprint(1, 0, ", ", func_args[i], "::", func_arg_types[i])
         end 
     end
-    dprintln(1, 0, ")\nAST:")
+    dprintln(1, 0, ")\n\nAST:")
     dprintln(1, 1, func_ast)
 
     new_ast = nothing
