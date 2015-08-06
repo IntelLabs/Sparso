@@ -365,7 +365,7 @@ function SparseOptimize(ast, call_sig_arg_tuple, call_sig_args)
 
   body = ast.args[3]
 
-  lives = CompilerTools.LivenessAnalysis.from_expr(ast)
+  lives = CompilerTools.LivenessAnalysis.from_expr(ast, no_mod = createModifiedArgsDict() )
   dprintln(3,"function to analyze type = ", typeof(body.args), "\n", body)
   dprintln(3,"testing_mode = ", testing_mode)
   if testing_mode
