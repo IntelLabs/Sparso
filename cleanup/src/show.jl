@@ -26,7 +26,8 @@ function show(level :: Int, indent :: Int, new_line :: Bool, msgs...)
             s = readline(io_buffer)
             print_unescaped(STDOUT, s)
         end
-        
+        if new_line println(STDOUT, "") end
+
         # Resize the buffer to be empty
         truncate(io_buffer, 0) 
     end
