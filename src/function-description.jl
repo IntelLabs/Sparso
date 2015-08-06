@@ -289,7 +289,7 @@ const inverse_divide_Desc = FunctionDescription(
 )
 
 const fwdTriSolve!_Desc = FunctionDescription(
-    "Main", 
+    "SparseAccelerator", 
     "fwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -298,7 +298,7 @@ const fwdTriSolve!_Desc = FunctionDescription(
 )
 
 const bwdTriSolve!_Desc = FunctionDescription(
-    "Main", 
+    "SparseAccelerator", 
     "bwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -306,7 +306,7 @@ const bwdTriSolve!_Desc = FunctionDescription(
     ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
 )
 
-function_descriptions  = [
+function_descriptions = [
     PointwiseMultiply_Desc,
     PointwiseMultiply!_Desc,
     PointwiseDivide_Desc,
@@ -338,6 +338,36 @@ function_descriptions  = [
     fwdTriSolve!_Desc,
     bwdTriSolve!_Desc
 ]
+
+@doc """
+Takes a module and a function both as Strings.
+Looks up the specified module as part of the "Main" module and then looks and returns the Function object corresponding
+to the "func" String in that module.
+"""
+function getFunctionFromString(mod :: String, func :: String)
+    msym = symbol(mod)
+    fsym = symbol(func)
+    modobj = eval(:(Main.$msym))
+    return   eval(:($modobj.$fsym))
+end
+
+@doc """
+Convert the function_descriptions table into a dictionary that can be passed to LivenessAnalysis to indicate which args can be modified by which functions.
+"""
+function createModifiedArgsDict()
+    res = Dict{Any, Array{Int64,1}}()
+
+    for desc in function_descriptions
+        num_args    = length(desc.argument_types)   # Get the number of arguments to the functions.
+        unmodifieds = ones(Int64, num_args)         # desc.output contains "modifies" so we default to true and then turn off based on desc.output.
+        for j in desc.output
+            unmodifieds[j] = 0
+        end
+        res[(getFunctionFromString(desc.module_name, desc.function_name),desc.argument_types)] = unmodifieds
+    end
+
+    return res
+end
 
 function show_function_descriptions()
     println("Function descriptions: ", function_descriptions)
