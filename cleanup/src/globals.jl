@@ -1,10 +1,12 @@
 # This file contains all the global constants, variables, routines.
 
-typealias BasicBlock CompilerTools.CFGs.BasicBlock
-typealias Statement  CompilerTools.CFGs.TopLevelStatement
-typealias Liveness   CompilerTools.LivenessAnalysis.BlockLiveness
-typealias CFG        CompilerTools.CFGs.CFG
-typealias DomLoops   CompilerTools.Loops.DomLoops
+typealias BasicBlock     CompilerTools.CFGs.BasicBlock
+typealias Statement      CompilerTools.CFGs.TopLevelStatement
+typealias Liveness       CompilerTools.LivenessAnalysis.BlockLiveness
+typealias CFG            CompilerTools.CFGs.CFG
+typealias DomLoops       CompilerTools.Loops.DomLoops
+typealias Loop           CompilerTools.Loops.Loop
+typealias Symbol2TypeMap Symbol2TypeMap # Map from a symbol or GenSym id to type
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
@@ -99,6 +101,64 @@ function build_symbol_dictionary(func_ast :: Expr)
     symbol_info
 end
 
+@doc """ 
+Determine the type of an AST node. A Symbol or GenSym gets a type from the 
+symbol_info. An expression or SymbolNode gets the type stored by Julia type 
+inference. All the other kinds of AST nodes resort to the default typeof(). 
+"""
+function type_of_ast_node(node, symbol_info :: Symbol2TypeMap)
+    local typ = typeof(node)
+    if typ == Symbol
+        # Use get() instead [] in case the key (like Symbol "*") does not exist
+        # Return Nothing if no info found
+        return get(symbol_info, node, Nothing)
+    elseif typ == GenSym
+        return get(symbol_info, node.id, Nothing)
+    elseif typ == Expr || typ == SymbolNode
+        return node.typ
+    else
+        return typ
+    end
+end
+
+@doc """ A module (or function)'s name string """
+function module_or_function_name(arg)
+    if typeof(arg) == Symbol
+        return string(arg)
+    elseif typeof(arg) == QuoteNode && typeof(arg.value) == Symbol
+        return string(arg.value)
+    else
+        throw(UnhandledModuleOrFunctionName(arg))
+    end
+end
+
+@doc """ 
+From the given call arguments, figure out the module and function name 
+"""
+function resolve_call_names(call_args :: Vector)
+    assert(length(call_args) > 0)
+    module_name, function_name = "", ""
+    if isdefined(:GlobalRef) && typeof(call_args[1]) == GlobalRef
+        return string(call_args[1].mod), string(call_args[1].name)
+    elseif typeof(call_args[1]) == Symbol 
+        # Example: :*
+        function_name = string(call_args[1])
+    elseif isa(call_args[1], TopNode) && length(call_args) == 3
+        # Example: top(getfield), SparseAccelerator,:SpMV
+        if call_args[1] == TopNode(:getfield)
+            module_name   = module_or_function_name(call_args[2])
+            function_name = module_or_function_name(call_args[3])
+        else
+            function_name = module_or_function_name(call_args[1].name)
+        end
+    elseif  isa(call_args[1], Expr) &&
+        call_args[1].head == :call
+        # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
+        return resolve_call_names(call_args[1].args)
+    end
+    module_name, function_name
+end
+
 abstract Action
 
 @doc """ Insert new statements to a basic block """
@@ -129,7 +189,7 @@ All the analyses, including reordering, reusing, call replacement, etc.
 """
 function analyses(
     func_ast    :: Expr, 
-    symbol_info :: Dict{Union(Symbol,Integer), Type}, 
+    symbol_info :: Symbol2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops)
@@ -145,20 +205,22 @@ end
 Entry of SparseAccelerator. 
 """
 function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
-    dprintln(1, 0, "******************************* SparseAccelerator ******************************")
-    dprintln(1, 0, "Signature:")
-    for i = 1 : length(func_args)
-        if i == 1
-            dprint(1, 1, "(", func_args[i], "::", func_arg_types[i]) 
-        else
-            dprint(1, 0, ", ", func_args[i], "::", func_arg_types[i])
-        end 
-    end
-    dprintln(1, 0, ")\n\nAST:")
-    dprintln(1, 1, func_ast)
-
     new_ast = nothing
     try
+        dprintln(1, 0, "******************************* SparseAccelerator ******************************")
+        dprintln(1, 0, "Signature:")
+        for i = 1 : length(func_args)
+            if i == 1
+                dprint(1, 1, "(", func_args[i], "::", func_arg_types[i]) 
+            else
+                dprint(1, 0, ", ", func_args[i], "::", func_arg_types[i])
+            end 
+        end
+        dprintln(1, 0, ")\n\nAST:")
+        dprintln(1, 1, func_ast)
+    
+        assert(func_ast.head == :lambda)
+        
         # Build the common facilities: symbols' type dictionary, liveness
         # info, and control flow graph.
         symbol_info = build_symbol_dictionary(func_ast)
