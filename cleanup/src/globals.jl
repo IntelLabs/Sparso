@@ -1,12 +1,16 @@
 # This file contains all the global constants, variables, routines.
 
-typealias BasicBlock     CompilerTools.CFGs.BasicBlock
-typealias Statement      CompilerTools.CFGs.TopLevelStatement
-typealias Liveness       CompilerTools.LivenessAnalysis.BlockLiveness
-typealias CFG            CompilerTools.CFGs.CFG
-typealias DomLoops       CompilerTools.Loops.DomLoops
-typealias Loop           CompilerTools.Loops.Loop
-typealias Symbol2TypeMap Symbol2TypeMap # Map from a symbol or GenSym id to type
+typealias BasicBlock      CompilerTools.CFGs.BasicBlock
+typealias Statement       CompilerTools.CFGs.TopLevelStatement
+typealias Liveness        CompilerTools.LivenessAnalysis.BlockLiveness
+typealias CFG             CompilerTools.CFGs.CFG
+typealias DomLoops        CompilerTools.Loops.DomLoops
+typealias Loop            CompilerTools.Loops.Loop
+typealias GenSymId        Int
+typealias BasicBlockIndex Int
+typealias StatementIndex  Int
+typealias Sym             Union(Symbol, GenSymId) # A Symbol or a GenSym id.
+typealias Sym2TypeMap     Dict{Sym, Type}
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
@@ -106,7 +110,7 @@ Determine the type of an AST node. A Symbol or GenSym gets a type from the
 symbol_info. An expression or SymbolNode gets the type stored by Julia type 
 inference. All the other kinds of AST nodes resort to the default typeof(). 
 """
-function type_of_ast_node(node, symbol_info :: Symbol2TypeMap)
+function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
     local typ = typeof(node)
     if typ == Symbol
         # Use get() instead [] in case the key (like Symbol "*") does not exist
@@ -189,7 +193,7 @@ All the analyses, including reordering, reusing, call replacement, etc.
 """
 function analyses(
     func_ast    :: Expr, 
-    symbol_info :: Symbol2TypeMap, 
+    symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops)

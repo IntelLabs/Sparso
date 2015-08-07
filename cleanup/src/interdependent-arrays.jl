@@ -1,7 +1,5 @@
 # This file is for inter-dependent array analysis.
 
-typealias Sym Union(Symbol, Int) # A Symbol or a GenSym (id).
-
 @doc """ 
 A set of inter-dependent arrays in the same statement. Some of them appear 
 in the Left Hand Side (LHS) of the statement, some in the Right Hand side(RHS).
@@ -35,7 +33,7 @@ function add_terminal_array_to_cluster(
     node        :: Any, 
     left        :: Bool, 
     cluster     :: Cluster, 
-    symbol_info :: Symbol2TypeMap
+    symbol_info :: Sym2TypeMap
 )
     if type_of_ast_node(node, symbol_info) <: AbstractArray
         # Symbol, SymbolNode and GenSym are terminals of the AST.
@@ -81,7 +79,7 @@ function find_inter_dependent_arrays(
     left        :: Bool,
     cluster     :: Cluster,
     trees       :: Set{ExpressionTree},
-    symbol_info :: Symbol2TypeMap
+    symbol_info :: Sym2TypeMap
 )
     add_terminal_array_to_cluster(node, left, cluster, symbol_info)
     
@@ -141,7 +139,7 @@ with each other, and thus compose of a cluster.
 function find_inter_dependent_arrays(
     region      :: LoopRegion,
     cfg         :: CFG, 
-    symbol_info :: Symbol2TypeMap
+    symbol_info :: Sym2TypeMap
 )
     mapping = Statement2Clusters()
     blocks  = cfg.basic_blocks

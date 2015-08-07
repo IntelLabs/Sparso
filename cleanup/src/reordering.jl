@@ -4,7 +4,7 @@ Find the first arrays to reorder from the function's input parameters. So far,
 """
 function find_first_arrays_to_reorder(
     func_ast    :: Expr, 
-    symbol_info :: Symbol2TypeMap
+    symbol_info :: Sym2TypeMap
 )
     assert(func_ast.head == :lambda)
     lambda = lambdaExprToLambdaInfo(func_ast)
@@ -24,7 +24,7 @@ Perform analyses for reordering. Write the intended transformation into actions.
 function reordering(
     actions     :: Vector{Action},
     func_ast    :: Expr, 
-    symbol_info :: Symbol2TypeMap, 
+    symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops)
@@ -39,8 +39,12 @@ function reordering(
     end
     
     for region in regions
-        IAs = find_inter_dependent_arrays(region, symbol_info, FAR)
-        reorder_region(region, actions, func_ast, symbol_info, liveness, cfg, loop_info, FAR)
+        distributive = check_distributivity(region)
+        if distributive
+            stmt_clusters = find_inter_dependent_arrays(region, symbol_info, FAR)
+            reorder_graph = discover_reorderable_arrays(region, stmt_clusters, cfg, FAR)
+            create_reorder_actions(reorder_graph, region, actions, func_ast, symbol_info, liveness, cfg, loop_info, FAR)
+        end
     end
 
     dprintln(1, 0, "\nReordering actions to take:", actions)
