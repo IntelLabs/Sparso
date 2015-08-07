@@ -23,3 +23,12 @@ type UnknownCallFormat <: Exception
     args
     parameter_types :: Tuple
 end
+
+type UnknownExprDistributivity <: Exception
+    head
+    args
+end
+
+type UnknownASTDistributivity <: Exception
+    ast
+end

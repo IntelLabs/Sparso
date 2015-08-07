@@ -125,6 +125,28 @@ function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
     end
 end
 
+@doc """ Is the type a scalar (number), or an array? """
+function is_number_or_array(typ :: Type)
+    is_number = (typ <: Number)
+
+    # We assume the user program does not use Range for any array
+    # computation, although Range is a subtype of AbstractArray
+    is_array  = (typ <: AbstractArray && !(typ <: Range))
+
+    is_number, is_array
+end
+
+@doc """ Are the types scalars (numbers), or are some of them arrays? """
+function are_numbers_or_arrays(result_type :: Type, arg_types :: Tuple{Type})
+    all_numbers, some_arrays = is_number_or_array(result_type)
+    for t in arg_types
+        is_number, is_array = is_number_or_array(t)
+        all_numbers         = all_numbers && is_number
+        some_arrays         = some_arrays || is_array
+    end
+    all_numbers, some_arrays
+end
+
 @doc """ A module (or function)'s name string """
 function module_or_function_name(arg)
     if typeof(arg) == Symbol

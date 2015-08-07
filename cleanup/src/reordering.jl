@@ -39,7 +39,7 @@ function reordering(
     end
     
     for region in regions
-        distributive = check_distributivity(region)
+        distributive = check_distributivity(region, cfg, symbol_info)
         if distributive
             stmt_clusters = find_inter_dependent_arrays(region, symbol_info, FAR)
             reorder_graph = discover_reorderable_arrays(region, stmt_clusters, cfg, FAR)
