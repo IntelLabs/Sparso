@@ -140,6 +140,12 @@ function build_reorder_graph_for_region(
         end
     end
     
+    # Connect ENTRY with the first vertex of the loop head
+    block = blocks[L.head]
+    bb_idx = block.label
+    push!(first_node[bb_idx].preds, entry)
+    push!(entry.succs, first_node[bb_idx])
+    
     return graph
 end
 

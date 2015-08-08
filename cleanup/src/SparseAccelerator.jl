@@ -29,6 +29,7 @@ include("call-replacement.jl")
 include("code-transformation.jl")
 include("reordering.jl")
 include("context.jl")
+include("lib-interface.jl")
 include("show.jl")
 
 end

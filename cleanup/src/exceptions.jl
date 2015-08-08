@@ -32,3 +32,8 @@ end
 type UnknownASTDistributivity <: Exception
     ast
 end
+
+type UnknownTypeToReorder <: Exception
+    sym
+    typ
+end

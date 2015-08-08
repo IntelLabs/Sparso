@@ -185,6 +185,28 @@ function resolve_call_names(call_args :: Vector)
     module_name, function_name
 end
 
+@doc """
+A call sites of interesting functions (like SpMV, triangular solver, etc.). From
+the AST of the call, we may figure out the matrices in its arguments so that we 
+may create a matrix knob for it. We may also create a function knob for the call
+site, and may delete the knob later.
+"""
+type CallSite
+    ast           :: Expr 
+    matrices      :: Set{Sym} 
+    fknob_creator :: Tuple(Symbol, String) # A library call to create a function knob for this call site
+    fknob_deletor :: Tuple(Symbol, String) # A library call to delete the function knob for this call site
+end
+
+@doc """
+Call sites of interesting functions (like SpMV, triangular solver, etc.). The
+function's result and argument types are figured out with the help of symbol_info. 
+"""
+type CallSites
+    sites       :: Set{CallSite}
+    symbol_info :: Sym2TypeMap
+end
+
 abstract Action
 
 @doc """ Insert new statements to a basic block """

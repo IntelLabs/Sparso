@@ -2,40 +2,11 @@
 abstract Region
 
 @doc """ 
-An exit edge of a loop from a block in the loop to another block outside the loop.
-"""
-type LoopExit
-    from_BB :: BasicBlock
-    to_BB   :: BasicBlock
-end
-
-@doc """ 
 A region that is composed of a loop. Speeding up loops is the focus of 
 Sparse Accelerator.
 """
 type LoopRegion <: Region
     loop  :: Loop
-    exits :: Set{LoopExit}
-end
-
-@doc """ 
-Form a region with the loop.
-"""
-function loop_region_formation(
-    L   :: Loop,
-    cfg :: CFG
-)
-    region = LoopRegion(L, Set{LoopExit}())
-    blocks = cfg.basic_blocks
-    for bb_index in L.members
-        bb = blocks[bb_index]
-        for succ in bb.succs
-            if !in(succ.label, L.members)
-                exit = LoopExit(bb, succ)
-                push!(region.exits, exit)
-            end
-        end
-    end
 end
 
 @doc """ 
@@ -57,7 +28,7 @@ function loop_region_formation(
         end
         
         if is_outermost
-            region = loop_region_formation(L, cfg)
+            region = LoopRegion(L)
             push!(regions, region)
         end
     end
