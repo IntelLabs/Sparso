@@ -21,7 +21,7 @@
 immutable FunctionDescription
     module_name     :: String # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
     function_name   :: String # Name of the function
-    argument_types  :: Tuple  # Tuple of the function arguments' types
+    argument_types  :: Tuple{Type}  # Tuple of the function arguments' types
     output          :: Set    # The arguments updated by the function
     distributive    :: Bool   # Is this function distributive?
     IA              :: Set    # A set. Each element itself is a set of inter-dependent arguments. E.g. 
@@ -343,22 +343,10 @@ function show_function_descriptions()
     println("Function descriptions: ", function_descriptions)
 end
 
-function lookup_function_description(module_name :: String, function_name :: String, argument_types :: Tuple)
-    for desc in function_descriptions
-        if module_name    == desc.module_name   && 
-           function_name  == desc.function_name &&
-           length(argument_types) == length(desc.argument_types)
-            found = true
-            for i in 1:length(argument_types) 
-               if !(argument_types[i] <: desc.argument_types[i])
-                   found = false
-                   break
-                end
-            end
-            if found
-               return desc
-            end
-        end
-    end
-    return nothing
+function look_for_function_description(
+    module_name    :: String, 
+    function_name  :: String, 
+    argument_types :: Tuple{Type}
+)
+    return look_for_function(function_descriptions, module_name, function_name, argument_types)
 end

@@ -12,11 +12,11 @@ function create_allocate_space_for_permutation(
 )
     P = gensym("P")
     stmt = :($P = Array(Cint, size($M, 2)))
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 
     inverse_P = gensym("inverse_P")
     stmt      = :($inverse_P = Array(Cint, size($M, 2)))
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 
     P, inverse_P
 end
@@ -51,16 +51,16 @@ function create_reorder_matrix(
                     Expr(:call, TopNode(:getfield), M, QuoteNode(:nzval))))
         )
     )
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 
     # Do the actual reordering through the C library
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_reorder_matrix),
                 M, new_M, P, inverse_P, permute, one_based_input, one_based_output)
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 
     # Update the original matrix with the new data.
     stmt = Expr(:(=), M, new_M)
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 end
 
 @doc """
@@ -93,15 +93,15 @@ function create_reorder_vector(
     stmt  = Expr(:(=), new_V,
                 Expr(:call, :Array, :Cdouble, 
                     Expr(:call, TopNode(:arraylen), V)))
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
     
     # Do the actual reordering through the C library
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :reorder_vector), V, new_V, P)
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
     
     # Update the original vector with the new data
     stmt = Expr(:(=), V, new_V )
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 end
 
 @doc """
@@ -118,15 +118,15 @@ function create_reverse_reorder_vector(
     stmt  = Expr(:(=), new_V,
                 Expr(:call, :Array, :Cdouble, 
                     Expr(:call, TopNode(:arraylen), V)))
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
     
     # Do the actual reordering through the C library
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reorder_vector), V, new_V, P)
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
     
     # Update the original vector with the new data
     stmt = Expr(:(=), V, new_V )
-    push!(new_stmts, stmt)
+    push!(new_stmts, Statement(0, stmt))
 end
 
 @doc """
@@ -391,16 +391,13 @@ Perform analyses for reordering. Write the intended transformation into actions.
 """
 function reordering(
     actions     :: Vector{Action},
+    regions     :: Vector{LoopRegion},
     func_ast    :: Expr, 
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
-    dprintln(1, 0, "\nReordering phase starts...", "\nCFG:")
-    dprintln(1, 1, cfg)
-    
-    regions = region_formation(cfg, loop_info)
     FAR     = find_first_arrays_to_reorder(func_ast, symbol_info)
     if isempty(FAR)
         return actions

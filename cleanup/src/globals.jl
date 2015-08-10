@@ -186,6 +186,35 @@ function resolve_call_names(call_args :: Vector)
 end
 
 @doc """
+Search in a database for information of the function specified by the module 
+name, function name, and argument types.
+"""
+function look_for_function(
+    database       :: Vector, 
+    module_name    :: String, 
+    function_name  :: String, 
+    argument_types :: Tuple{Type}
+)
+    for item in database
+        if module_name    == item.module_name   && 
+           function_name  == item.function_name &&
+           length(argument_types) == length(item.argument_types)
+            found = true
+            for i in 1:length(argument_types) 
+               if !(argument_types[i] <: item.argument_types[i])
+                   found = false
+                   break
+                end
+            end
+            if found
+               return item
+            end
+        end
+    end
+    return nothing
+end
+
+@doc """
 A call sites of interesting functions (like SpMV, triangular solver, etc.). From
 the AST of the call, we may figure out the matrices in its arguments so that we 
 may create a matrix knob for it. We may also create a function knob for the call
@@ -210,10 +239,10 @@ end
 abstract Action
 
 @doc """ Insert new statements to a basic block """
-type InsertToBB <: Action
+type InsertBeforeStatement <: Action
     new_stmts   :: Vector{Statement} 
     bb          :: BasicBlock
-    at          :: Int 
+    stmt        :: Statement 
 end
 
 @doc """ Insert new statements before a basic block """
@@ -242,10 +271,13 @@ function analyses(
     cfg         :: CFG, 
     loop_info   :: DomLoops)
     
+    dprintln(1, 0, "\nAnalyzing ...", "\nCFG:")
+    dprintln(1, 1, cfg)
+    
+    regions = region_formation(cfg, loop_info)
     actions = Vector{Action}()
-    actions = reordering(actions, func_ast, symbol_info, liveness, cfg, loop_info)
-    actions = context_info_discovery(actions, func_ast, symbol_info, liveness, 
-                                     cfg, loop_info)
+    actions = reordering(actions, regions, func_ast, symbol_info, liveness, cfg, loop_info)
+    actions = context_info_discovery(actions, regions, func_ast, symbol_info, liveness, cfg)
     actions
 end
 

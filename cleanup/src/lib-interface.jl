@@ -1,5 +1,31 @@
 # This file contains the routines that interfaces with the C library.
 
+function new_matrix_knob()
+  mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
+  mknob
+end
+
+function increment_matrix_version()
+  ccall((:IncrementMatrixVersion, LIB_PATH), Void, (Ptr{Void},))
+end
+
+function delete_matrix_knob(mknob)
+    ccall((:DeleteMatrixKnob, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+function add_mknob_to_fknob(mknob, fknob)
+  ccall((:AddMatrixKnob, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), 
+    pointer(fknob), pointer(mkob))
+end
+
+function new_function_knob(fknob_creator)
+  return ccall(fknob_creator, Ptr{Void}, ())
+end
+
+function delete_function_knob(fknob_deletor, fknob)
+    ccall(fknob_deletor, Void, (Ptr{Void},), fknob)
+end
+
 # In reordering, we insert some calls to the following 3 functions. So they are executed secretly
 # Reorder sparse matrix A and store the result in newA. A itself is not changed.
 function CSR_reorder_matrix(A :: SparseMatrixCSC, 
