@@ -277,7 +277,7 @@ function create_reorder_actions(
 
     if conditional_reordering
         # Insert new statements before the loop to initialize the conditions
-        init_action = InsertBeforeBB(Vector{Statement}(), loop_head, true)
+        init_action = InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
         push!(actions, init_action)
         
         init_stmt = Statement(-1, 
@@ -299,7 +299,7 @@ function create_reorder_actions(
     # loop's head block. In case of conditional reordering, it is before
     # the head, but inside the loop
     outside_loop = !conditional_reordering
-    first_reorder_action = InsertBeforeBB(Vector{Statement}(), loop_head, outside_loop)
+    first_reorder_action = InsertBeforeBlock(Vector{Statement}(), region.loop, outside_loop)
     push!(actions, first_reorder_action)
     
     if conditional_reordering

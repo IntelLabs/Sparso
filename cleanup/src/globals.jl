@@ -245,20 +245,19 @@ type InsertBeforeStatement <: Action
     stmt        :: Statement 
 end
 
-@doc """ Insert new statements before a basic block """
-type InsertBeforeBB <: Action
+@doc """ Insert new statements before a loop's head block """
+type InsertBeforeLoopHead <: Action
     new_stmts    :: Vector{Statement} 
-    bb           :: BasicBlock
-    outside_loop :: Bool # If bb is a loop header, outside_loop == true/false 
-                         # would make the statements inserted outside/inside 
-                         # the loop.
+    loop         :: Loop # The loop.
+    outside_loop :: Bool # Outside_loop == true/false would make the statements
+                         # inserted outside/inside the loop.
 end
 
 @doc """ Insert new statements on an edge """
 type InsertOnEdge <: Action
     new_stmts    :: Vector{Statement} 
-    predecessor  :: BasicBlock
-    successor    :: BasicBlock
+    from_bb      :: BasicBlock
+    to_bb        :: BasicBlock
 end
 
 @doc """ 
@@ -311,7 +310,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Do all analyses, and put their intended transformation code sequence
         # into a list. Then transform the code with the list.
         actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-        new_ast = code_transformation(actions, func_ast, symbol_info, liveness, cfg, loop_info)
+        new_ast = code_transformation(actions, func_ast, cfg)
 
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)

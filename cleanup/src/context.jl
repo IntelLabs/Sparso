@@ -149,7 +149,6 @@ function context_info_discovery(
     cfg         :: CFG
 )
     L         = region.loop
-    loop_head = L.head
     blocks    = cfg.basic_blocks
     
     # Find call to context-sensitive functions, including their matrix 
@@ -188,7 +187,7 @@ function context_info_discovery(
     # First, create matrix knobs, as they will be needed for creating the function
     # knobs.
     matrix_knobs         = Dict{Sym, Symbol}
-    action_before_region = InsertBeforeBB(Vector{Statement}(), loop_head, true)
+    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
     push!(action_before_region, action)
     for call_site in call_sites.sites
         for M in call_site.matrices
