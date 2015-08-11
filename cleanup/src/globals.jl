@@ -14,16 +14,16 @@ typealias Sym2TypeMap     Dict{Sym, Type}
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
-const SA_ENABLE = 1
+const SA_ENABLE = 0
 
 @doc """ Print verbose dump """
-const SA_VERBOSE = 2
+const SA_VERBOSE = 8
 
 @doc """ Use Jula's default sparse matrix functions """
-const SA_USE_JULIA = 8
+const SA_USE_JULIA = 16
 
 @doc """ Use MKL sparse matrix functions """
-const SA_USE_MKL = 16
+const SA_USE_MKL = 24
 
 @doc """ 
 Use Sparse Matrix Pre-processing library (SpMP) functions. SPMP is a 
@@ -32,16 +32,32 @@ Gauss-Seidel smoother, sparse triangular solver, etc.
 """
 const SA_USE_SPMP = 32
 
-@doc """ Enable reordering only when it is potentially beneficial """
-const SA_REORDER_WHEN_BENEFICIAL = 64
+@doc """" 
+Pattern match and replace the code that is functionally equivalent to SpMV, dot,
+WAXPBY, etc. with calls to the corresponding SPMP library functions.
+"""
+const SA_REPLACE_CALLS = 40
 
-# The internal booleans corresponding to the above options
-sparse_acc_enabled      = false
-verbosity               = 0
-use_Julia               = false
-use_MKL                 = false
-use_SPMP                = true 
-reorder_when_beneficial = false
+@doc """ Enable reordering of arrays. """
+const SA_REORDER = 48
+
+@doc """ Enable reordering only when it is potentially beneficial """
+const SA_REORDER_WHEN_BENEFICIAL = 56
+
+@doc """ Enable context-sensitive optimization. """
+const SA_CONTEXT = 64
+
+
+# The internal booleans corresponding to the above options, and their default values
+sparse_acc_enabled            = false
+verbosity                     = 0
+use_Julia                     = false
+use_MKL                       = false
+use_SPMP                      = true
+replace_calls_enabled         = false
+reorder_enabled               = false
+reorder_when_beneficial       = false
+context_sensitive_opt_enabled = false
 
 @doc """ 
 Set options for SparseAccelerator. The arguments can be any one or more 
@@ -68,8 +84,14 @@ function set_options(args...)
             global use_Julia = false; global use_MKL = true; global use_SPMP = false
         elseif arg == SA_USE_SPMP 
             global use_Julia = false; global use_MKL = false; global use_SPMP = true
+        elseif arg == SA_REPLACE_CALLS
+            global replace_calls_enabled = true
+        elseif arg == SA_REORDER
+            global reorder_enabled = true
         elseif arg == SA_REORDER_WHEN_BENEFICIAL 
             global reorder_when_beneficial = true
+        elseif arg == SA_CONTEXT
+            global context_sensitive_opt_enabled = true
         else
             # TODO: print usage info
         end
@@ -87,7 +109,7 @@ though in the source code, they might appear to have local or nested scopes:
 symbol renaming seems to have been done to make them function-wise.
 """
 function build_symbol_dictionary(func_ast :: Expr)
-    symbol_info = Dict{Union(Symbol, Integer), Type}()
+    symbol_info = Sym2TypeMap()
     
     # Record Symbols' types
     assert(func_ast.head == :lambda)
@@ -223,8 +245,8 @@ site, and may delete the knob later.
 type CallSite
     ast           :: Expr 
     matrices      :: Set{Sym} 
-    fknob_creator :: Tuple(Symbol, String) # A library call to create a function knob for this call site
-    fknob_deletor :: Tuple(Symbol, String) # A library call to delete the function knob for this call site
+    fknob_creator :: Tuple{Symbol, String} # A library call to create a function knob for this call site
+    fknob_deletor :: Tuple{Symbol, String} # A library call to delete the function knob for this call site
 end
 
 @doc """
@@ -269,14 +291,18 @@ function analyses(
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops)
-    
+
     dprintln(1, 0, "\nAnalyzing ...", "\nCFG:")
     dprintln(1, 1, cfg)
-    
+        
     regions = region_formation(cfg, loop_info)
     actions = Vector{Action}()
-    actions = reordering(actions, regions, func_ast, symbol_info, liveness, cfg, loop_info)
-    actions = context_info_discovery(actions, regions, func_ast, symbol_info, liveness, cfg)
+    if reorder_enabled
+        actions = reordering(actions, regions, func_ast, symbol_info, liveness, cfg, loop_info)
+    end
+    if context_sensitive_opt_enabled
+        actions = context_info_discovery(actions, regions, func_ast, symbol_info, liveness, cfg)
+    end
     actions
 end
 
@@ -307,11 +333,20 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         cfg         = liveness.cfg
         loop_info   = Loops.compute_dom_loops(cfg)
 
-        # Do all analyses, and put their intended transformation code sequence
-        # into a list. Then transform the code with the list.
-        actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-        new_ast = code_transformation(actions, func_ast, cfg)
-
+        new_ast = func_ast
+        
+        if replace_calls_enabled
+            replace_calls(symbol_info, cfg)
+        end
+        
+        if reorder_enabled || context_sensitive_opt_enabled
+            # Reordering and context-sensitive optimization: Do all analyses, and 
+            # put their intended transformation code sequence into a list. Then 
+            # transform the code with the list.
+            actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
+            new_ast = code_transformation(actions, func_ast, cfg)
+        end
+        
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)
     catch ex

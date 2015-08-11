@@ -144,7 +144,7 @@ function check_distributivity(
         for bb_index in region.loop.members
             bb = blocks[bb_index]
             for stmt in bb.statements
-                distributive = check_distributivity(stmt.tls.expr, symbol_info)
+                distributive = check_distributivity(stmt.expr, symbol_info)
                 if !distributive
                     return false
                 end

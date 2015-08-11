@@ -6,7 +6,7 @@ function group_action(
     action                          :: InsertBeforeStatement
 )
     for action1 in insert_before_statement_actions
-        if action1.bb = action.bb && action1.stmt = action.stmt
+        if action1.bb == action.bb && action1.stmt == action.stmt
             append!(action1.new_stmts, action.new_stmts)
             
             # No need to try match with other elements: the vector is ensured
@@ -25,7 +25,7 @@ function group_action(
     action                          :: InsertBeforeLoopHead
 )
     for action1 in insert_before_loop_head_actions
-        if action1.loop = action.loop && action1.outside_loop = action.outside_loop
+        if action1.loop == action.loop && action1.outside_loop == action.outside_loop
             append!(action1.new_stmts, action.new_stmts)
             
             # No need to try match with other elements: the vector is ensured
@@ -44,7 +44,7 @@ function group_action(
     action                 :: InsertOnEdge
 )
     for action1 in insert_on_edge_actions
-        if action1.from_bb = action.from_bb && action1.to_bb = action.to_bb
+        if action1.from_bb == action.from_bb && action1.to_bb == action.to_bb
             append!(action1.new_stmts, action.new_stmts)
             
             # No need to try match with other elements: the vector is ensured

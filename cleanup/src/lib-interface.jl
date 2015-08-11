@@ -249,8 +249,6 @@ function WAXPB(alpha::Number, x::Vector, beta::Number)
   w
 end
 
-end   # end of module
-
 #function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector)
 #  SparseAccelerator.SpMV(alpha, A, x, beta, y)
 #end

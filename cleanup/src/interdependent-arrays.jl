@@ -15,7 +15,7 @@ end
 A map from a statement to all the clusters of it. Each cluster contains 
 some arrays that are inter-dependent with each other.
 """
-typealias Dict{Statement, Set{Cluster}} Statement2Clusters
+typealias Statement2Clusters Dict{Statement, Set{Cluster}}
 
 @doc """ 
 The expression tree starting with a root, located in either left or right hand
@@ -96,14 +96,13 @@ function find_inter_dependent_arrays(
     
         # Recusively visit each argument to further decompose/cluster
         for c in node.args
-                if type_of_ast_node(c, symbol_info) <: Number
-                    # Decompose: break the tree from this node as another tree. 
-                    # The arrays inside that tree have nothing to do with those in 
-                    # this tree.
-                    push!(trees, ExpressionTree(c, left))
-                else
-                    find_inter_dependent_arrays(c, left, cluster, trees, symbol_info)
-                end
+            if type_of_ast_node(c, symbol_info) <: Number
+                # Decompose: break the tree from this node as another tree. 
+                # The arrays inside that tree have nothing to do with those in 
+                # this tree.
+                push!(trees, ExpressionTree(c, left))
+            else
+                find_inter_dependent_arrays(c, left, cluster, trees, symbol_info)
             end
         end
     end
@@ -132,7 +131,7 @@ function find_inter_dependent_arrays(
                 cluster = Cluster()
                 if typeof(tree.root) == Expr && tree.root.head == :(=)
                     # An assignment can happen only at top level, not inside LHS or RHS 
-                    assert(tree.root == stmt.tls.expr)
+                    assert(tree.root == stmt.expr)
                     find_inter_dependent_arrays(tree.root.args[1], true, cluster, trees, symbol_info)
                     find_inter_dependent_arrays(tree.root.args[2], false, cluster, trees, symbol_info)
                 else

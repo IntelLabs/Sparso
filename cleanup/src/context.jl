@@ -3,12 +3,12 @@ For a function, describe the matrix arguments, and how to create and delete its
 context info (fknob).
 """
 immutable ContextSensitiveFunction
-    module_name     :: String       # Module of the function. 
-    function_name   :: String       # Name of the function
-    argument_types  :: Tuple{Type}  # Tuple of the function arguments' types
-    matrices        :: Set{Sym}     # The matrix arguments.
-    fknob_creator   :: Tuple(Symbol, String) # The path to a fknob creator
-    fknob_deletor   :: Tuple(Symbol, String) # The path to a fknob deletor
+    module_name     :: String # Module of the function. 
+    function_name   :: String # Name of the function
+    argument_types  :: Tuple  # Tuple of the function arguments' types
+    matrices        :: Set    # The matrix arguments.
+    fknob_creator   :: Tuple  # {Symbol, String} The path to a fknob creator
+    fknob_deletor   :: Tuple  # {Symbol, String} The path to a fknob deletor
 end
 
 # Below are the context sensitive functions we care about. For short, CS represents 
@@ -60,7 +60,7 @@ end
 Create statements that will create a matrix knob for matrix M.
 """
 function create_new_matrix_knob(
-    new_stmts :: Vector{Statements},
+    new_stmts :: Vector{Statement},
     M         :: Sym
 )
     mknob = gensym(string("mknob", string(M)))
@@ -75,7 +75,7 @@ end
 Create statements that will increment a matrix knob's version.
 """
 function create_increment_matrix_version(
-    new_stmts :: Vector{Statements},
+    new_stmts :: Vector{Statement},
     mknob     :: Symbol
 )
     new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :increment_matrix_version), mknob)
@@ -87,7 +87,7 @@ Create statements that will create a function knob for the call site, and add
 the function knob to the call as a parameter.
 """
 function insert_new_function_knob(
-    new_stmts :: Vector{Statements},
+    new_stmts :: Vector{Statement},
     call_site :: CallSite
 )
     fknob = gensym("fknob")
@@ -105,7 +105,7 @@ end
 Create statements that add the matrix knob to the function knob.
 """
 function create_add_mknob_to_fknob(
-    new_stmts :: Vector{Statements},
+    new_stmts :: Vector{Statement},
     mknob     :: Symbol,
     fknob     :: Symbol
 )
@@ -117,7 +117,7 @@ end
 Create statements that will delete the function knob.
 """
 function create_delete_function_knob(
-    new_stmts     :: Vector{Statements},
+    new_stmts     :: Vector{Statement},
     fknob_deletor :: Tuple{Symbol, String},
     fknob         :: Symbol
 )
@@ -129,7 +129,7 @@ end
 Create statements that will delete the matrix knob.
 """
 function create_delete_matrix_knob(
-    new_stmts :: Vector{Statements},
+    new_stmts :: Vector{Statement},
     mknob     :: Symbol
 )
     new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_matrix_knob), mknob)
@@ -160,7 +160,7 @@ function context_info_discovery(
         statements = bb.statements
         for stmt_idx in 1 : length(statements)
             stmt = statements[stmt_index]
-            expr = stmt.tls.expr
+            expr = stmt.expr
             if typeof(expr) != Expr
                 continue
             end
@@ -200,7 +200,7 @@ function context_info_discovery(
                 # Create statements that will update the knob before every
                 # statement that defines the matrix
                 for (bb, stmt) in defs[M]
-                    action = InsertBeforeStatement((Vector{Statement}(), bb, stmt)
+                    action = InsertBeforeStatement(Vector{Statement}(), bb, stmt)
                     push!(actions, action)
                     create_increment_matrix_version(action.new_stmts, mknob)
                 end

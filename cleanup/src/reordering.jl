@@ -1,13 +1,19 @@
-# ISSUE: we hard code a sparse matrix format to be SparseMatrixCSC{Cdouble, Cint},
+# Reordering analysis: Feasibility, and where and what to reorder.
+
+# ISSUES: 
+# (1) We hard code a sparse matrix format to be SparseMatrixCSC{Cdouble, Cint},
 # and a permutation and inverse permutation vector to be Vector{Cint}.
 # Should make it general in future
+# (2) We assume that there are NO aliases between any two arrays. We should
+# use both static alias analysis and dynamic alias check to get rid of the 
+# assumption.
 
 @doc """ 
 Create new statements that allocate space for permutation (and inverse 
 permutation) vector. Return their symbols.
 """
 function create_allocate_space_for_permutation(
-    new_stmts :: Vector{Statements},
+    new_stmts :: Vector{Statement},
     M         :: Symbol
 )
     P = gensym("P")
@@ -26,7 +32,7 @@ Create new statements that will reorder matrix M with the permutation and invers
 permutation vector P and inverse_P, which will be computed if permute is true. 
 """
 function create_reorder_matrix(
-    new_stmts        :: Vector{Statements}, 
+    new_stmts        :: Vector{Statement}, 
     M                :: Symbol, 
     P                :: Symbol, 
     inverse_P        :: Symbol, 
@@ -67,8 +73,8 @@ end
 Create new statements that will reversely reorder matrix M with the permutation 
 and inverse permutation vector P and inverse_P. 
 """
-function create_reverse_reorder_matrix
-    new_stmts        :: Vector{Statements}, 
+function create_reverse_reorder_matrix(
+    new_stmts        :: Vector{Statement}, 
     M                :: Symbol, 
     P                :: Symbol, 
     inverse_P        :: Symbol, 
@@ -77,14 +83,13 @@ function create_reverse_reorder_matrix
 )
     create_reorder_matrix(new_stmts, M, inverse_P, P, false, 
         one_based_input, one_based_output)
-)
 end
 
 @doc """
 Create new statements that will reorder vector V with the permutation vector P. 
 """
 function create_reorder_vector(
-    new_stmts :: Vector{Statements}, 
+    new_stmts :: Vector{Statement}, 
     V         :: Symbol, 
     P         :: Symbol
 )
@@ -109,7 +114,7 @@ Create new statements that will reversely reorder vector V with the permutation
 vector P. 
 """
 function create_reverse_reorder_vector(
-    new_stmts :: Vector{Statements}, 
+    new_stmts :: Vector{Statement}, 
     V         :: Symbol, 
     P         :: Symbol
 )
@@ -134,11 +139,11 @@ Create an action that will insert new statements to reorder all arrays in X,
 with the permutation vector P and inverse permutation vector inverse_P.
 """
 function create_reorder_X(
-    new_stmts   :: Vector{Statements},
+    new_stmts   :: Vector{Statement},
     X           :: Set,
     succ_bb     :: BasicBlock,
-    P           :: Sym
-    inverse_P   :: Sym
+    P           :: Sym,
+    inverse_P   :: Sym,
     symbol_info :: Sym2TypeMap
 )
     for x in X
@@ -157,11 +162,11 @@ Create an action that will insert new statements to reversely reorder all arrays
 in X, with the permutation vector P and inverse permutation vector inverse_P.
 """
 function create_reverse_reorder_X(
-    new_stmts   :: Vector{Statements},
+    new_stmts   :: Vector{Statement},
     X           :: Set,
     succ_bb     :: BasicBlock,
-    P           :: Sym
-    inverse_P   :: Sym
+    P           :: Sym,
+    inverse_P   :: Sym,
     symbol_info :: Sym2TypeMap
 )
     for x in X
@@ -212,7 +217,7 @@ function discover_SpMVs(
         statements = bb.statements
         for stmt_idx in 1 : length(statements)
             stmt = statements[stmt_index]
-            expr = stmt.tls.expr
+            expr = stmt.expr
             if typeof(expr) != Expr
                 continue
             end
@@ -223,7 +228,7 @@ function discover_SpMVs(
     SpMVs
 end
 
-@"""
+@doc """
 For some SpMV calls, replace them with SpMV calls that also measure the benefit
 of reordering. So far, we do this only for the first SpMV call.
 TODO: find out the most time-consuming SpMVs, and decides the benefit from them. 

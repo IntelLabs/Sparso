@@ -21,7 +21,7 @@
 immutable FunctionDescription
     module_name     :: String # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
     function_name   :: String # Name of the function
-    argument_types  :: Tuple{Type}  # Tuple of the function arguments' types
+    argument_types  :: Tuple  # Tuple of the function arguments' types
     output          :: Set    # The arguments updated by the function
     distributive    :: Bool   # Is this function distributive?
     IA              :: Set    # A set. Each element itself is a set of inter-dependent arguments. E.g. 

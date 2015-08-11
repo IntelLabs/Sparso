@@ -37,3 +37,8 @@ type UnknownTypeToReorder <: Exception
     sym
     typ
 end
+
+type UnhandledSubstituteArg <: Exception
+    substitute_arg 
+    pattern
+end

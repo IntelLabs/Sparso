@@ -54,7 +54,7 @@ end
 
 function build_reorder_graph_for_region(
     region :: LoopRegion,
-    cfg    :: cfg
+    cfg    :: CFG
 )
     graph = ReorderGraph()
     
