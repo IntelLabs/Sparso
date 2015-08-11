@@ -23,10 +23,18 @@ const SpMV_pattern1 = Pattern(
      :arg2, :arg3)
 )
 
+const SpMV!_pattern1 = Pattern(
+    :call,
+    (GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
+    (LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+     :arg2, :arg3, :arg4)
+)
+
 patterns = [
     dot_pattern,
     #WAXPBY_pattern,
-    SpMV_pattern1
+    SpMV_pattern1,
+    SpMV!_pattern1,
     #SpMV_pattern2,
     #WAXPBY!_pattern,
 ]
