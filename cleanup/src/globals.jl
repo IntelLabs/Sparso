@@ -310,6 +310,7 @@ end
 Entry of SparseAccelerator. 
 """
 function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
+    old_ast = copy(func_ast)
     new_ast = nothing
     try
         dprintln(1, 0, "******************************* SparseAccelerator ******************************")
@@ -354,7 +355,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dprintln(1, 1, ex)
 
         # Return the original AST without any change
-        new_ast = func_ast
+        new_ast = old_ast
     finally
         dprintln(1, 0, "********************************************************************************")
         return new_ast
