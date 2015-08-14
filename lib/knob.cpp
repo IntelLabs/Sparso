@@ -175,7 +175,7 @@ void ForwardTriangularSolve(
         schedule->constructTaskGraph(*A);
     } else {
         ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
-        assert(size(f->mknobs) == 1);
+        assert(f->mknobs.size() == 1);
         MatrixKnob* m = f->mknobs[0];
         assert(m != NULL);
     
@@ -211,7 +211,7 @@ void BackwardTriangularSolve(
         schedule->constructTaskGraph(*A);
     } else {
         BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
-        assert(size(f->mknobs) == 1);
+        assert(f->mknobs.size() == 1);
         MatrixKnob* m = f->mknobs[0];
         assert(m != NULL);
     

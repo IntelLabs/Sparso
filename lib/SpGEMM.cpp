@@ -88,9 +88,6 @@ CSR_Handle *CSR_ADBInspect(const CSR_Handle *A, const CSR_Handle *B)
       int jcol = Acsr->colidx[j] - BASE;
       for (int k = Bcsr->rowptr[jcol] - BASE; k < Bcsr->rowptr[jcol + 1] - BASE; k++) {
         int kcol = Bcsr->colidx[k] - BASE;
-        if (kcol == 1036) {
-          int k = 0;
-        }
         if (marker[kcol] != i) {
           marker[kcol] = i;
           ++counter;
