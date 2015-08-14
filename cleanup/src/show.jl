@@ -14,8 +14,9 @@ end
 io_buffer = IOBuffer()
 
 function show_structure(
-    node :: Any,
-    space :: String
+    node        :: Any,
+    space       :: String,
+    symbol_info :: Sym2TypeMap, 
 )
     typ = typeof(node)
     if typ == Expr
@@ -39,31 +40,63 @@ function show_structure(
                 if args_are_statements && !arg_is_insignificant
                     println(io_buffer, space, "    ", "// ", arg)
                 end
-                print(io_buffer, space, "    ", i, ": ")
-                show_structure(arg, "")
+                show_structure(arg, string(space, "    "), symbol_info)
                 if args_are_statements
                     println(io_buffer, "")
                 end
             end
         end
     else
-        println(io_buffer, space, node, " [", typeof(node), "]")
+        print(io_buffer, space, node, " [", typ, "]")
+        typ1 = type_of_ast_node(node, symbol_info)
+        if typ != typ1
+            println(io_buffer, " [", typ1, "]")
+        else
+            println(io_buffer, "")
+        end
     end
 end
 
-function show(structure :: Bool, msg)
+function show(
+    structure   :: Bool, 
+    symbol_info :: Sym2TypeMap, 
+    msg
+)
     if structure
-        show_structure(msg, "")
+        show_structure(msg, "", symbol_info)
     else
-        print(io_buffer, msg)
+        if typeof(msg) <: Exception
+            print(io_buffer, msg)
+            show_backtrace(io_buffer, catch_backtrace())
+            println(io_buffer, "")
+        elseif typeof(msg) <: Pattern
+            flds = fieldnames(msg)
+            for i = 1 : length(flds)
+                fld = getfield(msg, flds[i])
+                if i < length(flds)
+                    println(io_buffer, fld)
+                else
+                    print(io_buffer, fld)
+                end
+            end
+        else
+            print(io_buffer, msg)
+        end
     end
 end
 
-function show(level :: Int, indent :: Int, new_line :: Bool, structure :: Bool, msgs...)
+function show(
+    level       :: Int, 
+    indent      :: Int, 
+    new_line    :: Bool, 
+    structure   :: Bool,
+    symbol_info :: Sym2TypeMap, 
+    msgs...
+)
     if(level >= verbosity)
         message_tuple = msgs[1]
         for msg in message_tuple
-            show(structure, msg)
+            show(structure, symbol_info, msg)
         end
         
         seekstart(io_buffer)
@@ -82,8 +115,7 @@ function show(level :: Int, indent :: Int, new_line :: Bool, structure :: Bool, 
 end
 
 # Debug printing
-dprint(level, indent, msgs...)   = show(level, indent, false, false, msgs)
-dprintln(level, indent, msgs...) = show(level, indent, true, false, msgs)
-dsprint(level, indent, msgs...)   = show(level, indent, false, true, msgs)
-dsprintln(level, indent, msgs...) = show(level, indent, true, true, msgs)
-
+dprint(level, indent, msgs...)   = show(level, indent, false, false, Sym2TypeMap(), msgs)
+dprintln(level, indent, msgs...) = show(level, indent, true, false, Sym2TypeMap(), msgs)
+dsprint(level, indent, symbol_info, msgs...)   = show(level, indent, false, true, symbol_info, msgs)
+dsprintln(level, indent, symbol_info, msgs...) = show(level, indent, true, true, symbol_info, msgs)

@@ -324,8 +324,6 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         end
         dprintln(1, 0, ")\n\nAST:")
         dprintln(1, 1, func_ast)
-        dprintln(1, 0, "\nFunction body showing structures:")
-        dsprintln(1, 1, func_ast)
     
         assert(func_ast.head == :lambda)
         
@@ -335,6 +333,9 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         liveness    = LivenessAnalysis.from_expr(func_ast)
         cfg         = liveness.cfg
         loop_info   = Loops.compute_dom_loops(cfg)
+
+        dprintln(1, 0, "\nFunction body showing structures:")
+        dsprintln(1, 1, symbol_info, func_ast)
 
         new_ast = func_ast
         
