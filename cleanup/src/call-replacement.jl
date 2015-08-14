@@ -310,6 +310,31 @@ end
 replacement_arg(arg :: Any, args :: Vector, symbol_info :: Sym2TypeMap) =
     replacement_arg(arg, args, nothing, symbol_info)
 
+@doc """ Check if two variables are the same. """
+function same_variable(x :: Any, y :: Any)
+    x1 = x
+    y1 = y
+    if typeof(x) <: SymbolNode
+        x1 = x.name
+    end
+    if typeof(y) <: SymbolNode
+        y1 = y.name
+    end
+    x1 == y1
+end
+
+@doc """ Check if a variable is an argument of an expression. """
+function is_an_arg(x :: Any, ast :: Any)
+    if typeof(ast) <: Expr
+        for arg in ast.args
+            if same_variable(x, arg)
+                return true
+            end
+        end
+    end
+    return false
+end
+
 @doc """ Replace the AST based on the expression pattern. """
 function replace(
     pattern     :: ExprPattern,
@@ -372,6 +397,13 @@ function match_replace(
     symbol_info :: Sym2TypeMap
 )
     if match_skeletons(skeleton, pattern.skeleton)
+        # When the skeleton is like (:(=), x, f), this is to change f into f!(x,...)
+        # In order to do so, we must ensure that x has already been allocated space.
+        # One case that satisfies this is that x is one of the input parameter of f.
+        if (skeleton[1] == :(=)) && !is_an_arg(ast.args[1], ast.args[2])
+            return false
+        end
+
         # Check sub-expr_patterns
         if length(pattern.sub_expr_patterns) == 1 && 
            pattern.sub_expr_patterns[1] == :NO_SUB_PATTERNS
@@ -454,19 +486,6 @@ function replace(
     dprintln(1, 1, pattern)
 end
 
-@doc """ Check if two variables are the same. """
-function same_variable(x :: Any, y :: Any)
-    x1 = x
-    y1 = y
-    if typeof(x) <: SymbolNode
-        x1 = x.name
-    end
-    if typeof(y) <: SymbolNode
-        y1 = y.name
-    end
-    x1 == y1
-end
-
 @doc """
 Check if the two expression, from adjacent statements, are of the following pattern:
     y = f(...) # f is some function. y is a Symbol or GenSym
@@ -490,14 +509,7 @@ function match_replace_an_in_place_update_pattern(
        
         # Check that the result is one of the input parameter of f, in which case
         # it must have been allocated space already.
-        allocated = false
-        for arg in prev_expr.args[2].args
-            if same_variable(arg, expr.args[1])
-                allocated = true
-                break
-            end
-        end
-        if !allocated
+        if !is_an_arg(expr.args[1], prev_expr.args[2])
             return false
         end
 
