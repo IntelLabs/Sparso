@@ -4,7 +4,11 @@ function pcg(x, A, b, M, tol, maxiter)
     r = b - A * x
     normr0 = norm(r)
     rel_err = 1
-    z::Vector{Float64} = M \ r   # Somehow, types for "M\r" is not inferred
+    z::Vector{Float64} = M \ r   # Somehow, types for "M\r" is not inferred. 
+                                 # The explicit typing makes it compile and shows
+                                 # the call replacement, but has a running error 
+                                 # in type conversion. So this example is for 
+                                 # manual checking of call replacement only.
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
     k = 1

@@ -23,6 +23,7 @@ function check_symmetry(A)
             if A[i, j] != A[j, i]
                 println("Matrix is asymmetric!")
                 println("A[", i, ",", j, "] != A[", j, ",", i, "]")
+                break
             end
         end
     end

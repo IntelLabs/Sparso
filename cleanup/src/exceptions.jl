@@ -37,3 +37,7 @@ type UnknownTypeToReorder <: Exception
     sym
     typ
 end
+
+type AsymmetricMatrixMarketFile <: Exception
+    filename
+end

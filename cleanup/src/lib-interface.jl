@@ -1,141 +1,175 @@
-# This file contains the routines that interfaces with the C library.
+# This file contains the routines that interfaces with SpMP library.
 
+const LIB_PATH = libcsr
+
+@doc """ Create a new matrix knob. """
 function new_matrix_knob()
-  mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
-  mknob
+    mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
 end
 
-function increment_matrix_version()
-  ccall((:IncrementMatrixVersion, LIB_PATH), Void, (Ptr{Void},))
+@doc """ Increment the version of a matrix knob. """
+function increment_matrix_version(mknob :: Symbol)
+    ccall((:IncrementMatrixVersion, LIB_PATH), Void, (Ptr{Void},), mknob)
 end
 
-function delete_matrix_knob(mknob)
+@doc """ Delete a matrix knob. """
+function delete_matrix_knob(mknob :: Symbol)
     ccall((:DeleteMatrixKnob, LIB_PATH), Void, (Ptr{Void},), mknob)
 end
 
-function add_mknob_to_fknob(mknob, fknob)
-  ccall((:AddMatrixKnob, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), 
-    pointer(fknob), pointer(mkob))
+@doc """ Associate a matrix knob with a function knob. """
+function add_mknob_to_fknob(
+    mknob :: Symbol, 
+    fknob :: Symbol
+)
+    ccall((:AddMatrixKnob, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), 
+        pointer(fknob), pointer(mkob))
 end
 
-function new_function_knob(fknob_creator)
-  return ccall(fknob_creator, Ptr{Void}, ())
+@doc """ Create a function knob. """
+function new_function_knob(fknob_creator :: Tuple)
+    ccall(fknob_creator, Ptr{Void}, ())
 end
 
-function delete_function_knob(fknob_deletor, fknob)
+@doc """ Delete a function knob. """
+function delete_function_knob(
+    fknob_deletor :: Tuple , 
+    fknob         :: Symbol
+)
     ccall(fknob_deletor, Void, (Ptr{Void},), fknob)
 end
 
-# In reordering, we insert some calls to the following 3 functions. So they are executed secretly
-# Reorder sparse matrix A and store the result in newA. A itself is not changed.
-function CSR_reorder_matrix(A :: SparseMatrixCSC, 
-                           newA :: SparseMatrixCSC, 
-                           P :: Vector, 
-                           Pprime :: Vector, 
-                           getPermutation :: Bool, 
-                           oneBasedInput :: Bool, 
-                           oneBasedOutput :: Bool)
-  ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
+@doc """ 
+Reorder a sparse matrix A and store the result in new_A. A itself is not changed.
+If get_permutation is true, then compute the permutation and inverse permutation
+vector P and inverse_P. Otherwise, P and inverse_P are given inputs.
+One_based_input/output tells if A and new_A are 1-based.
+"""
+function reorder_matrix(
+    A                :: SparseMatrixCSC, 
+    new_A            :: SparseMatrixCSC, 
+    P                :: Vector, 
+    inverse_P        :: Vector, 
+    get_permutation  :: Bool, 
+    one_based_input  :: Bool, 
+    one_based_output :: Bool
+)
+    ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-               pointer(newA.colptr), pointer(newA.rowval), pointer(newA.nzval),
-               pointer(P), pointer(Pprime), getPermutation, oneBasedInput, oneBasedOutput)
+               pointer(new_A.colptr), pointer(new_A.rowval), pointer(new_A.nzval),
+               pointer(P), pointer(inverse_P), get_permutation, one_based_input, 
+               one_based_output)
 end
 
-function CSR_bandwidth(A::SparseMatrixCSC)
-   A2 = CreateCSR(A)
-   bw = ccall((:CSR_GetBandwidth, LIB_PATH), Cint,
-         (Ptr{Void},),
-         A2)
-   DestroyCSR(A2)
-   bw
-end
-
-function reorder_vector(V::Vector, newV::Vector, P::Vector)
-   ccall((:reorderVector, LIB_PATH), Void,
+@doc """ Reorder vector V into new vector new_V with permutation vector P """
+function reorder_vector(
+    V     :: Vector, 
+    new_V :: Vector, 
+    P     :: Vector
+)
+    ccall((:reorderVector, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         pointer(V), pointer(newV), pointer(P), length(V))
+         pointer(V), pointer(new_V), pointer(P), length(V))
 end
 
-function reverse_reorder_vector(V::Vector, newV::Vector, P::Vector)
-   ccall((:reorderVectorWithInversePerm, LIB_PATH), Void,
+@doc """ Reversely reorder vector V into new vector new_V with permutation vector P """
+function reverse_reorder_vector(
+    V     :: Vector, 
+    new_V :: Vector, 
+    P     :: Vector
+)
+    ccall((:reorderVectorWithInversePerm, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         pointer(V), pointer(newV), pointer(P), length(V))
+         pointer(V), pointer(new_V), pointer(P), length(V))
 end
 
-function CreateCSR(A::SparseMatrixCSC)
-  ccall((:CSR_Create, LIB_PATH), Ptr{Void},
+@doc """
+Return a new representation of the sparse matrix, which is in CSC 
+format, in CSR format.
+"""
+function create_CSR(A :: SparseMatrixCSC)
+    ccall((:CSR_Create, LIB_PATH), Ptr{Void},
        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
        A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
 end
 
-function DestroyCSR(A::Ptr{Void})
-  ccall((:CSR_Destroy, LIB_PATH), Void,
-        (Ptr{Void},),
-        A)
+@doc """ Destroy the CSR representation of the sparse matrix. """
+function destroy_CSR(A :: Ptr{Void})
+    ccall((:CSR_Destroy, LIB_PATH), Void, (Ptr{Void},), A)
 end
 
-# w = alpha*A*x + beta*y + gamma
-function SpMV!(w::Vector, alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector, gamma::Number)
+@doc """ w = alpha*A*x + beta*y + gamma """
+function SpMV!(
+    w     :: Vector, 
+    alpha :: Number, 
+    A     :: SparseMatrixCSC, 
+    x     :: Vector, 
+    beta  :: Number, 
+    y     :: Vector, 
+    gamma :: Number
+)
     assert(length(w) == length(y))
 
-    if DEFAULT_LIBRARY == PCL_LIB
-        A2 = CreateCSR(A)
+    if use_SPMP
+        A1 = create_CSR(A)
         ccall((:CSR_MultiplyWithVector, LIB_PATH), Void,
               (Ptr{Cdouble}, Cdouble, Ptr{Void}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
-              pointer(w), alpha, A2, pointer(x), beta, pointer(y), gamma)
-        DestroyCSR(A2)
+              pointer(w), alpha, A1, pointer(x), beta, pointer(y), gamma)
+        destroy_CSR(A1)
     else
         # use Julia implementation
         w = alpha * A * x + beta * y + gamma
     end
+    w
 end
 
-# y = A*x
-SpMV!(y::Vector, A::SparseMatrixCSC, x::Vector) = SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)))
+@doc """ y = A*x """
+SpMV!(y :: Vector, A :: SparseMatrixCSC, x :: Vector) = 
+    SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)))
 
-function PageRank!(w::Vector, alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector, gamma::Number, z::Vector)
-    assert(length(w) == length(y))
-    assert(length(w) == length(z))
-
-    if DEFAULT_LIBRARY == PCL_LIB
-        A2 = CreateCSR(A)
-        ccall((:PageRank, LIB_PATH), Void,
-              (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
-              length(w), pointer(w), alpha, pointer(A.colptr), pointer(A.rowval), pointer(x), beta, pointer(y), gamma, pointer(z))
-        DestroyCSR(A2)
-    else
-        # use Julia implementation
-        w = (alpha * A * x + beta * x + gamma).*z
-    end
+@doc """ alpha*A*x + beta*y + gamma """
+function SpMV(
+    alpha :: Number, 
+    A     :: SparseMatrixCSC, 
+    x     :: Vector, 
+    beta  :: Number, 
+    y     :: Vector, 
+    gamma :: Number
+)
+   w = Array(Cdouble, length(x))
+   SpMV!(w, alpha, A, x, beta, y, gamma)
+   w
 end
 
-# alpha*A*x + beta*y + gamma
-function SpMV(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector, gamma::Number)
-  w = Array(Cdouble, length(x))
-  SpMV!(w, alpha, A, x, beta, y, gamma)
-  w
-end
+@doc """ alpha*A*x + beta*y """
+SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, beta :: Number, y :: Vector) =
+    SpMV(alpha, A, x, beta, y, zero(eltype(x)))
 
-# alpha*A*x + beta*y
-SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, beta::Number, y::AbstractVector) = SpMV(alpha, A, x, beta, y, zero(eltype(x)))
+@doc """ alpha*A*x + y """
+SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, y :: Vector) = 
+    SpMV(alpha, A, x, one(eltype(y)), y, zero(eltype(x)))
 
-# alpha*A*x + y
-SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector, y::AbstractVector) = SpMV(alpha, A, x, one(eltype(y)), y, zero(eltype(x)))
+@doc """ alpha*A*x """
+SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector) = 
+    SpMV(alpha, A, x, zero(eltype(x)), x, zero(eltype(x)))
 
-# alpha*A*x
-SpMV(alpha::Number, A::SparseMatrixCSC, x::AbstractVector) = SpMV(alpha, A, x, zero(eltype(x)), x, zero(eltype(x)))
-
-# A*x
-SpMV(A::SparseMatrixCSC, x::Vector) = SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
+@doc """ A*x """
+SpMV(A :: SparseMatrixCSC, x :: Vector) = 
+    SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
 
 @doc """
-SpMV. In addition, measure the benefit of reordering its input matrix, if
-reordering has not done yet.
+SpMV. In addition, measure the potential benefit of reordering its input matrix,
+if reordering has not done yet.
 """
-function SpMV_with_reordering_benefit(A::SparseMatrixCSC, x::Vector, first_reorder_done, beneficial)
+function SpMV_conditional_reordering(
+    A                  :: SparseMatrixCSC, 
+    x                  :: Vector, 
+    first_reorder_done :: Bool, 
+    beneficial         :: Vector{Bool}
+)
     if first_reorder_done
         return SpMV(A, x)
     end
@@ -145,6 +179,10 @@ function SpMV_with_reordering_benefit(A::SparseMatrixCSC, x::Vector, first_reord
     nnz = size(A.nzval, 1)
     rows = A.m
     SpMV_bandwidth = (nnz * 12 + rows * 3 * 8) / (time2 - time1) * 128 / 10 ^ 9
+    # ISSUE: here the machine peak bandwidth and the distance are fixed constants.
+    # The machine peak bandwidth should be set after running STREAM benchmark once
+    # during the installation time of the SparseAccelerator. The distance should
+    # be changed to make it portable for different machines. 
     machine_peak_bandwidth = 60
     if abs(SpMV_bandwidth - machine_peak_bandwidth) > 15
         beneficial[1] = true
@@ -152,39 +190,27 @@ function SpMV_with_reordering_benefit(A::SparseMatrixCSC, x::Vector, first_reord
     return y
 end
 
-function init_conditional_reordering(beneficial, first_reorder_done)
-    # Benefical can be just a scalar var. But we will treat it as a 1-element array
-    # so that we do not have difficulty in changing it in calling 
+@doc """ Initialize the conditions for conditional reordering. """
+function init_conditional_reordering(
+    first_reorder_done :: Bool, 
+    beneficial         :: Vector
+)
+    # Benefical can be just a scalar var. But we will treat it as a 1-element
+    # array so that we do not have difficulty in changing it in calling 
     # SpMV_conditional_reordering
     beneficial = Vector{Bool}()
     push!(beneficial, false)
     first_reorder_done = false
 end
 
-function WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
-  assert(length(x) == length(y))
-  assert(length(x) == length(w))
-
-  if DEFAULT_LIBRARY == PCL_LIB
-    ccall((:waxpby, LIB_PATH), Void,
-          (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
-          length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
-  else
-    w = alpha*x + beta*y
-  end
-  w
-end
-
-function WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
-  w = Array(Cdouble, length(x))
-  WAXPBY!(w, alpha, x, beta, y)
-  w
-end
-
-function Dot(x::Vector, y::Vector)
+@doc """ Dot product of vector x and y """
+function dot(
+    x :: Vector, 
+    y :: Vector
+)
   assert(length(x) == length(y))
 
-  if DEFAULT_LIBRARY == PCL_LIB
+  if use_SPMP
     ccall((:dot, LIB_PATH), Cdouble,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(x), pointer(y))
@@ -193,10 +219,15 @@ function Dot(x::Vector, y::Vector)
   end
 end
 
-function PointwiseDivide!(w::Vector, x::Vector, y::Vector)
+@doc """ w = x./y """
+function element_wise_divide!(
+    w :: Vector, 
+    x :: Vector, 
+    y :: Vector
+)
   assert(length(x) == length(y))
 
-  if DEFAULT_LIBRARY == PCL_LIB
+  if use_SPMP
     ccall((:pointwiseDivide, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
@@ -206,16 +237,25 @@ function PointwiseDivide!(w::Vector, x::Vector, y::Vector)
   w
 end
 
-function PointwiseDivide(x::Vector, y::Vector)
+@doc """" Alocate space for and return element-wise division of two vectors. """
+function element_wise_divide(
+    x :: Vector, 
+    y :: Vector
+)
   w = Array(Cdouble, length(x))
-  PointwiseDivide!(w, x, y)
+  element_wise_divide!(w, x, y)
   w
 end
 
-function PointwiseMultiply!(w::Vector, x::Vector, y::Vector)
+@doc """" w = x.*y """
+function element_wise_multiply!(
+    w :: Vector, 
+    x :: Vector, 
+    y :: Vector
+)
   assert(length(x) == length(y))
 
-  if DEFAULT_LIBRARY == PCL_LIB
+  if use_SPMP
     ccall((:pointwiseMultiply, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
@@ -225,31 +265,117 @@ function PointwiseMultiply!(w::Vector, x::Vector, y::Vector)
   w
 end
 
-function PointwiseMultiply(x::Vector, y::Vector)
+@doc """" Alocate space for and return element-wise multiplication of two vectors. """
+function element_wise_multiply(
+    x :: Vector, 
+    y :: Vector
+)
   w = Array(Cdouble, length(x))
-  PointwiseMultiply!(w, x, y)
+  element_wise_multiply!(w, x, y)
   w
 end
 
-function WAXPB!(w::Vector, alpha::Number, x::Vector, beta::Number)
+@doc """ w = alpha*x + beta*y """
+function WAXPBY!(
+    w     :: Vector, 
+    alpha :: Number, 
+    x     :: Vector, 
+    beta  :: Number, 
+    y     :: Vector
+)
+  assert(length(x) == length(y))
+  assert(length(x) == length(w))
+
+  if use_SPMP
+    ccall((:waxpby, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
+          length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
+  else
+    w = alpha*x + beta*y
+  end
+  w
+end
+
+@doc """ Allocate space for and return alpha*x + beta*y """
+function WAXPBY(
+    alpha :: Number,
+    x     :: Vector, 
+    beta  :: Number, 
+    y     :: Vector
+)
+  w = Array(Cdouble, length(x))
+  WAXPBY!(w, alpha, x, beta, y)
+  w
+end
+
+@doc """ w = alpha*x + beta """
+function WAXPB!(
+    w     :: Vector, 
+    alpha :: Number, 
+    x     :: Vector, 
+    beta  :: Number
+)
   assert(length(w) == length(x))
 
-  if DEFAULT_LIBRARY == PCL_LIB
+  if use_SPMP
     ccall((:waxpb, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
           length(x), pointer(w), alpha, pointer(x), beta)
   else
     w = alpha*x + beta
   end
+  w
 end
 
-function WAXPB(alpha::Number, x::Vector, beta::Number)
+@doc """ Allocate space for and return alpha*x + beta """
+function WAXPB(
+    alpha :: Number, 
+    x     :: Vector, 
+    beta  :: Number
+)
   w = Array(Cdouble, length(x))
   WAXPB!(w, alpha, x, beta)
   w
 end
 
-#function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector)
-#  SparseAccelerator.SpMV(alpha, A, x, beta, y)
-#end
+@doc """
+Read a matrix market file. Force it to be symmetric if force_symmetric is true.
+It calls SpMP library to do the actual work, which is faster than a pure
+Julia version.
+"""
+function matrix_market_read(
+    filename        :: String, 
+    force_symmetric :: Bool = false
+)
+    # Read into a COO array
+    sizes::Vector{Cint} = [0, 0, 0, 0]
+    ccall((:load_matrix_market_step1, LIB_PATH), Void, 
+        (Ptr{Uint8}, Ptr{Cint}, Bool), filename, pointer(sizes), force_symmetric)
 
+    is_symmetric::Cint = sizes[1] # 0/1: true/false    
+    if is_symmetric == 0
+        # We cannot handle asymmetric matrix right now, since we need a matrix
+        # to be symmetric, and thus we can use its CSC representation as CSR (The
+        # SpMP library is based on CSR, while Julia is based on CSC.)
+        throw(AsymmetricMatrixMarketFile(filename))
+    end
+
+    m::Cint = sizes[2]
+    n::Cint = sizes[3]
+    assert(m ==n)
+    nnz::Cint = sizes[4]  # Note: if symmetric, nnz includes elements in both 
+                          # upper and lower triangle 
+
+    v = Array(Cdouble, nnz)
+    i = Array(Cint, nnz)
+    j = Array(Cint, n + 1)
+    
+    A = SparseMatrixCSC{Cdouble, Cint}(m, n, j, i, v)
+
+    # Convert the COO array to CSC array.
+    ccall((:load_matrix_market_step2, LIB_PATH), Void, 
+        (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
+        filename, pointer(j), pointer(i), pointer(v), pointer(sizes), true)
+
+    A
+end

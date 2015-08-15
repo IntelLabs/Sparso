@@ -60,7 +60,7 @@ function create_reorder_matrix(
     push!(new_stmts, Statement(0, stmt))
 
     # Do the actual reordering through the C library
-    stmt = Expr(:call, GlobalRef(SparseAccelerator, :CSR_reorder_matrix),
+    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reorder_matrix),
                 M, new_M, P, inverse_P, permute, one_based_input, one_based_output)
     push!(new_stmts, Statement(0, stmt))
 
@@ -240,7 +240,7 @@ function SpMVs_with_reordering_benefit(
 )
     for site in SpMVs.sites
         func = LivenessAnalysis.TypedExpr(Function, :call, TopNode(:getfield), 
-            :SparseAccelerator, QuoteNode(:SpMV_with_reordering_benefit))
+            :SparseAccelerator, QuoteNode(:SpMV_conditional_reordering))
         site.ast.args = [func; site.ast.args[2:3]; first_reorder_done; beneficial]
         break
     end
@@ -287,7 +287,7 @@ function create_reorder_actions(
         
         init_stmt = Statement(-1, 
             Expr(:call, GlobalRef(SparseAccelerator, :init_conditional_reordering), 
-            beneficial, first_reorder_done))
+                first_reorder_done, beneficial))
         push!(init_action.new_stmts, init_stmt)
     end
 

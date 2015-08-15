@@ -1,5 +1,3 @@
-include("utils.jl")
-
 function cg(x, A, b, tol, maxiter)
     r = b - A * x
     rel_err = 1
@@ -10,10 +8,10 @@ function cg(x, A, b, tol, maxiter)
     while k <= maxiter
         old_rz = rz
         Ap = A*p #Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
-        alpha = old_rz / dot(p, Ap) #alpha = old_rz / SparseAccelerator.Dot(p, Ap) # manual
+        alpha = old_rz / dot(p, Ap) #alpha = old_rz / SparseAccelerator.dot(p, Ap) # manual
         x += alpha * p #SparseAccelerator.WAXPBY!(x, alpha, p, 1, x) # manual
         r -= alpha * Ap #SparseAccelerator.WAXPBY!(r, -alpha, Ap, 1, r) # manual
-        rz = dot(r, r) #rz = SparseAccelerator.Dot(r, r) # manual
+        rz = dot(r, r) #rz = SparseAccelerator.dot(r, r) # manual
         rel_err = sqrt(rz)/normr0
         if rel_err < tol 
             break
@@ -24,10 +22,3 @@ function cg(x, A, b, tol, maxiter)
     end
     return x, k, rel_err
 end
-
-m = 10
-A = generate_symmetric_sparse_matrix(m)
-x = repmat([1/m], m)
-b   = ones(Float64, m)
-tol = 1e-10
-maxiter = 1000

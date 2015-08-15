@@ -13,7 +13,7 @@ export SA_ENABLE, SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP,
        SA_REPLACE_CALLS, SA_REORDER, SA_REORDER_WHEN_BENEFICIAL, SA_CONTEXT
 
 # Function interface
-export set_options
+export set_options, matrix_market_read
 
 # Data structures user can extend
 export FunctionDescription

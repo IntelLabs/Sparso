@@ -36,34 +36,34 @@ const MATRIX_OR_NUM = Union(AbstractMatrix, Number)
 
 ia(args ...) = Set(Any[args ...])
 
-const PointwiseMultiply_Desc = FunctionDescription(
+const element_wise_multiply_Desc = FunctionDescription(
     "SparseAccelerator", 
-    "PointwiseMultiply",              # SparseAccelerator.PointwiseMultiply(x::Vector, y::Vector)
+    "element_wise_multiply",          # SparseAccelerator.element_wise_multiply(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
     ia(Set([0; 1; 2]))                # The return value (0) and the two arguments (1, 2) are inter-dependent
 )
 
-const PointwiseMultiply!_Desc = FunctionDescription(
+const element_wise_multiply!_Desc = FunctionDescription(
     "SparseAccelerator", 
-    "PointwiseMultiply!",             # SparseAccelerator.PointwiseMultiply!(w::Vector, x::Vector, y::Vector)
+    "element_wise_multiply!",         # SparseAccelerator.element_wise_multiply!(w::Vector, x::Vector, y::Vector)
     (Vector, Vector, Vector),         # The arguments must be vectors
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
     ia(Set([0; 1; 2; 3]))             # The return value (0) and the arguments (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
 )
 
-const PointwiseDivide_Desc = FunctionDescription(
+const element_wise_divide_Desc = FunctionDescription(
     "SparseAccelerator", 
-    "PointwiseDivide",                # SparseAccelerator.PointwiseDivide(x::Vector, y::Vector)
+    "element_wise_divide",            # SparseAccelerator.element_wise_divide(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
     ia(Set([0; 1; 2]))                # The return value (0) and the two arguments (1, 2) are inter-dependent
 )
 
-const PointwiseDivide1_Desc = FunctionDescription(
+const element_wise_divide1_Desc = FunctionDescription(
     "Main", 
     "./",           
     (VECTOR_OR_NUM, Vector),          # The arguments must be vectors
@@ -72,9 +72,9 @@ const PointwiseDivide1_Desc = FunctionDescription(
     ia(Set([0; 1; 2]))                # The return value (0) and the two arguments (1, 2) are inter-dependent
 )
 
-const PointwiseDivide!_Desc = FunctionDescription(
+const element_wise_divide!_Desc = FunctionDescription(
     "SparseAccelerator", 
-    "PointwiseDivide!",               # SparseAccelerator.PointwiseDivide!(w::Vector, x::Vector, y::Vector)
+    "element_wise_divide!",           # SparseAccelerator.element_wise_divide!(w::Vector, x::Vector, y::Vector)
     (Vector, Vector, Vector),         # The arguments must be vectors
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
@@ -119,7 +119,7 @@ const star2_Desc = FunctionDescription(
 
 const Dot_Desc = FunctionDescription(
     "SparseAccelerator", 
-    "Dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
+    "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -307,11 +307,11 @@ const bwdTriSolve!_Desc = FunctionDescription(
 )
 
 function_descriptions  = [
-    PointwiseMultiply_Desc,
-    PointwiseMultiply!_Desc,
-    PointwiseDivide_Desc,
-    PointwiseDivide1_Desc,
-    PointwiseDivide!_Desc,
+    element_wise_multiply_Desc,
+    element_wise_multiply!_Desc,
+    element_wise_divide_Desc,
+    element_wise_divide1_Desc,
+    element_wise_divide!_Desc,
     SpMV_Desc,
     star_Desc,
     star1_Desc,

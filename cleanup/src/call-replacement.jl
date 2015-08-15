@@ -111,7 +111,7 @@ const dot_pattern1 = ExprPattern(
     "dot_pattern1",
     (:call, GlobalRef(Main, :dot), Vector, Vector),
     (:NO_SUB_PATTERNS,),
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:Dot)),
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
      :arg2, :arg3)
 )
 
@@ -203,14 +203,13 @@ const WAXPBY!_pattern1 = ExprPattern(
      :arg1, :aarg22, :aarg23, :aarg24, :aarg25)
 )
 
-const PointwiseMultiply_pattern1 = ExprPattern(
-    "PointwiseMultiply_pattern1",
+const element_wise_multiply_pattern1 = ExprPattern(
+    "element_wise_multiply_pattern1",
     (:call, GlobalRef(Main, :.*), Vector, Vector),
     (:NO_SUB_PATTERNS,),
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:PointwiseMultiply)),
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_multiply)),
      :arg2, :arg3)
 )
-
 
 expr_patterns = [
     dot_pattern1,
@@ -225,7 +224,7 @@ expr_patterns = [
     WAXPBY_pattern1,
     WAXPBY_pattern2,
     WAXPBY!_pattern1,
-    PointwiseMultiply_pattern1
+    element_wise_multiply_pattern1
     #SpMV_pattern2,
     #WAXPBY!_pattern,
 ]
