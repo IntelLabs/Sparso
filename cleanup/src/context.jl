@@ -14,7 +14,7 @@ end
 # Below are the context sensitive functions we care about. For short, CS represents 
 # Context Sensitive
 const CS_fwdTriSolve! = ContextSensitiveFunction(
-    "SparseAccelerator", 
+    "Base.SparseMatrix", 
     "fwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),
@@ -23,7 +23,7 @@ const CS_fwdTriSolve! = ContextSensitiveFunction(
 )
 
 const CS_bwdTriSolve! = ContextSensitiveFunction(
-    "SparseAccelerator", 
+    "Base.SparseMatrix", 
     "bwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),
@@ -44,12 +44,16 @@ function discover_context_sensitive_call(ast, call_sites :: CallSites, top_level
         head = ast.head
         if head == :call || head == :call1
             args = ast.args
-            module_name, function_name = resolve_module_function_names(args)
+            module_name, function_name = resolve_call_names(args)
             arg_types                  = ntuple(i-> type_of_ast_node(args[i+1], call_sites.symbol_info), length(args) - 1)
             item                       = look_for_function(context_sensitive_functions, module_name, function_name, arg_types)
             if item != nothing 
-                site = CallSite(ast, item.matrices, item.fknob_creator, item.fknob_deletor)
-                push!(call_sites.sites, site) 
+                site = CallSite(ast, Set(), item.fknob_creator, item.fknob_deletor)
+                push!(call_sites.sites, site)
+                for i in item.matrices
+                    push!(site.matrices, typeof(args[i]) == SymbolNode ?
+                        args[i].name : args[i])
+                end
             end
         end
     end
@@ -86,7 +90,7 @@ end
 Create statements that will create a function knob for the call site, and add
 the function knob to the call as a parameter.
 """
-function insert_new_function_knob(
+function create_new_function_knob(
     new_stmts :: Vector{Statement},
     call_site :: CallSite
 )
@@ -96,7 +100,7 @@ function insert_new_function_knob(
                     call_site.fknob_creator)
                )
     push!(new_stmts, Statement(0, new_stmt))
-    call_site.ast.args = [call_site.ast.args, fknob]
+    call_site.ast.args = [call_site.ast.args; fknob]
 
     fknob
 end
@@ -154,29 +158,26 @@ function context_info_discovery(
     # Find call to context-sensitive functions, including their matrix 
     # inputs. Find all definitions of sparse matrices related with the calls.
     call_sites  = CallSites(Set{CallSite}(), symbol_info)
-    var_defs    = Dict{Sym, Set{Tuple{BasicBlock, Statement}}}() # Map from a variable to a set of statements defining it
+    var_defs    = Dict{Sym, Set{Tuple{BasicBlock, StatementIndex}}}() # Map from a variable to a set of statements defining it
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements
         for stmt_idx in 1 : length(statements)
-            stmt = statements[stmt_index]
+            stmt = statements[stmt_idx]
             expr = stmt.expr
             if typeof(expr) != Expr
                 continue
             end
 
             CompilerTools.AstWalker.AstWalk(expr, discover_context_sensitive_call, call_sites)
-            
-            # Get the def of the statement. 
-            # TODO: LivenessAnalysis package should provide an interface for this
-            stmt_def = LivenessAnalysis.get_info_internal(stmt, liveness, :def)
-            
+
+            stmt_def = LivenessAnalysis.def(stmt, liveness)
             for d in stmt_def
-                if type_of_ast_node(d, symbolInfo) <: AbstractSparseMatrix
-                    if !haskey(defs, d)
-                        defs[d] = Set{Tuple{BasicBlock, Statement}}()
+                if type_of_ast_node(d, symbol_info) <: AbstractSparseMatrix
+                    if !haskey(var_defs, d)
+                        var_defs[d] = Set{Tuple{BasicBlock, StatementIndex}}()
                     end
-                    push!(defs[d], (bb, stmt))
+                    push!(var_defs[d], (bb, stmt_idx))
                 end
             end
         end
@@ -186,9 +187,9 @@ function context_info_discovery(
     # functions. Create matrix-specific knobs for the matrices inputs.
     # First, create matrix knobs, as they will be needed for creating the function
     # knobs.
-    matrix_knobs         = Dict{Sym, Symbol}
+    matrix_knobs         = Dict{Sym, Symbol}()
     action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
-    push!(action_before_region, action)
+    push!(actions, action_before_region)
     for call_site in call_sites.sites
         for M in call_site.matrices
             if !haskey(matrix_knobs, M)
@@ -196,14 +197,15 @@ function context_info_discovery(
                 # the matrix before the loop region
                 mknob = create_new_matrix_knob(action_before_region.new_stmts, M)
                 matrix_knobs[M] = mknob
+            end
+            mknob = matrix_knobs[M]
 
-                # Create statements that will update the knob before every
-                # statement that defines the matrix
-                for (bb, stmt) in defs[M]
-                    action = InsertBeforeStatement(Vector{Statement}(), bb, stmt)
-                    push!(actions, action)
-                    create_increment_matrix_version(action.new_stmts, mknob)
-                end
+            # Create statements that will update the knob before every
+            # statement that defines the matrix
+            for (bb, stmt_idx) in var_defs[M]
+                action = InsertBeforeStatement(Vector{Statement}(), bb, stmt_idx)
+                push!(actions, action)
+                create_increment_matrix_version(action.new_stmts, mknob)
             end
         end
     end
@@ -218,8 +220,8 @@ function context_info_discovery(
     end
     
     # Create statemetns that will delete all the knobs at each exit of the region
-    for (from_bb, to_bb) in region.exits
-        action  = InsertOnEdge(Vector{Statement}(), from_bb, to_bb)
+    for exit in region.exits
+        action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
         push!(actions, action)
         for (fknob, fknob_deletor) in function_knobs
             create_delete_function_knob(action.new_stmts, fknob_deletor, fknob)
@@ -246,7 +248,8 @@ function context_info_discovery(
         context_info_discovery(actions, region, func_ast, symbol_info, liveness, cfg)
     end
 
-    dprintln(1, 0, "\nContext-sensitive actions to take:", actions)
+    dprintln(1, 0, "\nContext-sensitive actions to take:")
+    dprintln(1, 1, "", actions)
     
     actions
 end

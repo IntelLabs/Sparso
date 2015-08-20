@@ -79,6 +79,30 @@ function show(
                     print(io_buffer, fld)
                 end
             end
+        elseif typeof(msg) <: Vector{Action}
+            for action in msg
+                println(io_buffer, "Insert action:")
+                for stmt in action.new_stmts
+                    println(io_buffer, "    ", stmt.expr)
+                end
+                if typeof(action) <: InsertBeforeStatement
+                    println(io_buffer, "before BB ", action.bb.label, " statement")
+                    println(io_buffer, "    ", action.bb.statements[action.stmt_idx].expr)
+                elseif typeof(action) <: InsertBeforeLoopHead
+                    print(io_buffer, action.outside_loop ? "outisde" : "inside", " loop of BBs [")
+                    total = 0
+                    for i in action.loop.members
+                        total = total + 1
+                        print(io_buffer, i, 
+                            total == length(action.loop.members) ? "" : ", ")
+                    end
+                    println(io_buffer, "] before loop head BB ", action.loop.head)
+                else
+                    assert(typeof(action) == InsertOnEdge)
+                    println(io_buffer, "on the edge BB ", action.from_bb.label, " --> BB ", action.to_bb.label)
+                end
+                println(io_buffer, "")
+            end
         else
             print(io_buffer, msg)
         end

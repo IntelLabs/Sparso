@@ -36,6 +36,7 @@ function loop_region_formation(
             end
         end
     end
+    region
 end
 
 @doc """ 

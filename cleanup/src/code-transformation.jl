@@ -1,16 +1,28 @@
 @doc """
-Group InsertBeforeStatement actions.
+Group InsertBeforeStatement actions in decreasing order of
+(basic block index, statement index) of the actions.
 """
 function group_action(
     insert_before_statement_actions :: Vector{InsertBeforeStatement},
     action                          :: InsertBeforeStatement
 )
-    for action1 in insert_before_statement_actions
-        if action1.bb == action.bb && action1.stmt == action.stmt
-            append!(action1.new_stmts, action.new_stmts)
+    for i in 1 : length(insert_before_statement_actions)
+        action1 = insert_before_statement_actions[i]
+        if action.bb == action1.bb 
+            if action.stmt_idx == action1.stmt_idx
+                append!(action1.new_stmts, action.new_stmts)
             
-            # No need to try match with other elements: the vector is ensured
-            # to have only one elment for one specific statement.
+                # No need to try match with other elements: the vector is ensured
+                # to have only one elment for one specific statement.
+                return
+            elseif action.stmt_idx > action1.stmt_idx
+                # Let the actions for a later statement happen earlier since
+                # they do not impact the positions of earlier statements.
+                insert!(insert_before_statement_actions, i, action)
+                return
+            end
+        elseif action.bb.label > action.bb.label
+            insert!(insert_before_statement_actions, i, action)
             return
         end
     end
@@ -107,7 +119,7 @@ function code_transformation(
             continue
         end
 
-        new_bb, new_goto_stmt = CFGs.insertBetween(cfg, acton.from_bb.label, action.to_bb.label)
+        new_bb, new_goto_stmt = CFGs.insertBetween(cfg, action.from_bb.label, action.to_bb.label)
         new_bb.statements     = action.new_stmts
         if new_goto_stmt != nothing
             push!(new_bb.statements, new_goto_stmt)
@@ -120,10 +132,8 @@ function code_transformation(
             continue
         end
 
-        stmt_idx = index_of_stmt(action.bb, action.stmt)
-        assert(stmt_idx > 0)
         for i = 1 : length(action.new_stmts)
-            insert!(action.bb.statements, stmt_idx + i - 1, action.new_stmts[i])
+            insert!(action.bb.statements, action.stmt_idx + i - 1, action.new_stmts[i])
         end
     end
 
@@ -133,12 +143,15 @@ function code_transformation(
             continue
         end
 
-        new_bb, new_goto_stmt = insertBefore(cfg, action.L.head.label, action.outside_loop, action.L.back_edge)
+        new_bb, new_goto_stmt = CFGs.insertBefore(cfg, action.loop.head, action.outside_loop, action.loop.back_edge)
         new_bb.statements     = action.new_stmts
         if new_goto_stmt != nothing
             push!(new_bb.statements, new_goto_stmt)
         end
     end
+
+    body_reconstructed   = CFGs.createFunctionBody(cfg)
+    func_ast.args[3].args = body_reconstructed
 
     func_ast
 end

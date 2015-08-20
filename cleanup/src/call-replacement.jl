@@ -345,7 +345,7 @@ function replace(
         return
     end
 
-    dprintln(1, 0, "Replace")
+    dprintln(1, 0, "\n\nReplace")
     dsprintln(1, 1, symbol_info, ast)
 
     orig_ast = copy(ast)

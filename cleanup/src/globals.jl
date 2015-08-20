@@ -170,11 +170,18 @@ function are_numbers_or_arrays(result_type :: Type, arg_types :: Tuple{Type})
 end
 
 @doc """ A module (or function)'s name string """
-function module_or_function_name(arg)
+function module_or_function_name(arg :: Any)
     if typeof(arg) == Symbol
         return string(arg)
     elseif typeof(arg) == QuoteNode && typeof(arg.value) == Symbol
         return string(arg.value)
+    elseif isdefined(:GlobalRef) && typeof(arg) == GlobalRef
+        return string(arg)
+    elseif typeof(arg) == Expr && arg.head == :call && length(arg.args) == 3 &&
+        arg.args[1] == TopNode(:getfield)
+        from_name  = module_or_function_name(arg.args[2])
+        field_name = module_or_function_name(arg.args[3])
+        return string(from_name, ".", field_name)
     else
         throw(UnhandledModuleOrFunctionName(arg))
     end
@@ -199,8 +206,7 @@ function resolve_call_names(call_args :: Vector)
         else
             function_name = module_or_function_name(call_args[1].name)
         end
-    elseif  isa(call_args[1], Expr) &&
-        call_args[1].head == :call
+    elseif  isa(call_args[1], Expr) && call_args[1].head == :call
         # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
         return resolve_call_names(call_args[1].args)
     end
@@ -215,7 +221,7 @@ function look_for_function(
     database       :: Vector, 
     module_name    :: String, 
     function_name  :: String, 
-    argument_types :: Tuple{Type}
+    argument_types :: Tuple
 )
     for item in database
         if module_name    == item.module_name   && 
@@ -244,9 +250,9 @@ site, and may delete the knob later.
 """
 type CallSite
     ast           :: Expr 
-    matrices      :: Set{Sym} 
-    fknob_creator :: Tuple{Symbol, String} # A library call to create a function knob for this call site
-    fknob_deletor :: Tuple{Symbol, String} # A library call to delete the function knob for this call site
+    matrices      :: Set   #Set{Sym} 
+    fknob_creator :: Tuple #Tuple{Symbol, String} A library call to create a function knob for this call site
+    fknob_deletor :: Tuple #Tuple{Symbol, String} A library call to delete the function knob for this call site
 end
 
 @doc """
@@ -264,7 +270,7 @@ abstract Action
 type InsertBeforeStatement <: Action
     new_stmts   :: Vector{Statement} 
     bb          :: BasicBlock
-    stmt        :: Statement 
+    stmt_idx    :: StatementIndex
 end
 
 @doc """ Insert new statements before a loop's head block """
@@ -293,7 +299,8 @@ function analyses(
     loop_info   :: DomLoops)
 
     dprintln(1, 0, "\nAnalyzing ...", "\nCFG:")
-    dprintln(1, 1, cfg)
+    LivenessAnalysis.set_debug_level(6)
+    dprintln(1, 1, liveness)
         
     regions = region_formation(cfg, loop_info)
     actions = Vector{Action}()
