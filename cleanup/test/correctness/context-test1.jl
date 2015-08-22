@@ -3,6 +3,7 @@ using SparseAccelerator
 using CompilerTools.OptFramework
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
+CompilerTools.LivenessAnalysis.set_debug_level(6)
 
 include("./pcg-symgs.jl")
 include("utils.jl")

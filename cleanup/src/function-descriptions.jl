@@ -289,7 +289,7 @@ const inverse_divide_Desc = FunctionDescription(
 )
 
 const fwdTriSolve!_Desc = FunctionDescription(
-    "Main", 
+    "Base.SparseMatrix", 
     "fwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -298,7 +298,7 @@ const fwdTriSolve!_Desc = FunctionDescription(
 )
 
 const bwdTriSolve!_Desc = FunctionDescription(
-    "Main", 
+    "Base.SparseMatrix", 
     "bwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -357,17 +357,24 @@ part of the "Main" module and then looks and returns the Function object
 corresponding to the "func" String in that module.
 """
 function get_function_from_string(mod :: String, func :: String)
-    msym   = symbol(mod)
+    # A module string may have submodules like "Base.SparseMatrix". We need to
+    # get module object level by level
+    modobj  = eval(:Main)
+    modules = split(mod, '.')
+    for m in modules
+        msym = symbol(m)
+        modobj = eval(:($modobj.$msym))
+    end
+    
     fsym   = symbol(func)
-    modobj = eval(:(Main.$msym))
     return eval(:($modobj.$fsym))
 end
 
 @doc """
 Convert the function_descriptions table into a dictionary that can be passed to
-LivenessAnalysis to indicate which args can be modified by which functions.
+LivenessAnalysis to indicate which args are unmodified by which functions.
 """
-function create_modified_args_dict()
+function create_unmodified_args_dict()
     res = Dict{Any, Array{Int64,1}}()
     for desc in function_descriptions
         num_args    = length(desc.argument_types)   # Get the number of arguments to the functions.
