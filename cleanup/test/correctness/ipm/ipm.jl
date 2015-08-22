@@ -1,5 +1,10 @@
+include("../../../src/SparseAccelerator.jl")
+using SparseAccelerator
+using CompilerTools.OptFramework
 using MatrixMarket
 using MatrixMarket2
+
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_REPLACE_CALLS)
 
 include("dss.jl")
 
@@ -426,7 +431,8 @@ m = size(A, 1)
 n = size(A, 2)
 println("Problem size = [$m $n]")
 
-ipm_ref(A, b, p, false) # ignore timing of the first run
+print_time = false
+@acc ipm_ref(A, b, p, print_time) # ignore timing of the first run
 ipm_ref(A, b, p)
 
 ipm_unopt(A, b, p, false)
