@@ -69,7 +69,7 @@ function fwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
-    y = Array(Cdouble, length(b))
+    y = zeros(Cdouble, length(b))
     ccall((:ForwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
@@ -84,7 +84,7 @@ function bwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
-    y = Array(Cdouble, length(b))
+    y = zeros(Cdouble, length(b))
     ccall((:BackwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
