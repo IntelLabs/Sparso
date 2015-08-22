@@ -373,13 +373,13 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     catch ex
         dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
         dprintln(1, 1, ex)
-        Libc.flush_cstdio()
-        flush(STDOUT)
 
         # Return the original AST without any change
         new_ast = old_ast
     finally
         dprintln(1, 0, "********************************************************************************")
+        Libc.flush_cstdio()
+        flush(STDOUT)
         return new_ast
     end
 end
