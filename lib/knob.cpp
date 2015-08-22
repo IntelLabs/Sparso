@@ -157,17 +157,10 @@ void DeleteBackwardTriangularSolveKnob(void* fknob)
     delete f;
 }
 
-synk::Barrier *bar;
-  
 void ForwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-#ifdef __MIC__
-    bar = new synk::Barrier(omp_get_max_threads()/4, 4);
-#else
-    bar = new synk::Barrier(omp_get_max_threads(), 1);
-#endif
     CSR *A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
@@ -192,18 +185,13 @@ void ForwardTriangularSolve(
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    forwardSolve(*A, y, b, *schedule, invPerm, bar);
+    forwardSolve(*A, y, b, *schedule, invPerm);
 }
 
 void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-#ifdef __MIC__
-    bar = new synk::Barrier(omp_get_max_threads()/4, 4);
-#else
-    bar = new synk::Barrier(omp_get_max_threads(), 1);
-#endif
     CSR *A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
@@ -228,5 +216,5 @@ void BackwardTriangularSolve(
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    backwardSolve(*A, y, b, *schedule, invPerm, bar);
+    backwardSolve(*A, y, b, *schedule, invPerm);
 }

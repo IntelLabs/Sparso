@@ -13,37 +13,37 @@ void backwardSolveRef(const CSR& A, double y[], const double b[]);
 void forwardSolveWithBarrier(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar);
+  const int *perm);
 
 void backwardSolveWithBarrier(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar);
+  const int *perm);
 
 void forwardSolve(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar);
+  const int *perm);
   
 void backwardSolve(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar);
+  const int *perm);
 
 void forwardSolveWithBarrierAndReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar);
+  const LevelSchedule& schedule);
 
 void backwardSolveWithBarrierAndReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar);
+  const LevelSchedule& schedule);
  
 void forwardSolveWithReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar);
+  const LevelSchedule& schedule);
  
 void backwardSolveWithReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar);
+  const LevelSchedule& schedule);
 
 #endif

@@ -45,7 +45,7 @@ void backwardSolveRef(const CSR& A, double y[], const double b[])
 void forwardSolveWithBarrier(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar)
+  const int *perm)
 {
 #pragma omp parallel
   {
@@ -64,7 +64,7 @@ void forwardSolveWithBarrier(
         y[row] = sum*A.idiag[row];
       } // for each row
 
-      bar->wait(tid);
+      synk::Barrier::getInstance()->wait(tid);
     } // for each level
   } // omp parallel
 }
@@ -76,7 +76,7 @@ void forwardSolveWithBarrier(
 void backwardSolveWithBarrier(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar)
+  const int *perm)
 {
 #pragma omp parallel
   {
@@ -94,7 +94,7 @@ void backwardSolveWithBarrier(
         }
         y[row] = sum;
       } // for each row
-      bar->wait(tid);
+      synk::Barrier::getInstance()->wait(tid);
     } // for each level
   } // omp parallel
 }
@@ -106,7 +106,7 @@ void backwardSolveWithBarrier(
 void forwardSolve(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar)
+  const int *perm)
 {
 #pragma omp parallel
   {
@@ -127,7 +127,7 @@ void forwardSolve(
 
     memset((char *)(taskFinished + nBegin), 0, (nEnd - nBegin)*sizeof(int));
 
-    bar->wait(tid);
+    synk::Barrier::getInstance()->wait(tid);
 
     for (int task = threadBoundaries[tid]; task < threadBoundaries[tid + 1]; ++task) {
       SPMP_LEVEL_SCHEDULE_WAIT;
@@ -153,7 +153,7 @@ void forwardSolve(
 void backwardSolve(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
-  const int *perm, synk::Barrier *bar)
+  const int *perm)
 {
 #pragma omp parallel
   {
@@ -174,7 +174,7 @@ void backwardSolve(
 
     memset((char *)(taskFinished + nBegin), 0, (nEnd - nBegin)*sizeof(int));
 
-    bar->wait(tid);
+    synk::Barrier::getInstance()->wait(tid);
 
     for (int task = threadBoundaries[tid + 1] - 1; task >= threadBoundaries[tid]; --task) {
       SPMP_LEVEL_SCHEDULE_WAIT;
@@ -199,7 +199,7 @@ void backwardSolve(
  */
 void forwardSolveWithBarrierAndReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar)
+  const LevelSchedule& schedule)
 {
 #pragma omp parallel
   {
@@ -216,7 +216,7 @@ void forwardSolveWithBarrierAndReorderedMatrix(
         }
         y[i] = sum*A.idiag[i];
       } // for each row
-      bar->wait(tid);
+      synk::Barrier::getInstance()->wait(tid);
     } // for each level
   } // omp parallel
 }
@@ -227,7 +227,7 @@ void forwardSolveWithBarrierAndReorderedMatrix(
  */
 void backwardSolveWithBarrierAndReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar)
+  const LevelSchedule& schedule)
 {
 #pragma omp parallel
   {
@@ -244,7 +244,7 @@ void backwardSolveWithBarrierAndReorderedMatrix(
         }
         y[i] = sum;
       } // for each row
-      bar->wait(tid);
+      synk::Barrier::getInstance()->wait(tid);
     } // for each level
   } // omp parallel
 }
@@ -255,7 +255,7 @@ void backwardSolveWithBarrierAndReorderedMatrix(
  */
 void forwardSolveWithReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar)
+  const LevelSchedule& schedule)
 {
 #pragma omp parallel
   {
@@ -276,7 +276,7 @@ void forwardSolveWithReorderedMatrix(
 
     memset((char *)(taskFinished + nBegin), 0, (nEnd - nBegin)*sizeof(int));
 
-    bar->wait(tid);
+    synk::Barrier::getInstance()->wait(tid);
 
     for (int task = threadBoundaries[tid]; task < threadBoundaries[tid + 1]; ++task) {
       SPMP_LEVEL_SCHEDULE_WAIT;
@@ -300,7 +300,7 @@ void forwardSolveWithReorderedMatrix(
  */
 void backwardSolveWithReorderedMatrix(
   const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule, synk::Barrier *bar)
+  const LevelSchedule& schedule)
 {
 #pragma omp parallel
   {
@@ -321,7 +321,7 @@ void backwardSolveWithReorderedMatrix(
 
     memset((char *)(taskFinished + nBegin), 0, (nEnd - nBegin)*sizeof(int));
 
-    bar->wait(tid);
+    synk::Barrier::getInstance()->wait(tid);
 
     for (int task = threadBoundaries[tid + 1] - 1; task >= threadBoundaries[tid]; --task) {
       SPMP_LEVEL_SCHEDULE_WAIT;
