@@ -8,35 +8,89 @@ function new_matrix_knob()
 end
 
 @doc """ Increment the version of a matrix knob. """
-function increment_matrix_version(mknob :: Symbol)
+function increment_matrix_version(
+    mknob :: Ptr{Void}
+)
     ccall((:IncrementMatrixVersion, LIB_PATH), Void, (Ptr{Void},), mknob)
 end
 
 @doc """ Delete a matrix knob. """
-function delete_matrix_knob(mknob :: Symbol)
+function delete_matrix_knob(
+    mknob :: Ptr{Void}
+)
     ccall((:DeleteMatrixKnob, LIB_PATH), Void, (Ptr{Void},), mknob)
 end
 
 @doc """ Associate a matrix knob with a function knob. """
 function add_mknob_to_fknob(
-    mknob :: Symbol, 
-    fknob :: Symbol
+    mknob :: Ptr{Void}, 
+    fknob :: Ptr{Void}
 )
     ccall((:AddMatrixKnob, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), 
-        pointer(fknob), pointer(mkob))
+        fknob, mknob)
 end
 
 @doc """ Create a function knob. """
-function new_function_knob(fknob_creator :: Tuple)
-    ccall(fknob_creator, Ptr{Void}, ())
+function new_function_knob(
+    fknob_creator :: String
+)
+    # Simulate ccall((fknob_creator, LIB_PATH), Ptr{Void}, ()). We cannot directly
+    # use this ccall here because (fknob_creator, LIB_PATH) is treated as a tuple,
+    # instead of a pointer or expression.
+    expr = Expr(:call, 
+        TopNode(:ccall), 
+        Expr(:call, TopNode(:tuple), QuoteNode(fknob_creator), LIB_PATH), 
+        Ptr{Void}, 
+        Expr(:call, TopNode(:svec))
+    )
+    eval(expr)
 end
 
 @doc """ Delete a function knob. """
 function delete_function_knob(
-    fknob_deletor :: Tuple , 
-    fknob         :: Symbol
+    fknob_deletor :: String, 
+    fknob         :: Ptr{Void}
 )
-    ccall(fknob_deletor, Void, (Ptr{Void},), fknob)
+    # Simulate ccall((fknob_deletor, LIB_PATH), Ptr{Void}, ()). We cannot directly
+    # use this ccall here because (fknob_deletor, LIB_PATH) is treated as a tuple,
+    # instead of a pointer or expression.
+    expr = Expr(:call, 
+        TopNode(:ccall), 
+        Expr(:call, TopNode(:tuple), QuoteNode(fknob_deletor), LIB_PATH), 
+        Void, 
+        Expr(:call, TopNode(:svec))
+    )
+    eval(expr)
+end
+
+@doc """ Context-sensitive forward triangular solver. """
+function fwdTriSolve!(
+    A     :: SparseMatrixCSC, 
+    b     :: Vector,
+    fknob :: Ptr{Void}
+ )
+    y = Array(Cdouble, length(b))
+    ccall((:ForwardTriangularSolve, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(y), pointer(b), fknob)
+    b = copy(y)
+end
+
+@doc """ Context-sensitive backward triangular solver. """
+function bwdTriSolve!(
+    A     :: SparseMatrixCSC, 
+    b     :: Vector,
+    fknob :: Ptr{Void}
+ )
+    y = Array(Cdouble, length(b))
+    ccall((:BackwardTriangularSolve, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(y), pointer(b), fknob)
+    b = copy(y)
 end
 
 @doc """ 

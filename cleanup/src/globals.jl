@@ -242,6 +242,13 @@ function look_for_function(
     return nothing
 end
 
+@doc """ Abstract type for a pattern. """
+abstract Pattern
+
+@doc """ Dummy function that does nothing. Used for empty call back. """
+function do_nothing()
+end
+
 @doc """
 A call sites of interesting functions (like SpMV, triangular solver, etc.). From
 the AST of the call, we may figure out the matrices in its arguments so that we 
@@ -250,18 +257,21 @@ site, and may delete the knob later.
 """
 type CallSite
     ast           :: Expr 
-    matrices      :: Set   #Set{Sym} 
-    fknob_creator :: Tuple #Tuple{Symbol, String} A library call to create a function knob for this call site
-    fknob_deletor :: Tuple #Tuple{Symbol, String} A library call to delete the function knob for this call site
+    matrices      :: Set    # Set{Sym} 
+    fknob_creator :: String # A library function to create a function knob for this call site
+    fknob_deletor :: String # A library function to delete the function knob for this call site
 end
 
 @doc """
 Call sites of interesting functions (like SpMV, triangular solver, etc.). The
-function's result and argument types are figured out with the help of symbol_info. 
+function's result and argument types are figured out with the help of symbol_info.
+It may also have some patterns to match and replace at the call sites.
+
 """
 type CallSites
     sites       :: Set{CallSite}
     symbol_info :: Sym2TypeMap
+    patterns    :: Vector{Pattern}
 end
 
 abstract Action
@@ -363,6 +373,8 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     catch ex
         dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
         dprintln(1, 1, ex)
+        Libc.flush_cstdio()
+        flush(STDOUT)
 
         # Return the original AST without any change
         new_ast = old_ast

@@ -1,64 +1,53 @@
-@doc """
-For a function, describe the matrix arguments, and how to create and delete its
-context info (fknob).
-"""
-immutable ContextSensitiveFunction
-    module_name     :: String # Module of the function. 
-    function_name   :: String # Name of the function
-    argument_types  :: Tuple  # Tuple of the function arguments' types
-    matrices        :: Set    # The matrix arguments.
-    fknob_creator   :: Tuple  # {Symbol, String} The path to a fknob creator
-    fknob_deletor   :: Tuple  # {Symbol, String} The path to a fknob deletor
-end
-
-# Below are the context sensitive functions we care about. For short, CS represents 
-# Context Sensitive
-const CS_fwdTriSolve! = ContextSensitiveFunction(
-    "Base.SparseMatrix", 
-    "fwdTriSolve!",                              
-    (AbstractSparseMatrix, Vector),
-    Set(2),
-    (:NewForwardTriangularSolveKnob, libcsr),
-    (:DeleteForwardTriangularSolveKnob, libcsr)
+@doc """ Gather context sensitive info of the call site at the given AST. """
+function gather_context_sensitive_info(
+    ast           :: Expr,
+    call_sites    :: CallSites,
+    fknob_creator :: String,
+    fknob_deletor :: String
 )
-
-const CS_bwdTriSolve! = ContextSensitiveFunction(
-    "Base.SparseMatrix", 
-    "bwdTriSolve!",                              
-    (AbstractSparseMatrix, Vector),
-    Set(2),
-    (:NewBackwardTriangularSolveKnob, libcsr),
-    (:DeleteBackwardTriangularSolveKnob, libcsr)
-)
-
-context_sensitive_functions = [
-    CS_fwdTriSolve!,
-    CS_bwdTriSolve!
-]
-
-@doc """
-Find a call to a context-sensitive function.
-"""
-function discover_context_sensitive_call(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
-    if typeof(ast) <: Expr
-        head = ast.head
-        if head == :call || head == :call1
-            args = ast.args
-            module_name, function_name = resolve_call_names(args)
-            arg_types                  = ntuple(i-> type_of_ast_node(args[i+1], call_sites.symbol_info), length(args) - 1)
-            item                       = look_for_function(context_sensitive_functions, module_name, function_name, arg_types)
-            if item != nothing 
-                site = CallSite(ast, Set(), item.fknob_creator, item.fknob_deletor)
-                push!(call_sites.sites, site)
-                for i in item.matrices
-                    push!(site.matrices, typeof(args[i]) == SymbolNode ?
-                        args[i].name : args[i])
-                end
-            end
+    symbol_info = call_sites.symbol_info
+    site        = CallSite(ast, Set(), fknob_creator, fknob_deletor)
+    push!(call_sites.sites, site)
+    for arg in ast.args
+        if type_of_ast_node(arg, symbol_info) <: AbstractSparseMatrix
+            push!(site.matrices, typeof(arg) == SymbolNode ? arg.name : arg)
         end
     end
-    return nothing
 end
+
+# Below are the patterns that we would like to replace a function with another,
+# which is semantically equivalent, but is context-sensitive
+# For short, CS represents "Context Sensitive".
+const CS_fwdTriSolve!_pattern = ExprPattern(
+    "CS_fwdTriSolve!_pattern",
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:fwdTriSolve!)),
+      SparseMatrixCSC, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:fwdTriSolve!)),
+      :arg2, :arg3),
+    gather_context_sensitive_info,
+    "NewForwardTriangularSolveKnob",
+    "DeleteForwardTriangularSolveKnob"
+)
+ 
+const CS_bwdTriSolve!_pattern = ExprPattern(
+    "CS_bwdTriSolve!_pattern",
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:bwdTriSolve!)),
+      SparseMatrixCSC, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:bwdTriSolve!)),
+      :arg2, :arg3),
+    gather_context_sensitive_info,
+    "NewBackwardTriangularSolveKnob",
+    "DeleteBackwardTriangularSolveKnob"
+)
+
+context_sensitive_patterns = [
+    CS_fwdTriSolve!_pattern,
+    CS_bwdTriSolve!_pattern
+]
 
 @doc """
 Create statements that will create a matrix knob for matrix M.
@@ -94,10 +83,11 @@ function create_new_function_knob(
     new_stmts :: Vector{Statement},
     call_site :: CallSite
 )
-    fknob = gensym("fknob")
+    fknob    = gensym("fknob")
     new_stmt = Expr(:(=), fknob, 
-                Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob), 
-                    call_site.fknob_creator)
+                Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob),
+                      call_site.fknob_creator
+                    )
                )
     push!(new_stmts, Statement(0, new_stmt))
     call_site.ast.args = [call_site.ast.args; fknob]
@@ -122,7 +112,7 @@ Create statements that will delete the function knob.
 """
 function create_delete_function_knob(
     new_stmts     :: Vector{Statement},
-    fknob_deletor :: Tuple{Symbol, String},
+    fknob_deletor :: String,
     fknob         :: Symbol
 )
     new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob), fknob_deletor, fknob)
@@ -155,9 +145,7 @@ function context_info_discovery(
     L         = region.loop
     blocks    = cfg.basic_blocks
     
-    # Find call to context-sensitive functions, including their matrix 
-    # inputs. Find all definitions of sparse matrices related with the calls.
-    call_sites  = CallSites(Set{CallSite}(), symbol_info)
+    call_sites  = CallSites(Set{CallSite}(), symbol_info, context_sensitive_patterns)
     var_defs    = Dict{Sym, Set{Tuple{BasicBlock, StatementIndex}}}() # Map from a variable to a set of statements defining it
     for bb_idx in L.members
         bb         = blocks[bb_idx]
@@ -169,7 +157,7 @@ function context_info_discovery(
                 continue
             end
 
-            CompilerTools.AstWalker.AstWalk(expr, discover_context_sensitive_call, call_sites)
+            CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
 
             stmt_def = LivenessAnalysis.def(stmt, liveness)
             for d in stmt_def

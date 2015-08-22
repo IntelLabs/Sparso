@@ -350,3 +350,34 @@ function look_for_function_description(
 )
     return look_for_function(function_descriptions, module_name, function_name, argument_types)
 end
+
+@doc """
+Takes a module and a function both as Strings. Looks up the specified module as
+part of the "Main" module and then looks and returns the Function object
+corresponding to the "func" String in that module.
+"""
+function get_function_from_string(mod :: String, func :: String)
+    msym   = symbol(mod)
+    fsym   = symbol(func)
+    modobj = eval(:(Main.$msym))
+    return eval(:($modobj.$fsym))
+end
+
+@doc """
+Convert the function_descriptions table into a dictionary that can be passed to
+LivenessAnalysis to indicate which args can be modified by which functions.
+"""
+function create_modified_args_dict()
+    res = Dict{Any, Array{Int64,1}}()
+    for desc in function_descriptions
+        num_args    = length(desc.argument_types)   # Get the number of arguments to the functions.
+        unmodifieds = ones(Int64, num_args)         # desc.output contains "modifies" so we default to true and then turn off based on desc.output.
+        for j in desc.output
+            unmodifieds[j] = 0
+        end
+        res[(get_function_from_string(desc.module_name, desc.function_name), 
+             desc.argument_types)] = unmodifieds
+    end
+
+    return res
+end

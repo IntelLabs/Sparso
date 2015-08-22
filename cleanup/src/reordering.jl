@@ -211,7 +211,7 @@ function discover_SpMVs(
 )
     L      = region.loop
     blocks = cfg.basic_blocks
-    SpMVs  = CallSites(Set{CallSite}(), symbol_info)
+    SpMVs  = CallSites(Set{CallSite}(), symbol_info, Vector{Pattern}())
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements
