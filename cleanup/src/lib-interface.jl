@@ -394,29 +394,31 @@ end
 
 @doc """
 Read a matrix market file. Force it to be symmetric if force_symmetric is true.
-It calls SpMP library to do the actual work, which is faster than a pure
-Julia version.
+Error when symmetric_only is true but the matrix is not symmetric (and not
+forced to be symmetric). It calls SpMP library to do the actual work, which is 
+faster than a pure Julia version.
 """
 function matrix_market_read(
-    filename        :: String, 
+    filename        :: String,
+    symmetric_only  :: Bool = false,
     force_symmetric :: Bool = false
 )
     # Read into a COO array
     sizes::Vector{Cint} = [0, 0, 0, 0]
     ccall((:load_matrix_market_step1, LIB_PATH), Void, 
-        (Ptr{Uint8}, Ptr{Cint}, Bool), filename, pointer(sizes), force_symmetric)
+        (Ptr{Uint8}, Ptr{Cint}, Bool, Bool), filename, pointer(sizes), force_symmetric, false)
 
     is_symmetric::Cint = sizes[1] # 0/1: true/false    
-    if is_symmetric == 0
+    if symmetric_only && is_symmetric == 0
         # We cannot handle asymmetric matrix right now, since we need a matrix
         # to be symmetric, and thus we can use its CSC representation as CSR (The
         # SpMP library is based on CSR, while Julia is based on CSC.)
         throw(AsymmetricMatrixMarketFile(filename))
     end
 
-    m::Cint = sizes[2]
-    n::Cint = sizes[3]
-    assert(m ==n)
+    n::Cint = sizes[2]
+    m::Cint = sizes[3]
+    assert(is_symmetric == 0 || m == n)
     nnz::Cint = sizes[4]  # Note: if symmetric, nnz includes elements in both 
                           # upper and lower triangle 
 

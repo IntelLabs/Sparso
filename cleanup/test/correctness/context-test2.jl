@@ -1,4 +1,5 @@
 include("../../src/SparseAccelerator.jl")
+include("./utils.jl")
 using SparseAccelerator
 
 # The original pcg_symgs
@@ -112,7 +113,7 @@ function pcg_symgs_context(x, A, b, tol, maxiter)
     return x, k, rel_err
 end
 
-A = matrix_market_read(ARGS[1])
+A = matrix_market_read(ARGS[1], true, true)
 m = size(A, 1)
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
