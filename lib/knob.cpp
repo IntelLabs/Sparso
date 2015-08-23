@@ -28,8 +28,10 @@ using namespace SpMP;
 // A matrix knob stores the information shared by all the functions refering to this matrix.
 // Function-specific info like a level schedule should be put into a function knob.
 struct MatrixKnob {
-    int  matrix_version; // The latest version of the matrix. With version, we do not have to have another field "constant_valued".
-    bool constant_structured; // A matrix might be changed, and thus its version updated, but its structure might stay the same
+    bool         constant_valued;     // The matrix is a constant in value(and thus of course constant in structure).
+    int          matrix_version;      // The latest version of the matrix. It may be incremented dynamically if the matrix is not constant-valued.
+    bool         constant_structured; // A matrix might be changed, and thus its version updated, but its structure might stay the same
+    MatrixKnob * structure_proxy;     // The structure of another matrix might represent the structure of this matrix. 
 };
 
 // This is the base class of all function knobs
@@ -104,17 +106,21 @@ private:
 };
 
 /**************************** Usage of knobs *****************************/
+// TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
 void* NewMatrixKnob()
 {
     MatrixKnob* m = new MatrixKnob;
+    m->constant_valued = false;
     m->matrix_version = MIN_VALID_VERSION;
     m->constant_structured = false;
+    m->structure_proxy = NULL;
     return (void*)m;
 }
 
 void IncrementMatrixVersion(void* mknob)
 {
     MatrixKnob* m = (MatrixKnob*)mknob;
+    assert(!m->constant_valued);
     m->matrix_version++;
 }
 
@@ -172,8 +178,9 @@ void ForwardTriangularSolve(
         MatrixKnob* m = f->mknobs[0];
         assert(m != NULL);
     
-        if ((f->matrix_version == m->matrix_version) &&
-            (f->schedule != NULL)) {
+        if ((f->schedule != NULL) && 
+            (m->constant_valued || m->constant_structured ||
+             f->matrix_version == m->matrix_version)) {
             schedule = f->schedule;
         } else {
             // Either no schedule, or is out of date
