@@ -10,16 +10,6 @@ void forwardSolveRef(const CSR& A, double y[], const double b[]);
 
 void backwardSolveRef(const CSR& A, double y[], const double b[]);
 
-void forwardSolveWithBarrier(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule,
-  const int *perm);
-
-void backwardSolveWithBarrier(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule,
-  const int *perm);
-
 void forwardSolve(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
@@ -30,14 +20,6 @@ void backwardSolve(
   const LevelSchedule& schedule,
   const int *perm);
 
-void forwardSolveWithBarrierAndReorderedMatrix(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule);
-
-void backwardSolveWithBarrierAndReorderedMatrix(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule);
- 
 void forwardSolveWithReorderedMatrix(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule);

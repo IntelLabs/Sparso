@@ -40,67 +40,6 @@ void backwardSolveRef(const CSR& A, double y[], const double b[])
 
 /**
  * Forward sparse triangular solver parallelized with level scheduling
- * and barrier synchronization
- */
-void forwardSolveWithBarrier(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule,
-  const int *perm)
-{
-#pragma omp parallel
-  {
-    int tid = omp_get_thread_num();
-
-    const vector<int>& threadBoundaries = schedule.threadBoundaries;
-    const vector<int>& taskBoundaries = schedule.taskBoundaries;
-
-    for (int task = threadBoundaries[tid]; task < threadBoundaries[tid + 1]; ++task) {
-      for (int i = taskBoundaries[task]; i < taskBoundaries[task + 1]; ++i) {
-        int row = perm[i];
-        double sum = b[row];
-        for (int j = A.rowptr[row]; j < A.rowptr[row + 1]; ++j) {
-          sum -= A.values[j]*y[A.colidx[j]];
-        }
-        y[row] = sum*A.idiag[row];
-      } // for each row
-
-      synk::Barrier::getInstance()->wait(tid);
-    } // for each level
-  } // omp parallel
-}
-
-/**
- * Backward sparse triangular solver parallelized with level scheduling
- * and barrier synchronization
- */
-void backwardSolveWithBarrier(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule,
-  const int *perm)
-{
-#pragma omp parallel
-  {
-    int tid = omp_get_thread_num();
-
-    const vector<int>& threadBoundaries = schedule.threadBoundaries;
-    const vector<int>& taskBoundaries = schedule.taskBoundaries;
-
-    for (int task = threadBoundaries[tid + 1] - 1; task >= threadBoundaries[tid]; --task) {
-      for (int i = taskBoundaries[task + 1] - 1; i >= taskBoundaries[task]; --i) {
-        int row = perm[i];
-        double sum = b[row];
-        for (int j = A.rowptr[row + 1] - 1; j >= A.rowptr[row]; --j) {
-          sum -= A.values[j]*y[A.colidx[j]];
-        }
-        y[row] = sum;
-      } // for each row
-      synk::Barrier::getInstance()->wait(tid);
-    } // for each level
-  } // omp parallel
-}
-
-/**
- * Forward sparse triangular solver parallelized with level scheduling
  * and point-to-point synchronization
  */
 void forwardSolve(
@@ -190,62 +129,6 @@ void backwardSolve(
 
       SPMP_LEVEL_SCHEDULE_NOTIFY;
     } // for each task
-  } // omp parallel
-}
-
-/**
- * Forward sparse triangular solver parallelized with level scheduling
- * and barrier synchronization. Matrix is reordered.
- */
-void forwardSolveWithBarrierAndReorderedMatrix(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule)
-{
-#pragma omp parallel
-  {
-    int tid = omp_get_thread_num();
-
-    const vector<int>& threadBoundaries = schedule.threadBoundaries;
-    const vector<int>& taskBoundaries = schedule.taskBoundaries;
-
-    for (int task = threadBoundaries[tid]; task < threadBoundaries[tid + 1]; ++task) {
-      for (int i = taskBoundaries[task]; i < taskBoundaries[task + 1]; ++i) {
-        double sum = b[i];
-        for (int j = A.rowptr[i]; j < A.rowptr[i + 1]; ++j) {
-          sum -= A.values[j]*y[A.colidx[j]];
-        }
-        y[i] = sum*A.idiag[i];
-      } // for each row
-      synk::Barrier::getInstance()->wait(tid);
-    } // for each level
-  } // omp parallel
-}
-
-/**
- * Backward sparse triangular solver parallelized with level scheduling
- * and barrier synchronization. Matrix is reordered.
- */
-void backwardSolveWithBarrierAndReorderedMatrix(
-  const CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule)
-{
-#pragma omp parallel
-  {
-    int tid = omp_get_thread_num();
-
-    const vector<int>& threadBoundaries = schedule.threadBoundaries;
-    const vector<int>& taskBoundaries = schedule.taskBoundaries;
-
-    for (int task = threadBoundaries[tid + 1] - 1; task >= threadBoundaries[tid]; --task) {
-      for (int i = taskBoundaries[task + 1] - 1; i >= taskBoundaries[task]; --i) {
-        double sum = b[i];
-        for (int j = A.rowptr[i + 1] - 1; j >= A.rowptr[i]; --j) {
-          sum -= A.values[j]*y[A.colidx[j]];
-        }
-        y[i] = sum;
-      } // for each row
-      synk::Barrier::getInstance()->wait(tid);
-    } // for each level
   } // omp parallel
 }
 
