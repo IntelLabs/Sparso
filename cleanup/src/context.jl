@@ -1,6 +1,39 @@
+# Below are the patterns that we would like to replace a function with another,
+# which is semantically equivalent, but is context-sensitive
+# For short, CS represents "Context Sensitive".
+
+@doc """
+Pre-processing function of CS_fwd/bwdTriSolve!_pattern. It checks if the L/U
+matrix has a proxy structure available or not. That proxy matrix has to be a
+symmetric matrix (not just lower or upper part). This is due to the special 
+requirement of the library to fast build a dependence graph. If the matrix is just
+lower or upper part, the library building the graph would be twice slower.
+"""
+function CS_fwdBwdTriSolve!_check(
+    ast           :: Expr,
+    call_sites    :: CallSites,
+    fknob_creator :: String,
+    fknob_deletor :: String
+)
+    L_or_U = ast.args[2]
+    structure = get_structure_proxy(L_or_U) 
+    if structure == nothing
+        return false
+    end
+    
+    # Check it is lower or upper part of a symmetric matrix.
+    if structure.lower || structure.upper
+        # So far, symmetricity is not checked: that might need user annotation.
+        # TODO: Check symmetricity once available
+        return true
+    end
+    return false
+end
+
 @doc """ 
 Post-processing function of a pattern: Gather context sensitive info of the call
 site at the given AST.
+This function is not used so far.
 """
 function gather_context_sensitive_info(
     ast           :: Expr,
@@ -27,34 +60,30 @@ function gather_context_sensitive_info(
     return true
 end
 
-# Below are the patterns that we would like to replace a function with another,
-# which is semantically equivalent, but is context-sensitive
-# For short, CS represents "Context Sensitive".
-const CS_fwdTriSolve!_pattern = ExprPattern(
-    "CS_fwdTriSolve!_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:fwdTriSolve!)),
-      SparseMatrixCSC, Vector),
-    (:NO_SUB_PATTERNS,),
-    do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:fwdTriSolve!)),
-      :arg2, :arg3),
-    gather_context_sensitive_info,
-    "NewForwardTriangularSolveKnob",
-    "DeleteForwardTriangularSolveKnob"
+@doc """
+Post-processing function of CS_fwd/bwdTriSolve!_pattern.
+"""
+function CS_fwdBwdTriSolve!_post_process(
+    ast           :: Expr,
+    call_sites    :: CallSites,
+    fknob_creator :: String,
+    fknob_deletor :: String
 )
- 
-const CS_bwdTriSolve!_pattern = ExprPattern(
-    "CS_bwdTriSolve!_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:bwdTriSolve!)),
-      SparseMatrixCSC, Vector),
-    (:NO_SUB_PATTERNS,),
-    do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:bwdTriSolve!)),
-      :arg2, :arg3),
-    gather_context_sensitive_info,
-    "NewBackwardTriangularSolveKnob",
-    "DeleteBackwardTriangularSolveKnob"
-)
+    # So far, the pattern is in the form like SparseAccelerator.fwdTriSolve!(L, z) 
+    # or bwdTriSolve!(U, z). We need to replace them as 
+    # SparseAccelerator.fwdTriSolve!(A, z) and bwdTriSolve!(A, z). In this way,
+    # the library is faster to build the dependence graph.
+    L_or_U = ast.args[2]
+    structure = get_structure_proxy(L_or_U) 
+    ast.args[2] = structure.proxy
+
+    # Remember this call site so that we will add a fknob for it later: So that 
+    # the library willl remember that dependence graph (or its schedule) inside
+    # the fknob.
+    site = CallSite(ast, Vector(), fknob_creator, fknob_deletor)
+    push!(call_sites.sites, site)
+    return true
+end
 
 @doc """ 
 Pre-processing function of CS_ADAT_pattern: check it is A*D*A'; D is a diagonal
@@ -207,12 +236,39 @@ const CS_cholsolve_assign_pattern = ExprPattern(
     ""
 )
 
-context_sensitive_patterns = [
-    CS_fwdTriSolve!_pattern,
-    CS_bwdTriSolve!_pattern,
+const CS_fwdTriSolve!_pattern = ExprPattern(
+    "CS_fwdTriSolve!_pattern",
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:fwdTriSolve!)),
+      SparseMatrixCSC, Vector),
+    (:NO_SUB_PATTERNS,),
+    CS_fwdBwdTriSolve!_check,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:fwdTriSolve!)),
+      :arg2, :arg3),
+    CS_fwdBwdTriSolve!_post_process,
+    "NewForwardTriangularSolveKnob",
+    "DeleteForwardTriangularSolveKnob"
+)
+ 
+const CS_bwdTriSolve!_pattern = ExprPattern(
+    "CS_bwdTriSolve!_pattern",
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:bwdTriSolve!)),
+      Any, Vector), #SparseMatrixCSC, Vector), # Somehow, type inference does not figure out U's type is SparseMatrixCSC
+    (:NO_SUB_PATTERNS,),
+    CS_fwdBwdTriSolve!_check,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:bwdTriSolve!)),
+      :arg2, :arg3),
+    CS_fwdBwdTriSolve!_post_process,
+    "NewBackwardTriangularSolveKnob",
+    "DeleteBackwardTriangularSolveKnob"
+)
+
+@doc """" Patterns that will actually transform the code. """
+CS_transformation_patterns = [
     CS_ADAT_assign_pattern,
     CS_cholfact_assign_pattern,
-    CS_cholsolve_assign_pattern
+    CS_cholsolve_assign_pattern,
+    CS_fwdTriSolve!_pattern,
+    CS_bwdTriSolve!_pattern
 ]
 
 @doc """
@@ -311,7 +367,7 @@ function context_info_discovery(
     L           = region.loop
     blocks      = cfg.basic_blocks
     constants   = find_constant_values(region, liveness, cfg)
-    call_sites  = CallSites(Set{CallSite}(), region, symbol_info, constants, context_sensitive_patterns, actions)
+    call_sites  = CallSites(Set{CallSite}(), region, symbol_info, constants, CS_transformation_patterns, actions)
     var_defs    = Dict{Sym, Set{Tuple{BasicBlock, StatementIndex}}}() # Map from a variable to a set of statements defining it
     for bb_idx in L.members
         bb         = blocks[bb_idx]
@@ -398,6 +454,10 @@ function context_info_discovery(
     liveness    :: Liveness, 
     cfg         :: CFG
 )
+    # Discover structures of matrices in the whole function
+    structure_discovery(symbol_info, cfg)
+
+    # Discover context info for each loop region
     for region in regions
         context_info_discovery(actions, region, func_ast, symbol_info, liveness, cfg)
     end
@@ -407,4 +467,3 @@ function context_info_discovery(
     
     actions
 end
-

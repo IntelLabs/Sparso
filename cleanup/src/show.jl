@@ -103,6 +103,11 @@ function show(
                 end
                 println(io_buffer, "")
             end
+        elseif typeof(msg) <: Dict{Any, StructureProxy}
+            for (ast, structure) in msg
+                println(io_buffer, "Matrix ", ast)
+                println(io_buffer, "     ==> ", structure)
+            end
         else
             print(io_buffer, msg)
         end

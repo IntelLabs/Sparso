@@ -501,14 +501,14 @@ function cholfact(
     R :: Base.SparseMatrix.CHOLMOD.Factor{Float64},
     A :: SparseMatrixCSC
 )
-    if !haskey(A, structures)
+    if !haskey(structures, A)
         # A does not have a constant structure. Or it has not been computed yet.
         R = Main.cholfact(A)
         return
     end
 
     structure = structures[A]
-    if !haskey(R, dss_handles)
+    if !haskey(dss_handles, R)
         dss_handle     = dss_analyze(structure)
         dss_handles[R] = dss_handle
     end
@@ -521,7 +521,7 @@ function cholmod_factor_inverse_divide(
     R :: Base.SparseMatrix.CHOLMOD.Factor{Float64},
     t :: Any
 )
-    if !haskey(R, dss_handles)
+    if !haskey(dss_handles, R)
         y = R \ t
         return
     end
