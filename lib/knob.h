@@ -26,6 +26,9 @@ void ForwardTriangularSolve(
 void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob);
+    
+void *ADBInspect(
+    const void *A, const void *B, void* fknob);
 
 /******************************************************************************/
 

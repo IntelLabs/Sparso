@@ -9,7 +9,7 @@ typealias Loop            CompilerTools.Loops.Loop
 typealias GenSymId        Int
 typealias BasicBlockIndex Int
 typealias StatementIndex  Int
-typealias Sym             Union(Symbol, GenSymId) # A Symbol or a GenSym id.
+typealias Sym             Union(Symbol, GenSym) # A Symbol or a GenSym.
 typealias Sym2TypeMap     Dict{Sym, Type}
 
 # Options controlling debugging, performance (library choice, cost model), etc.
@@ -121,7 +121,7 @@ function build_symbol_dictionary(func_ast :: Expr)
     # Record GenSym's types.
     for id = 1:length(lambda.gen_sym_typs)
         # Note that a GenSym id starts from 0
-        symbol_info[id - 1] = lambda.gen_sym_typs[id] 
+        symbol_info[GenSym(id - 1)] = lambda.gen_sym_typs[id] 
     end
 
     symbol_info
@@ -245,6 +245,14 @@ end
 @doc """ Abstract type for a pattern. """
 abstract Pattern
 
+@doc """ Abstract type for an action to take in code transformation"""
+abstract Action
+
+@doc """ 
+Abstract type for a region. A region can be an arbitrary part of user code.
+"""
+abstract Region
+
 @doc """ Dummy function that does nothing. Used for empty call back. """
 function do_nothing()
 end
@@ -257,7 +265,7 @@ site, and may delete the knob later.
 """
 type CallSite
     ast           :: Expr 
-    matrices      :: Set    # Set{Sym} 
+    matrices      :: Vector # Vector{Sym} 
     fknob_creator :: String # A library function to create a function knob for this call site
     fknob_deletor :: String # A library function to delete the function knob for this call site
 end
@@ -265,16 +273,19 @@ end
 @doc """
 Call sites of interesting functions (like SpMV, triangular solver, etc.). The
 function's result and argument types are figured out with the help of symbol_info.
-It may also have some patterns to match and replace at the call sites.
-
+Some patterns may need constants information in order to match.
+The patterns to match are specified by the specific analysis. In addition to the 
+direct change of the call site AST due to replacement, there might be additional
+actions resulted (like hoisting some computation out of a loop, etc.)
 """
 type CallSites
     sites       :: Set{CallSite}
+    region      :: Region
     symbol_info :: Sym2TypeMap
+    constants   :: Set{Sym}
     patterns    :: Vector{Pattern}
+    actions     :: Vector{Action}
 end
-
-abstract Action
 
 @doc """ Insert new statements to a basic block """
 type InsertBeforeStatement <: Action

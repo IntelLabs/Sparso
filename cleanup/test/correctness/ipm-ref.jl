@@ -148,7 +148,7 @@ function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: ob
 
     # use the form of the Cholesky routine "cholinc" that's best
     # suited to interior-point methods
-    R = cholfact(SparseMatrixCSC{Float64, Int64}(B))
+    R = cholfact(B)
 
     # set up the right-hand side
     t1 = x.*Rd - Rc;

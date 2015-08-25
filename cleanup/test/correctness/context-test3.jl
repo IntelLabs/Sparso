@@ -9,15 +9,17 @@ CompilerTools.LivenessAnalysis.set_debug_level(6)
 include("./ipm-ref.jl")
 include("utils.jl")
 
-# min 2*x1 + x2 subject to x1 + x2 = 1, x1 >= 0, x2 >= 0
-# expected solution: x1 = 0, x2 = 1, obj = 1
-#A = sparse([1 1])
-#b = [ 1 ]'
-#p = [ 2 1 ]'
-
-A = matrix_market_read(string(ARGS[1], "-A.mtx"))'
-b = vec(MatrixMarket.mmread(string(ARGS[1], "-b.mtx")))
-p = vec(MatrixMarket.mmread(string(ARGS[1], "-p.mtx")))
+if length(ARGS) == 0
+    # min 2*x1 + x2 subject to x1 + x2 = 1, x1 >= 0, x2 >= 0
+    # expected solution: x1 = 0, x2 = 1, obj = 1
+    A = sparse([1 1])
+    b = [ 1 ]'
+    p = [ 2 1 ]'
+else
+    A = matrix_market_read(string(ARGS[1], "-A.mtx"))'
+    b = vec(MatrixMarket.mmread(string(ARGS[1], "-b.mtx")))
+    p = vec(MatrixMarket.mmread(string(ARGS[1], "-p.mtx")))
+end
 
 m = size(A, 1)
 n = size(A, 2)

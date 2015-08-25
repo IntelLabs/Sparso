@@ -1,0 +1,102 @@
+New AST:
+    $(Expr(:lambda, Any[:A,:b,:p], Any[Any[Any[:A,Base.SparseMatrix.SparseMatrixCSC{Int64,Int64},0],Any[:b,Array{Int64,2},0],Any[:p,Array{Int64,2},0],Any[symbol("#s182"),Int64,2],Any[:m,Int64,18],Any[:n,Int64,18],Any[:bigM,Any,2],Any[:x,Any,2],Any[:s,Any,2],Any[:y,Any,2],Any[:bc,Float64,18],Any[:relResidual,Any,2],Any[:D,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},18],Any[symbol("#s181"),Int64,2],Any[:iter,Int64,18],Any[:Rd,Any,18],Any[:Rp,Any,18],Any[:Rc,Any,2],Any[:mu,Any,18],Any[symbol("#s180"),Any,2],Any[:d,Any,18],Any[:B,Base.SparseMatrix.SparseMatrixCSC{Float64,Int64},18],Any[:R,Base.SparseMatrix.CHOLMOD.Factor{Float64},18],Any[:t1,Any,18],Any[:t2,Any,18],Any[:dy,Any,18],Any[:temp,Any,18],Any[:dx,Any,18],Any[:ds,Any,18],Any[:tau,Any,18],Any[:ap,Any,2],Any[:ad,Any,2],Any[:f,Any,18]],Any[],Any[Tuple{Int64,Int64},Tuple{Int64,Int64},Tuple{Int64,Int64},UnitRange{Int64},Tuple{Int64,Int64}],Any[]], :(begin  # /media/sf_VBoxVMShared/SparseAccelerator/cleanup/test/correctness/./ipm-ref.jl, line 120:
+            NewvarNode(:iter)
+            NewvarNode(:Rd)
+            NewvarNode(:Rp)
+            NewvarNode(:Rc)
+            NewvarNode(:mu)
+            NewvarNode(symbol("#s180"))
+            NewvarNode(:d)
+            NewvarNode(:B)
+            NewvarNode(:R)
+            NewvarNode(:t1)
+            NewvarNode(:t2)
+            NewvarNode(:dy)
+            NewvarNode(:temp)
+            NewvarNode(:dx)
+            NewvarNode(:ds)
+            NewvarNode(:tau)
+            NewvarNode(:ap)
+            NewvarNode(:ad)
+            NewvarNode(:f)
+            GenSym(0) = (Main.size)(A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64})::Tuple{Int64,Int64}
+            #s182 = (top(start))(GenSym(0))::Int64
+            GenSym(1) = (top(indexed_next))(GenSym(0),1,#s182::Int64)::Tuple{Int64,Int64}
+            m = (top(getfield))(GenSym(1),1)::Int64
+            #s182 = (top(getfield))(GenSym(1),2)::Int64
+            GenSym(2) = (top(indexed_next))(GenSym(0),2,#s182::Int64)::Tuple{Int64,Int64}
+            n = (top(getfield))(GenSym(2),1)::Int64
+            #s182 = (top(getfield))(GenSym(2),2)::Int64 # line 123:
+            bigM = (Main.maximum)(A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64})::Int64 # line 124:
+            bigM = (Main.maximum)((Main.hcat)((Main.norm)(b::Array{Int64,2},Main.Inf)::Float64,(Main.norm)(p::Array{Int64,2},Main.Inf)::Float64,bigM::Int64)::Array{Float64,2})::Float64 # line 125:
+            x = 100 * bigM::Float64 * (Main.ones)(n::Int64)::Array{Float64,1}::Array{Float64,1} # line 126:
+            s = x::Array{Float64,1} # line 127:
+            y = (Main.zeros)(m::Int64)::Array{Float64,1} # line 128:
+            bc = 1 + (Main.maximum)((Main.hcat)((Main.norm)(b::Array{Int64,2})::Float64,(Main.norm)(p::Array{Int64,2})::Float64)::Array{Float64,2})::Float64::Float64 # line 129:
+            relResidual = Main.NaN # line 130:
+            D = (Main.speye_int32)(n::Int64)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} # line 131:
+            GenSym(3) = (Main.colon)(1,200)::UnitRange{Int64}
+            #s181 = (top(start))(GenSym(3))::Int64
+            unless (top(!))((top(done))(GenSym(3),#s181::Int64)::Bool)::Bool goto 5
+            6: 
+            __AT__ = (Main.ctranspose)(A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64})
+            ##fknob#8691 = (SparseAccelerator.new_function_knob)("NewADBKnob")
+            goto 0
+            0: 
+            NewvarNode(symbol("#s180"))
+            NewvarNode(:d)
+            NewvarNode(:B)
+            NewvarNode(:R)
+            NewvarNode(:t1)
+            NewvarNode(:t2)
+            NewvarNode(:dy)
+            NewvarNode(:temp)
+            NewvarNode(:dx)
+            NewvarNode(:ds)
+            NewvarNode(:tau)
+            NewvarNode(:ap)
+            NewvarNode(:ad)
+            GenSym(4) = (top(next))(GenSym(3),#s181::Int64)::Tuple{Int64,Int64}
+            iter = (top(getfield))(GenSym(4),1)::Int64
+            #s181 = (top(getfield))(GenSym(4),2)::Int64 # line 133:
+            Rd = ((Main.Ac_mul_B)(A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64},y) + s) - p::Array{Int64,2} # line 134:
+            Rp = A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64} * x - b::Array{Int64,2} # line 135:
+            Rc = x .* s # line 136:
+            mu = (Main.mean)(Rc) # line 137:
+            relResidual = (Main.norm)((Main.vcat)(Rd,Rp,Rc)) / bc::Float64 # line 138:
+            unless relResidual <= 1.0e-7 goto 1
+            #s180 = mu <= 1.0e-7
+            goto 2
+            1: 
+            #s180 = false
+            2: 
+            unless #s180 goto 3
+            (SparseAccelerator.delete_function_knob)("DeleteADBKnob",##fknob#8691) # line 138:
+            goto 5
+            3:  # line 140:
+            Rc = Rc - (Main.min)(0.1,100mu) * mu # line 144:
+            d = (Main.min)(5.0e15,x ./ s) # line 146:
+            (top(setfield!))(D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},:nzval,(top(convert))((top(fieldtype))((top(typeof))(D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Type{Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}},:nzval)::Type{Array{Float64,1}},d)) # line 147:
+            ((top(getfield))(SparseAccelerator,:ADB))(B,__AT__,D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64},##fknob#8691) # line 151:
+            ((top(getfield))(SparseAccelerator,:cholfact))(R,B::Base.SparseMatrix.SparseMatrixCSC{Float64,Int64}) # line 154:
+            t1 = x .* Rd - Rc # line 155:
+            t2 = -((Rp + A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64} * (t1 ./ s))) # line 158:
+            ((top(getfield))(SparseAccelerator,:cholmod_factor_inverse_divide))(dy,R::Base.SparseMatrix.CHOLMOD.Factor{Float64},t2) # line 159:
+            temp = (Main.Ac_mul_B)(A::Base.SparseMatrix.SparseMatrixCSC{Int64,Int64},dy) # line 160:
+            dx = (x .* temp + t1) ./ s # line 161:
+            ds = -((s .* dx + Rc)) ./ x # line 162:
+            tau = (Main.max)(0.9995,1 - mu) # line 163:
+            ap = -1 / (Main.minimum)((Main.vcat)(dx ./ x,-1)) # line 164:
+            ad = -1 / (Main.minimum)((Main.vcat)(ds ./ s,-1)) # line 165:
+            ap = tau * ap # line 166:
+            ad = tau * ad # line 167:
+            x = x + ap * dx # line 168:
+            s = s + ad * ds # line 169:
+            y = y + ad * dy
+            4: 
+            unless (top(!))((top(!))((top(done))(GenSym(3),#s181::Int64)::Bool)::Bool)::Bool goto 0
+            (SparseAccelerator.delete_function_knob)("DeleteADBKnob",##fknob#8691)
+            5:  # line 172:
+            f = (Main.Ac_mul_B)(p::Array{Int64,2},x) # line 174:
+            return x
+        end)))
