@@ -1,5 +1,43 @@
 TypedExprNode(x...) = LivenessAnalysis.TypedExpr(x...)
 
+@doc """ Check if two variables are the same. """
+function same_variable(x :: Any, y :: Any)
+    x1 = x
+    y1 = y
+    if typeof(x) <: SymbolNode
+        x1 = x.name
+    end
+    if typeof(y) <: SymbolNode
+        y1 = y.name
+    end
+    x1 == y1
+end
+
+@doc """ Check if a variable is an argument of an expression. """
+function is_an_arg(x :: Any, ast :: Any)
+    if typeof(ast) <: Expr
+        for arg in ast.args
+            if same_variable(x, arg)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+@doc """
+Pre-processing function: check if the LHS of an assignment is in the RHS. 
+"""
+function LHS_in_RHS(
+    ast           :: Expr,
+    call_sites    :: CallSites,
+    fknob_creator :: String,
+    fknob_deletor :: String
+)
+    assert(ast.head == :(=))
+    return is_an_arg(ast.args[1], ast.args[2]);
+end
+
 # There are two kinds of patterns: one is ExprPattern, the other InPlaceUpdatePattern.
 # ExprPattern is for matching an expression within a statement. InPlaceUpdatePattern
 # is for matching two expressions in two adjacent statements.
@@ -225,7 +263,7 @@ const SpMV!_pattern2 = ExprPattern(
     "SpMV!_pattern2",
     (:(=), Vector, Vector),
     (nothing, nothing, SpMV_6_parameters_pattern),
-    do_nothing,
+    LHS_in_RHS,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
      :arg1, :aarg22, :aarg23, :aarg24, :aarg25, :aarg26, :aarg27),
     do_nothing,
@@ -237,7 +275,7 @@ const SpMV!_pattern3 = ExprPattern(
     "SpMV!_pattern3",
     (:(=), Vector, Vector),
     (nothing, nothing, SpMV_3_parameters_pattern),
-    do_nothing,
+    LHS_in_RHS,
     (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
      :arg1, :aarg22, :aarg23, :aarg24, 0, :arg1, :aarg27),
     do_nothing,
@@ -273,7 +311,7 @@ const WAXPBY!_pattern1 = ExprPattern(
     "WAXPBY!_pattern1",
     (:(=), Vector, Vector),
     (nothing, nothing, WAXPBY_4_parameters_pattern),
-    do_nothing,
+    LHS_in_RHS,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
      :arg1, :aarg22, :aarg23, :aarg24, :aarg25),
     do_nothing,
@@ -391,31 +429,6 @@ end
 replacement_arg(arg :: Any, args :: Vector, symbol_info :: Sym2TypeMap) =
     replacement_arg(arg, args, nothing, symbol_info)
 
-@doc """ Check if two variables are the same. """
-function same_variable(x :: Any, y :: Any)
-    x1 = x
-    y1 = y
-    if typeof(x) <: SymbolNode
-        x1 = x.name
-    end
-    if typeof(y) <: SymbolNode
-        y1 = y.name
-    end
-    x1 == y1
-end
-
-@doc """ Check if a variable is an argument of an expression. """
-function is_an_arg(x :: Any, ast :: Any)
-    if typeof(ast) <: Expr
-        for arg in ast.args
-            if same_variable(x, arg)
-                return true
-            end
-        end
-    end
-    return false
-end
-
 @doc """ Replace the AST based on the expression pattern. """
 function replace(
     pattern     :: ExprPattern,
@@ -455,7 +468,7 @@ function match_skeletons(
         if (skeleton1[1] == skeleton2[1]) && 
            ((skeleton1[1] == :call && skeleton1[2] == skeleton2[2]) ||
             (skeleton1[1] == :(=)  && skeleton1[2] <: skeleton2[2]))
-            for i in 3:length(skeleton1) 
+            for i in 3:length(skeleton1)
                 if !(skeleton1[i] <: skeleton2[i])
                     return false
                 end
@@ -479,13 +492,6 @@ function match_replace(
 )
     symbol_info = call_sites.symbol_info
     if match_skeletons(skeleton, pattern.skeleton)
-        # When the skeleton is like (:(=), x, f), this is to change f into f!(x,...)
-        # In order to do so, we must ensure that x has already been allocated space.
-        # One case that satisfies this is that x is one of the input parameter of f.
-        if (skeleton[1] == :(=)) && !is_an_arg(ast.args[1], ast.args[2])
-            return false
-        end
-
         # Check sub-expr_patterns
         if length(pattern.sub_expr_patterns) == 1 && 
            pattern.sub_expr_patterns[1] == :NO_SUB_PATTERNS
@@ -508,13 +514,17 @@ function match_replace(
         end
         
         if pattern.pre_processing != do_nothing
-            pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+            if !pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+                return false
+            end
         end
         
         replace(pattern, ast, symbol_info)
         
         if pattern.post_processing != do_nothing
-            pattern.post_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+            if !pattern.post_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+                return false
+            end
         end
         
         return true
@@ -636,7 +646,7 @@ function replace_calls(
     symbol_info :: Sym2TypeMap, 
     cfg         :: CFG
 )
-    call_sites  = CallSites(Set{CallSite}(), symbol_info, expr_patterns)
+    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, Set{Sym}(), expr_patterns, Vector{Action}())
     for (bb_idx, bb) in cfg.basic_blocks
         prev_expr = nothing
         for stmt in bb.statements

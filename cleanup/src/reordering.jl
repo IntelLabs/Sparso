@@ -193,7 +193,7 @@ function discover_a_SpMV(ast, call_sites :: CallSites, top_level_number, is_top_
                 length(args) == 3 && 
                 type_of_ast_node(args[2], call_sites.symbol_info) <: SparseMatrixCSC &&
                 type_of_ast_node(args[3], call_sites.symbol_info) <: Vector
-                    site = CallSite(ast, Set(), nothing, nothing)
+                    site = CallSite(ast, Vector(), nothing, nothing)
                     push!(call_sites.sites, site) 
             end
         end
@@ -205,13 +205,14 @@ end
 Find all SpMVs from the loop region.
 """
 function discover_SpMVs(
+    actions       :: Vector{Action},
     region        :: LoopRegion,
     symbol_info   :: Sym2TypeMap,
     cfg           :: CFG
 )
     L      = region.loop
     blocks = cfg.basic_blocks
-    SpMVs  = CallSites(Set{CallSite}(), symbol_info, Vector{Pattern}())
+    SpMVs  = CallSites(Set{CallSite}(), region, symbol_info, Set{Sym}(), Vector{Pattern}(), actions)
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements
@@ -270,7 +271,7 @@ function create_reorder_actions(
     first_reorder_done     = gensym("first_reorder_done")
     conditional_reordering = false
     if reorder_when_beneficial
-        SpMVs = discover_SpMVs(lives, loop_info, symbol_info, region)
+        SpMVs = discover_SpMVs(actions, lives, loop_info, symbol_info, region)
         if !isempty(SpMVs.sites)
             # TODO: turn on conditional reordering only when SpMVs are dominating
             # the execution time of the loop region, for example, when there is

@@ -105,6 +105,24 @@ private:
         double *y, const double *b, void* fknob);
 };
 
+class ADBKnob : public FunctionKnob {
+public:
+    ADBKnob() {
+        structure = NULL;
+    }
+    
+    ~ADBKnob() {
+        if (structure != NULL) {
+            delete (CSR *)structure;
+        }
+    }
+
+private:
+    CSR_Handle* structure;
+
+    friend void* ADBInspect(const void *A, const void *B, void* fknob);
+};
+
 /**************************** Usage of knobs *****************************/
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
 void* NewMatrixKnob()
@@ -224,4 +242,25 @@ void BackwardTriangularSolve(
         
     int* invPerm = schedule->threadContToOrigPerm;
     backwardSolve(*A, y, b, *schedule, invPerm);
+}
+
+void* NewADBKnob()
+{
+    ADBKnob* f = new ADBKnob;
+    return (void*)f;
+}
+
+void DeleteADBKnob(void* fknob)
+{
+    ADBKnob* f = (ADBKnob*) fknob;
+    delete f;
+}
+
+void* ADBInspect(const void *A, const void *B, void* fknob)
+{
+    assert(fknob != NULL);
+    ADBKnob* f = (ADBKnob*) fknob;
+    if (f->structure == NULL)
+        f->structure = CSR_ADBInspect((CSR_Handle *)A, (CSR_Handle *)B);
+    return (void*)(f->structure);
 }

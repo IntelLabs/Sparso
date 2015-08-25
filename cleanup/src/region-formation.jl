@@ -1,5 +1,6 @@
-# A region can be an arbitrary part of the user code.
-abstract Region
+@doc """ The whole function region. Not really used so far. """
+type WholeFunction <: Region
+end
 
 @doc """ 
 An exit edge of a loop from a block in the loop to another block outside the loop.

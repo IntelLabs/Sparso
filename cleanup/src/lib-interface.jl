@@ -146,8 +146,8 @@ format, in CSR format.
 """
 function create_CSR(A :: SparseMatrixCSC)
     ccall((:CSR_Create, LIB_PATH), Ptr{Void},
-       (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-       A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
+        A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
 end
 
 @doc """ Destroy the CSR representation of the sparse matrix. """
@@ -390,6 +390,143 @@ function WAXPB(
   w = Array(Cdouble, length(x))
   WAXPB!(w, alpha, x, beta)
   w
+end
+
+# The following data structures and routines are used for Cholesky factorization.
+# Structures map a sparse matrix to its struture (A representation internal to 
+# libcsr). Dss_handles maps a Cholesky to its handle (Also a representation 
+# internal to libcsr).
+structures  = Dict{SparseMatrixCSC, Ptr{Void}}()
+dss_handles = Dict{Base.SparseMatrix.CHOLMOD.Factor{Float64}, Cint}()
+ 
+@doc """
+A * D * B, where D is a diagonal matrix, and A, D, and B all have constant structures.
+A and B are given in transposed form, as they are in CSC in Julia but libcsr
+takes only CSR.
+"""
+function ADB(
+    ADB   :: SparseMatrixCSC, # result
+    AT    :: SparseMatrixCSC,
+    D     :: SparseMatrixCSC,
+    BT    :: SparseMatrixCSC,
+    fknob :: Ptr{Void}
+)
+    csrA = SparseAccelerator.create_CSR(AT)
+    csrB = SparseAccelerator.create_CSR(BT)
+    d    = diag(D)
+    
+    # A*D*B inspection
+    csrADB = ccall((:ADBInspect, LIB_CSR_PATH), Ptr{Void},
+                   (Ptr{Void}, Ptr{Void}, Ptr{Void}),
+                    csrA, csrB, fknob)
+    ccall((:CSR_ADB, LIB_CSR_PATH), Void,
+          (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Cdouble}),
+          csrADB, csrA, csrB, d)
+
+    # Represent the result in CSC format
+    m = size(A, 1)
+    rowptr = pointer_to_array(
+        ccall((:CSR_GetRowPtr, LIB_CSR_PATH), Ptr{Cint}, (Ptr{Void},), csrADB), (m + 1,))
+    nnz = rowptr[m + 1] - 1
+    colidx = pointer_to_array(
+        ccall((:CSR_GetColIdx, LIB_CSR_PATH), Ptr{Cint}, (Ptr{Void},), csrADB), (nnz,))
+    values = pointer_to_array(
+        ccall((:CSR_GetValues, LIB_CSR_PATH), Ptr{Cdouble}, (Ptr{Void},), csrADAT), (nnz,))
+    ADB = SparseMatrixCSC{Cdouble, Cint}(m, m, rowptr, colidx, values)
+
+    structures[ADB] = csrADB
+
+    destroy_CSR(csrA)
+    destroy_CSR(csrB)
+end
+
+const MKL_DSS_DEFAULTS = 0
+const MKL_DSS_NON_SYMMETRIC = 536871104
+const MKL_DSS_SUCCESS = 0
+const MKL_DSS_AUTO_ORDER = 268435520
+const MKL_DSS_POSITIVE_DEFINITE = 134217792
+
+function dss_analyze(A :: SparseMatrixCSC)
+    handle = Int[0]
+    opt = MKL_DSS_DEFAULTS
+    error = ccall((:dss_create, LIB_CSR_PATH), Cint,
+        (Ptr{Void}, Ptr{Cint}),
+        handle, &opt)
+    if error != MKL_DSS_SUCCESS
+        println("dss_create returned error code $error")
+    end
+
+    opt = MKL_DSS_NON_SYMMETRIC
+    m = size(A, 1)
+    nnz = A.colptr[m + 1] - 1
+    error = ccall((:dss_define_structure, LIB_CSR_PATH), Cint,
+        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}),
+        handle, &opt, A.colptr, &m, &m, A.rowval, &nnz)
+    if error != MKL_DSS_SUCCESS
+        println("dss_define_structure returned error code $error")
+    end
+
+    opt = MKL_DSS_AUTO_ORDER
+    error = ccall((:dss_reorder, LIB_CSR_PATH), Cint,
+                (Ptr{Void}, Ptr{Cint}, Ptr{Cint}),
+                handle, &opt, C_NULL)
+    if error != MKL_DSS_SUCCESS
+        println("dss_reorder returned error code $error")
+    end
+
+    handle
+end
+
+function dss_factor(handle, A::SparseMatrixCSC)
+    opt = MKL_DSS_POSITIVE_DEFINITE
+    error = ccall((:dss_factor_real, LIB_CSR_PATH), Cint,
+                (Ptr{Void}, Ptr{Cint}, Ptr{Cdouble}),
+                handle, &opt, A.nzval)
+    if error != MKL_DSS_SUCCESS
+        println("dss_factor_real returned error code $error")
+    end
+end
+
+# solve A*sol = rhs
+function dss_solve!(handle, rhs::Vector, sol::Vector)
+    opt = MKL_DSS_DEFAULTS
+    nrhs = 1
+    error = ccall((:dss_solve_real, LIB_CSR_PATH), Cint,
+                (Ptr{Void}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cdouble}),
+                handle, &opt, rhs, &nrhs, sol)
+end
+
+@doc """ Compute R = the sparse Cholesky factorization of a sparse matrix A. """
+function cholfact(
+    R :: Base.SparseMatrix.CHOLMOD.Factor{Float64},
+    A :: SparseMatrixCSC
+)
+    if !haskey(A, structures)
+        # A does not have a constant structure. Or it has not been computed yet.
+        R = Main.cholfact(A)
+        return
+    end
+
+    structure = structures[A]
+    if !haskey(R, dss_handles)
+        dss_handle     = dss_analyze(structure)
+        dss_handles[R] = dss_handle
+    end
+    dss_factor(dss_handles[R], structure)
+end
+
+@doc """ y = R \ t """
+function cholmod_factor_inverse_divide(
+    y :: Any,
+    R :: Base.SparseMatrix.CHOLMOD.Factor{Float64},
+    t :: Any
+)
+    if !haskey(R, dss_handles)
+        y = R \ t
+        return
+    end
+    
+    dss_solve!(dss_handles[R], t, y)
 end
 
 @doc """
