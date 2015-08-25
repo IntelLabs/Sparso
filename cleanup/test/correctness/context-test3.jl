@@ -1,6 +1,5 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
-using CompilerTools.OptFramework
 using MatrixMarket
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
