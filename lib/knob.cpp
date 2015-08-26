@@ -67,6 +67,7 @@ private:
     // Info private to the forward triangular solver.
     int            matrix_version; // version of the matrix when the private info is built
     LevelSchedule* schedule;
+    double*        idiag; // pre-computed inverse of diagonals
 
     friend void ForwardTriangularSolve(
         int numrows, int numcols, int* colptr, int* rowval, double* nzval,
@@ -99,6 +100,7 @@ private:
     // Info private to the backward triangular solver.
     int            matrix_version; // version of the matrix when the private info is built
     LevelSchedule* schedule;
+    double*        idiag; // pre-computed inverse of diagonals
 
     friend void BackwardTriangularSolve(
         int numrows, int numcols, int* colptr, int* rowval, double* nzval,
@@ -185,11 +187,14 @@ void ForwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-    CSR *A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+    CSR A(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
+        A.make0BasedIndexing();
+        A.computeInverseDiag();
+
         schedule = new LevelSchedule;
-        schedule->constructTaskGraph(*A);
+        schedule->constructTaskGraph(A);
     } else {
         ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
@@ -200,28 +205,42 @@ void ForwardTriangularSolve(
             (m->constant_valued || m->constant_structured ||
              f->matrix_version == m->matrix_version)) {
             schedule = f->schedule;
+            A.idiag = f->idiag;
         } else {
+            A.make0BasedIndexing();
+            A.computeInverseDiag();
+            f->idiag = A.idiag;
+
             // Either no schedule, or is out of date
             f->UpdateMatrixVersion(m->matrix_version);
             schedule = new LevelSchedule;
-            schedule->constructTaskGraph(*A);
+            schedule->constructTaskGraph(A);
             f->schedule = schedule;
+
+            A.make1BasedIndexing();
         }
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    forwardSolve(*A, y, b, *schedule, invPerm);
+    forwardSolve(A, y, b, *schedule, invPerm);
+
+    A.idiag = NULL; // knob owns idiag
 }
 
 void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-    CSR *A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+    CSR A(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
+        A.make0BasedIndexing();
+        A.computeInverseDiag();
+
         schedule = new LevelSchedule;
-        schedule->constructTaskGraph(*A);
+        schedule->constructTaskGraph(A);
+
+        A.make1BasedIndexing();
     } else {
         BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
@@ -231,17 +250,26 @@ void BackwardTriangularSolve(
         if ((f->matrix_version == m->matrix_version) &&
             (f->schedule != NULL)) {
             schedule = f->schedule;
+            A.idiag = f->idiag;
         } else {
+            A.make0BasedIndexing();
+            A.computeInverseDiag();
+            f->idiag = A.idiag;
+            
             // Either no schedule, or is out of date
             f->UpdateMatrixVersion(m->matrix_version);
             schedule = new LevelSchedule;
-            schedule->constructTaskGraph(*A);
+            schedule->constructTaskGraph(A);
             f->schedule = schedule;
+
+            A.make1BasedIndexing();
         }
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    backwardSolve(*A, y, b, *schedule, invPerm);
+    backwardSolve(A, y, b, *schedule, invPerm);
+
+    A.idiag = NULL; // knob owns idiag
 }
 
 void* NewADBKnob()
