@@ -16,33 +16,58 @@ using namespace SpMP;
 /**
  * Reference sequential sparse triangular solver
  */
-void forwardSolveRef(const CSR& A, double y[], const double b[])
+template<int BASE = 0>
+static void forwardSolveRef_(const CSR& A, double y[], const double b[])
 {
   for (int i = 0; i < A.m; ++i) {
     double sum = b[i];
-    for (int j = A.rowptr[i]; j < A.rowptr[i + 1]; ++j) {
-      sum -= A.values[j]*y[A.colidx[j]];
+    for (int j = A.rowptr[i] - BASE; j < A.rowptr[i + 1] - BASE; ++j) {
+      sum -= A.values[j]*y[A.colidx[j] - BASE];
     }
     y[i] = sum*A.idiag[i];
   } // for each row
 }
 
-void backwardSolveRef(const CSR& A, double y[], const double b[])
+void forwardSolveRef(const CSR& A, double y[], const double b[])
+{
+  if (0 == A.base) {
+    forwardSolveRef_<0>(A, y, b);
+  }
+  else {
+    assert(1 == A.base);
+    forwardSolveRef_<1>(A, y, b);
+  }
+}
+
+template<int BASE = 0>
+static void backwardSolveRef_(const CSR& A, double y[], const double b[])
 {
   for (int i = A.m - 1; i >= 0; --i) {
     double sum = b[i];
-    for (int j = A.rowptr[i]; j < A.rowptr[i + 1]; ++j) {
-      sum -= A.values[j]*y[A.colidx[j]];
+    for (int j = A.rowptr[i] - BASE; j < A.rowptr[i + 1] - BASE; ++j) {
+      sum -= A.values[j]*y[A.colidx[j] - BASE];
     }
     y[i] = sum;
   } // for each row
+}
+
+void backwardSolveRef(const CSR& A, double y[], const double b[])
+{
+  if (0 == A.base) {
+    backwardSolveRef_<0>(A, y, b);
+  }
+  else {
+    assert(1 == A.base);
+    backwardSolveRef_<1>(A, y, b);
+  }
 }
 
 /**
  * Forward sparse triangular solver parallelized with level scheduling
  * and point-to-point synchronization
  */
-void forwardSolve(
+template<int BASE = 0>
+static void forwardSolve_(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
   const int *perm)
@@ -74,8 +99,8 @@ void forwardSolve(
       for (int i = taskBoundaries[task]; i < taskBoundaries[task + 1]; ++i) {
         int row = perm[i];
         double sum = b[row];
-        for (int j = A.rowptr[row]; j < A.rowptr[row + 1]; ++j) {
-          sum -= A.values[j]*y[A.colidx[j]];
+        for (int j = A.rowptr[row] - BASE; j < A.rowptr[row + 1] - BASE; ++j) {
+          sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
         y[row] = sum*A.idiag[row];
       }
@@ -85,11 +110,25 @@ void forwardSolve(
   } // omp parallel
 }
 
+void forwardSolve(
+  const CSR& A, double y[], const double b[],
+  const LevelSchedule& schedule, const int *perm)
+{
+  if (0 == A.base) {
+    forwardSolve_<0>(A, y, b, schedule, perm);
+  }
+  else {
+    assert(1 == A.base);
+    forwardSolve_<1>(A, y, b, schedule, perm);
+  }
+}
+
 /**
  * Backward sparse triangular solver parallelized with level scheduling
  * and point-to-point synchronization
  */
-void backwardSolve(
+template<int BASE = 0>
+static void backwardSolve_(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
   const int *perm)
@@ -121,8 +160,8 @@ void backwardSolve(
       for (int i = taskBoundaries[task + 1] - 1; i >= taskBoundaries[task]; --i) {
         int row = perm[i];
         double sum = b[row];
-        for (int j = A.rowptr[row + 1] - 1; j >= A.rowptr[row]; --j) {
-          sum -= A.values[j]*y[A.colidx[j]];
+        for (int j = A.rowptr[row + 1] - 1 - BASE; j >= A.rowptr[row] - BASE; --j) {
+          sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
         y[row] = sum;
       }
@@ -132,11 +171,25 @@ void backwardSolve(
   } // omp parallel
 }
 
+void backwardSolve(
+  const CSR& A, double y[], const double b[],
+  const LevelSchedule& schedule, const int *perm)
+{
+  if (0 == A.base) {
+    backwardSolve_<0>(A, y, b, schedule, perm);
+  }
+  else {
+    assert(1 == A.base);
+    backwardSolve_<1>(A, y, b, schedule, perm);
+  }
+}
+
 /**
  * Forward sparse triangular solver parallelized with level scheduling
  * and point-to-point synchronization
  */
-void forwardSolveWithReorderedMatrix(
+template<int BASE = 0>
+static void forwardSolveWithReorderedMatrix_(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
@@ -166,8 +219,8 @@ void forwardSolveWithReorderedMatrix(
 
       for (int i = taskBoundaries[task]; i < taskBoundaries[task + 1]; ++i) {
         double sum = b[i];
-        for (int j = A.rowptr[i]; j < A.rowptr[i + 1]; ++j) {
-          sum -= A.values[j]*y[A.colidx[j]];
+        for (int j = A.rowptr[i] - BASE; j < A.rowptr[i + 1] - BASE; ++j) {
+          sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
         y[i] = sum*A.idiag[i];
       }
@@ -177,11 +230,25 @@ void forwardSolveWithReorderedMatrix(
   } // omp parallel
 }
 
+void forwardSolveWithReorderedMatrix(
+  const CSR& A, double y[], const double b[],
+  const LevelSchedule& schedule)
+{
+  if (0 == A.base) {
+    forwardSolveWithReorderedMatrix_<0>(A, y, b, schedule);
+  }
+  else {
+    assert(1 == A.base);
+    forwardSolveWithReorderedMatrix_<1>(A, y, b, schedule);
+  }
+}
+
 /**
  * Backward sparse triangular solver parallelized with level scheduling
  * and point-to-point synchronization
  */
-void backwardSolveWithReorderedMatrix(
+template<int BASE = 0>
+static void backwardSolveWithReorderedMatrix_(
   const CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
@@ -211,8 +278,8 @@ void backwardSolveWithReorderedMatrix(
 
       for (int i = taskBoundaries[task + 1] - 1; i >= taskBoundaries[task]; --i) {
         double sum = b[i];
-        for (int j = A.rowptr[i + 1] - 1; j >= A.rowptr[i]; --j) {
-          sum -= A.values[j]*y[A.colidx[j]];
+        for (int j = A.rowptr[i + 1] - 1 - BASE; j >= A.rowptr[i] - BASE; --j) {
+          sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
         y[i] = sum;
       }
@@ -220,4 +287,17 @@ void backwardSolveWithReorderedMatrix(
       SPMP_LEVEL_SCHEDULE_NOTIFY;
     } // for each task
   } // omp parallel
+}
+
+void backwardSolveWithReorderedMatrix(
+  const CSR& A, double y[], const double b[],
+  const LevelSchedule& schedule)
+{
+  if (0 == A.base) {
+    backwardSolveWithReorderedMatrix_<0>(A, y, b, schedule);
+  }
+  else {
+    assert(1 == A.base);
+    backwardSolveWithReorderedMatrix_<1>(A, y, b, schedule);
+  }
 }
