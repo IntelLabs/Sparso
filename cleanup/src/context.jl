@@ -75,12 +75,16 @@ function CS_fwdBwdTriSolve!_post_process(
     # the library is faster to build the dependence graph.
     L_or_U = ast.args[2]
     structure = get_structure_proxy(L_or_U) 
-    ast.args[2] = structure.proxy
+    A = structure.proxy
+    ast.args[2] = A
 
     # Remember this call site so that we will add a fknob for it later: So that 
     # the library willl remember that dependence graph (or its schedule) inside
     # the fknob.
-    site = CallSite(ast, Vector(), fknob_creator, fknob_deletor)
+    site        = CallSite(ast, Vector(), fknob_creator, fknob_deletor)
+    symbol_info = call_sites.symbol_info
+    assert(type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix)
+    push!(site.matrices, typeof(A) == SymbolNode ? A.name : A)
     push!(call_sites.sites, site)
     return true
 end
@@ -412,10 +416,12 @@ function context_info_discovery(
 
             # Create statements that will update the knob before every
             # statement that defines the matrix
-            for (bb, stmt_idx) in var_defs[M]
-                action = InsertBeforeStatement(Vector{Statement}(), bb, stmt_idx)
-                push!(actions, action)
-                create_increment_matrix_version(action.new_stmts, mknob)
+            if haskey(var_defs, M)
+                for (bb, stmt_idx) in var_defs[M]
+                    action = InsertBeforeStatement(Vector{Statement}(), bb, stmt_idx)
+                    push!(actions, action)
+                    create_increment_matrix_version(action.new_stmts, mknob)
+                end
             end
         end
     end

@@ -9,7 +9,7 @@ include("utils.jl")
 
 if length(ARGS) == 0
     m = 10
-    A = generate_symmetric_sparse_matrix(m)
+    A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
 else
     A = matrix_market_read(ARGS[1], true, true)
     m = size(A, 1)
