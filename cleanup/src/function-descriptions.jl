@@ -375,15 +375,17 @@ Convert the function_descriptions table into a dictionary that can be passed to
 LivenessAnalysis to indicate which args are unmodified by which functions.
 """
 function create_unmodified_args_dict()
-    res = Dict{Any, Array{Int64,1}}()
+    res = Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}()
+
     for desc in function_descriptions
         num_args    = length(desc.argument_types)   # Get the number of arguments to the functions.
+        arg_type_array = collect(desc.argument_types)
         unmodifieds = ones(Int64, num_args)         # desc.output contains "modifies" so we default to true and then turn off based on desc.output.
         for j in desc.output
             unmodifieds[j] = 0
         end
         res[(get_function_from_string(desc.module_name, desc.function_name), 
-             desc.argument_types)] = unmodifieds
+             arg_type_array)] = unmodifieds
     end
 
     return res
