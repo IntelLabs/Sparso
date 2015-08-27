@@ -50,7 +50,7 @@ public:
     
     ~ForwardTriangularSolveKnob() {
         if (schedule != NULL) {
-            delete schedule;
+            //delete schedule;
         }
     }
 
@@ -60,6 +60,7 @@ public:
         // Free all info based on the old matrix
         if (schedule != NULL) {
             delete schedule;
+            schedule = NULL;
         }
     }
 
@@ -83,7 +84,7 @@ public:
     
     ~BackwardTriangularSolveKnob() {
         if (schedule != NULL) {
-            delete schedule;
+            //delete schedule;
         }
     }
 
@@ -93,6 +94,7 @@ public:
         // Free all info based on the old matrix
         if (schedule != NULL) {
             delete schedule;
+            schedule = NULL;
         }
     }
 
@@ -168,7 +170,7 @@ void* NewForwardTriangularSolveKnob()
 void DeleteForwardTriangularSolveKnob(void* fknob)
 {
     ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
-    delete f;
+    //delete f;
 }
 
 void* NewBackwardTriangularSolveKnob()
@@ -180,7 +182,7 @@ void* NewBackwardTriangularSolveKnob()
 void DeleteBackwardTriangularSolveKnob(void* fknob)
 {
     BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
-    delete f;
+    //delete f;
 }
 
 void ForwardTriangularSolve(
@@ -190,7 +192,6 @@ void ForwardTriangularSolve(
     CSR A(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
-        A.make0BasedIndexing();
         A.computeInverseDiag();
 
         schedule = new LevelSchedule;
@@ -207,7 +208,6 @@ void ForwardTriangularSolve(
             schedule = f->schedule;
             A.idiag = f->idiag;
         } else {
-            A.make0BasedIndexing();
             A.computeInverseDiag();
             f->idiag = A.idiag;
 
@@ -216,8 +216,6 @@ void ForwardTriangularSolve(
             schedule = new LevelSchedule;
             schedule->constructTaskGraph(A);
             f->schedule = schedule;
-
-            A.make1BasedIndexing();
         }
     }
         
@@ -234,13 +232,10 @@ void BackwardTriangularSolve(
     CSR A(numrows, numcols, colptr, rowval, nzval, 1);
     LevelSchedule * schedule;
     if (fknob == NULL) {
-        A.make0BasedIndexing();
         A.computeInverseDiag();
 
         schedule = new LevelSchedule;
         schedule->constructTaskGraph(A);
-
-        A.make1BasedIndexing();
     } else {
         BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
@@ -252,7 +247,6 @@ void BackwardTriangularSolve(
             schedule = f->schedule;
             A.idiag = f->idiag;
         } else {
-            A.make0BasedIndexing();
             A.computeInverseDiag();
             f->idiag = A.idiag;
             
@@ -261,8 +255,6 @@ void BackwardTriangularSolve(
             schedule = new LevelSchedule;
             schedule->constructTaskGraph(A);
             f->schedule = schedule;
-
-            A.make1BasedIndexing();
         }
     }
         
