@@ -194,9 +194,9 @@ const CS_ADAT_assign_pattern = ExprPattern(
 # original call with calls to our library, where we check if we have cached 
 # some constant structure to reuse. If not, we call the original Julia
 # function; otherwise, we avoid some redundant computation and return results faster.
-const CS_cholfact_pattern = ExprPattern(
-    "CS_cholfact_pattern",
-    (:call, GlobalRef(Main, :cholfact), SparseMatrixCSC{Float64,Int64}),
+const CS_cholfact_int32_pattern = ExprPattern(
+    "CS_cholfact_int32_pattern",
+    (:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC{Float64, Int32}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -208,7 +208,7 @@ const CS_cholfact_pattern = ExprPattern(
 const CS_cholfact_assign_pattern = ExprPattern(
     "CS_cholfact_assign_pattern",
     (:(=), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Base.SparseMatrix.CHOLMOD.Factor{Float64}),
-    (nothing, nothing, CS_cholfact_pattern),
+    (nothing, nothing, CS_cholfact_int32_pattern),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact)),
      :arg1, :aarg22),
