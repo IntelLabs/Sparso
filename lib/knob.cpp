@@ -32,6 +32,14 @@ struct MatrixKnob {
     int          matrix_version;      // The latest version of the matrix. It may be incremented dynamically if the matrix is not constant-valued.
     bool         constant_structured; // A matrix might be changed, and thus its version updated, but its structure might stay the same
     MatrixKnob * structure_proxy;     // The structure of another matrix might represent the structure of this matrix. 
+
+    CSR        * A; // CSC used in Julia is often not be the best performing format. We want to decouple from it by having a shadow copy of the Julia CSC matrix in more optimized representation. For now, we fix it as CSR in SpMP. Later, we need to make it something like union so that we can change the matrix representation depending on the context
+    CSR        * AT; // to save transpose of A
+
+    bool         is_symmetric;
+
+    // auxiliary data structure
+    LevelSchedule *schedule;
 };
 
 // This is the base class of all function knobs
@@ -49,26 +57,16 @@ public:
     }
     
     ~ForwardTriangularSolveKnob() {
-        if (schedule != NULL) {
-            //delete schedule;
-        }
     }
 
     void UpdateMatrixVersion(int new_version) {
         matrix_version = new_version;
-        
-        // Free all info based on the old matrix
-        if (schedule != NULL) {
-            delete schedule;
-            schedule = NULL;
-        }
     }
 
 private:
     // Info private to the forward triangular solver.
     int            matrix_version; // version of the matrix when the private info is built
     LevelSchedule* schedule;
-    double*        idiag; // pre-computed inverse of diagonals
 
     friend void ForwardTriangularSolve(
         int numrows, int numcols, int* colptr, int* rowval, double* nzval,
@@ -79,30 +77,18 @@ class BackwardTriangularSolveKnob : public FunctionKnob {
 public:
     BackwardTriangularSolveKnob() {
         matrix_version = INVALID_VERSION; // No valid private info built yet
-        schedule = NULL;
     }
     
     ~BackwardTriangularSolveKnob() {
-        if (schedule != NULL) {
-            //delete schedule;
-        }
     }
 
     void UpdateMatrixVersion(int new_version) {
         matrix_version = new_version;
-        
-        // Free all info based on the old matrix
-        if (schedule != NULL) {
-            delete schedule;
-            schedule = NULL;
-        }
     }
 
 private:
     // Info private to the backward triangular solver.
     int            matrix_version; // version of the matrix when the private info is built
-    LevelSchedule* schedule;
-    double*        idiag; // pre-computed inverse of diagonals
 
     friend void BackwardTriangularSolve(
         int numrows, int numcols, int* colptr, int* rowval, double* nzval,
@@ -136,6 +122,10 @@ void* NewMatrixKnob()
     m->matrix_version = MIN_VALID_VERSION;
     m->constant_structured = false;
     m->structure_proxy = NULL;
+    m->A = NULL;
+    m->AT = NULL;
+    m->is_symmetric = false;
+    m->schedule = NULL;
     return (void*)m;
 }
 
@@ -146,9 +136,66 @@ void IncrementMatrixVersion(void* mknob)
     m->matrix_version++;
 }
 
+static void DeleteOptimizedRepresentation(MatrixKnob *m)
+{
+    if (m->A) {
+      FREE(m->A->rowptr);
+      FREE(m->A->colidx);
+      FREE(m->A->values);
+      delete m->A;
+      m->A = NULL;
+    }
+    if (m->AT) {
+      delete m->AT;
+      m->AT = NULL;
+    }
+    m->is_symmetric = false;
+}
+
+static void CreateOptimizedRepresentation(
+    MatrixKnob *m, int numrows, int numcols, int *colptr, int *rowval, double *nzval)
+{
+    DeleteOptimizedRepresentation(m);
+
+    int nnz = colptr[numcols] - 1;
+    int *colptr_copy = MALLOC(int, numcols + 1);
+    int *rowval_copy = MALLOC(int, nnz);
+    double *nzval_copy = MALLOC(double, nnz);
+    
+    // Copy Julia CSC to SpMP CSR, while converting into 0
+#pragma omp parallel for
+    for (int i = 0; i <= numcols; i++)
+        colptr_copy[i] = colptr[i] - 1;
+
+#pragma omp parallel for
+    for (int i = 0; i < nnz; i++) {
+        rowval_copy[i] = rowval[i] - 1;
+        nzval_copy[i] = nzval[i];
+    }
+
+    // Simply copying CSC to CSR will create a transposed version of original matrix
+    CSR *AT = new CSR(numcols, numrows, colptr_copy, rowval_copy, nzval_copy);
+
+    if (!AT->isSymmetric(true, true)) {
+      m->is_symmetric = false;
+
+      m->AT = AT->transpose();
+      m->AT = AT;
+    }
+    else {
+      m->is_symmetric = true;
+      m->A = AT;
+    }
+}
+
 void DeleteMatrixKnob(void* mknob)
 {
     MatrixKnob* m = (MatrixKnob*)mknob;
+    DeleteOptimizedRepresentation(m);
+    if (m->schedule) {
+        delete m->schedule;
+        m->schedule = NULL;
+    }
     delete m;
 }
 
@@ -170,7 +217,7 @@ void* NewForwardTriangularSolveKnob()
 void DeleteForwardTriangularSolveKnob(void* fknob)
 {
     ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
-    //delete f;
+    //delete f; FIXME
 }
 
 void* NewBackwardTriangularSolveKnob()
@@ -182,60 +229,67 @@ void* NewBackwardTriangularSolveKnob()
 void DeleteBackwardTriangularSolveKnob(void* fknob)
 {
     BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
-    //delete f;
+    //delete f; FIXME
 }
 
 void ForwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-    CSR A(numrows, numcols, colptr, rowval, nzval, 1);
-    LevelSchedule * schedule;
+    CSR *A = NULL;
+    LevelSchedule *schedule;
     if (fknob == NULL) {
-        A.computeInverseDiag();
+        A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+        A->computeInverseDiag();
 
         schedule = new LevelSchedule;
-        schedule->constructTaskGraph(A);
+        schedule->constructTaskGraph(*A);
     } else {
         ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
         MatrixKnob* m = f->mknobs[0];
         assert(m != NULL);
     
-        if ((f->schedule != NULL) && 
+        if ((m->schedule != NULL) && 
             (m->constant_valued || m->constant_structured ||
              f->matrix_version == m->matrix_version)) {
-            schedule = f->schedule;
-            A.idiag = f->idiag;
+            // FIXME: when matrix value has been changed (but not structure),
+            // we need to update the values of shadow copy
+            A = m->A;
+            if (!A->idiag) A->computeInverseDiag();
+
+            schedule = m->schedule;
         } else {
-            A.computeInverseDiag();
-            f->idiag = A.idiag;
+            CreateOptimizedRepresentation(m, numrows, numcols, colptr, rowval, nzval);
+            A = m->A;
+            A->computeInverseDiag();
 
             // Either no schedule, or is out of date
             f->UpdateMatrixVersion(m->matrix_version);
             schedule = new LevelSchedule;
-            schedule->constructTaskGraph(A);
-            f->schedule = schedule;
+            schedule->constructTaskGraph(*A);
+            m->schedule = schedule;
         }
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    forwardSolve(A, y, b, *schedule, invPerm);
+    forwardSolve(*A, y, b, *schedule, invPerm);
 
-    A.idiag = NULL; // knob owns idiag
+    if (!fknob) delete A;
 }
 
 void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-    CSR A(numrows, numcols, colptr, rowval, nzval, 1);
+    CSR *A = NULL;
     LevelSchedule * schedule;
     if (fknob == NULL) {
-        A.computeInverseDiag();
+        A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+        A->computeInverseDiag();
 
         schedule = new LevelSchedule;
-        schedule->constructTaskGraph(A);
+        schedule->constructTaskGraph(*A);
     } else {
         BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
@@ -243,25 +297,28 @@ void BackwardTriangularSolve(
         assert(m != NULL);
     
         if ((f->matrix_version == m->matrix_version) &&
-            (f->schedule != NULL)) {
-            schedule = f->schedule;
-            A.idiag = f->idiag;
+            (m->schedule != NULL)) {
+            A = m->A;
+            if (!A->idiag) A->computeInverseDiag();
+
+            schedule = m->schedule;
         } else {
-            A.computeInverseDiag();
-            f->idiag = A.idiag;
+            CreateOptimizedRepresentation(m, numrows, numcols, colptr, rowval, nzval);
+            A = m->A;
+            A->computeInverseDiag();
             
             // Either no schedule, or is out of date
             f->UpdateMatrixVersion(m->matrix_version);
             schedule = new LevelSchedule;
-            schedule->constructTaskGraph(A);
-            f->schedule = schedule;
+            schedule->constructTaskGraph(*A);
+            m->schedule = schedule;
         }
     }
         
     int* invPerm = schedule->threadContToOrigPerm;
-    backwardSolve(A, y, b, *schedule, invPerm);
+    backwardSolve(*A, y, b, *schedule, invPerm);
 
-    A.idiag = NULL; // knob owns idiag
+    if (!fknob) delete A;
 }
 
 void* NewADBKnob()

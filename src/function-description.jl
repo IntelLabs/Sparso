@@ -26,9 +26,11 @@ immutable FunctionDescription
     distributive    :: Bool   # Is this function distributive?
     IA              :: Set    # A set. Each element itself is a set of inter-dependent arguments. E.g. 
                               #Set(Any[Set(0, 1, 2), Set(4, 5)]) means that result (0) and argument 1 and 2 are inter-dependent, and argument 3 and 4 are inter-dependent.
+    non_structure_preserving :: Set
 end
 
 const UPDATED_NONE  = Set()
+const ALL_STRUCTURE_PRESERVING = Set()
 const IA_NONE       = Set()
 
 const VECTOR_OR_NUM = Union(Vector, Number)
@@ -42,7 +44,8 @@ const PointwiseMultiply_Desc = FunctionDescription(
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the two arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the two arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const PointwiseMultiply!_Desc = FunctionDescription(
@@ -51,7 +54,8 @@ const PointwiseMultiply!_Desc = FunctionDescription(
     (Vector, Vector, Vector),         # The arguments must be vectors
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2; 3]))             # The return value (0) and the arguments (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
+    ia(Set([0; 1; 2; 3])),            # The return value (0) and the arguments (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
+    ALL_STRUCTURE_PRESERVING
 )
 
 const PointwiseDivide_Desc = FunctionDescription(
@@ -60,7 +64,8 @@ const PointwiseDivide_Desc = FunctionDescription(
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the two arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the two arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const PointwiseDivide1_Desc = FunctionDescription(
@@ -69,7 +74,8 @@ const PointwiseDivide1_Desc = FunctionDescription(
     (VECTOR_OR_NUM, Vector),          # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the two arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the two arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const PointwiseDivide!_Desc = FunctionDescription(
@@ -78,7 +84,8 @@ const PointwiseDivide!_Desc = FunctionDescription(
     (Vector, Vector, Vector),         # The arguments must be vectors
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2; 3]))             # The return value (0) and the arguments (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
+    ia(Set([0; 1; 2; 3])),            # The return value (0) and the arguments (1, 2, 3) are inter-dependent. In fact, 0 and 1 are the same array
+    ALL_STRUCTURE_PRESERVING
 )
 
 const SpMV_Desc = FunctionDescription(
@@ -87,7 +94,8 @@ const SpMV_Desc = FunctionDescription(
     (SparseMatrixCSC, Vector),        # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const star_Desc = FunctionDescription(
@@ -96,7 +104,8 @@ const star_Desc = FunctionDescription(
     (SparseMatrixCSC, Vector),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const star1_Desc = FunctionDescription(
@@ -105,7 +114,8 @@ const star1_Desc = FunctionDescription(
     (Number, SparseMatrixCSC, Vector),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 2; 3]))                # The return value (0) and the arguments (2, 3) are inter-dependent
+    ia(Set([0; 2; 3])),               # The return value (0) and the arguments (2, 3) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const star2_Desc = FunctionDescription(
@@ -114,7 +124,8 @@ const star2_Desc = FunctionDescription(
     (Number, Vector),                 
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 2]))                   # The return value (0) and the argument 2 are inter-dependent
+    ia(Set([0; 2])),                  # The return value (0) and the argument 2 are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const Dot_Desc = FunctionDescription(
@@ -123,7 +134,8 @@ const Dot_Desc = FunctionDescription(
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const dot_Desc = FunctionDescription(
@@ -132,7 +144,8 @@ const dot_Desc = FunctionDescription(
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const copy_Desc = FunctionDescription(
@@ -141,7 +154,8 @@ const copy_Desc = FunctionDescription(
     (Vector, ),                       # The arguments must be a vector
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1]))                   # The return value (0) and the argument are inter-dependent
+    ia(Set([0; 1])),                  # The return value (0) and the argument are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const WAXPBY_Desc = FunctionDescription(
@@ -150,7 +164,8 @@ const WAXPBY_Desc = FunctionDescription(
     (Number, Vector, Number, Vector), 
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 2; 4]))                # The return value (0) and the two arguments (2, 4) are inter-dependent
+    ia(Set([0; 2; 4])),               # The return value (0) and the two arguments (2, 4) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const WAXPBY!_Desc = FunctionDescription(
@@ -159,7 +174,8 @@ const WAXPBY!_Desc = FunctionDescription(
     (Vector, Number, Vector, Number, Vector), 
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 3; 5]))             # The return value (0) and the arguments 1, 3, 5 are inter-dependent. In fact, 0 and 1 are the same array
+    ia(Set([0; 1; 3; 5])),            # The return value (0) and the arguments 1, 3, 5 are inter-dependent. In fact, 0 and 1 are the same array
+    ALL_STRUCTURE_PRESERVING
 )
 
 const add_vector_Desc = FunctionDescription(
@@ -168,7 +184,8 @@ const add_vector_Desc = FunctionDescription(
     (VECTOR_OR_NUM, VECTOR_OR_NUM),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const add_matrix_Desc = FunctionDescription(
@@ -177,7 +194,8 @@ const add_matrix_Desc = FunctionDescription(
     (MATRIX_OR_NUM, MATRIX_OR_NUM),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const sub_vector_Desc = FunctionDescription(
@@ -186,7 +204,8 @@ const sub_vector_Desc = FunctionDescription(
     (VECTOR_OR_NUM, VECTOR_OR_NUM),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments (1, 2) are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments (1, 2) are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const norm_Desc = FunctionDescription(
@@ -195,7 +214,8 @@ const norm_Desc = FunctionDescription(
     (AbstractArray, ),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    IA_NONE                           # No inter-dependent arrays
+    IA_NONE,                          # No inter-dependent arrays
+    ALL_STRUCTURE_PRESERVING
 )
 
 const spones_Desc = FunctionDescription(
@@ -204,7 +224,8 @@ const spones_Desc = FunctionDescription(
     (AbstractSparseMatrix, ),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1]))                   # The return value (0) and the argument are inter-dependent
+    ia(Set([0; 1])),                  # The return value (0) and the argument are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const size_Desc = FunctionDescription(
@@ -213,7 +234,8 @@ const size_Desc = FunctionDescription(
     (AbstractArray, Number),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    IA_NONE                           # No inter-dependent arrays
+    IA_NONE,                          # No inter-dependent arrays
+    ALL_STRUCTURE_PRESERVING
 )
 
 const Array_Desc = FunctionDescription(
@@ -222,7 +244,8 @@ const Array_Desc = FunctionDescription(
     (Any, Integer),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is actually not distributive, but it constructs an array whose values are unitialized, and thus we can treat it as distributive 
-    IA_NONE                           # No inter-dependent arrays
+    IA_NONE,                          # No inter-dependent arrays
+    ALL_STRUCTURE_PRESERVING
 )
 
 const fill!_Desc = FunctionDescription(
@@ -231,7 +254,8 @@ const fill!_Desc = FunctionDescription(
     (AbstractArray, Number),
     Set(1),                           # argument 1 is updated
     true,                             # The function is distributive 
-    IA_NONE                           # No inter-dependent arrays: the result array is filled with the same value, and thus independent of the original array's content
+    IA_NONE,                          # No inter-dependent arrays: the result array is filled with the same value, and thus independent of the original array's content
+    ALL_STRUCTURE_PRESERVING
 )
 
 const max_Desc = FunctionDescription(
@@ -240,7 +264,8 @@ const max_Desc = FunctionDescription(
     (Vector, Number),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive 
-    ia(Set([0, 1]))                   # The return value (0) and the argument are inter-dependent
+    ia(Set([0, 1])),                  # The return value (0) and the argument are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const scale_Desc = FunctionDescription(
@@ -249,7 +274,8 @@ const scale_Desc = FunctionDescription(
     (AbstractMatrix, Vector),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive 
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const sum_Desc = FunctionDescription(
@@ -258,7 +284,8 @@ const sum_Desc = FunctionDescription(
     (AbstractArray, ),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive 
-    IA_NONE                           # No inter-dependent arrays
+    IA_NONE,                          # No inter-dependent arrays
+    ALL_STRUCTURE_PRESERVING
 )
 
 const convert_Desc = FunctionDescription(
@@ -267,7 +294,8 @@ const convert_Desc = FunctionDescription(
     (Type{Array{Float64,1}}, Vector), # Cannot use Type{Vector} as Type{Array{Float64,1}} <: Type{Vector} is false! but Type{Array{Float64,1}} <: Type{Array{Float64,1}} is true! Not sure why
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive 
-    ia(Set([0; 2]))                   # The return value (0) and the argument 2 are inter-dependent
+    ia(Set([0; 2])),                  # The return value (0) and the argument 2 are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const eltype_Desc = FunctionDescription(
@@ -276,7 +304,8 @@ const eltype_Desc = FunctionDescription(
     (AbstractArray, ), 
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive 
-    IA_NONE                           # No inter-dependent arrays
+    IA_NONE,                          # No inter-dependent arrays
+    ALL_STRUCTURE_PRESERVING
 )
 
 const inverse_divide_Desc = FunctionDescription(
@@ -285,7 +314,8 @@ const inverse_divide_Desc = FunctionDescription(
     (AbstractSparseMatrix, Vector),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const fwdTriSolve!_Desc = FunctionDescription(
@@ -294,7 +324,8 @@ const fwdTriSolve!_Desc = FunctionDescription(
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 const bwdTriSolve!_Desc = FunctionDescription(
@@ -303,7 +334,8 @@ const bwdTriSolve!_Desc = FunctionDescription(
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
     true,                             # The function is distributive
-    ia(Set([0; 1; 2]))                # The return value (0) and the arguments are inter-dependent
+    ia(Set([0; 1; 2])),               # The return value (0) and the arguments are inter-dependent
+    ALL_STRUCTURE_PRESERVING
 )
 
 function_descriptions = [
@@ -355,15 +387,16 @@ end
 Convert the function_descriptions table into a dictionary that can be passed to LivenessAnalysis to indicate which args can be modified by which functions.
 """
 function createModifiedArgsDict()
-    res = Dict{Any, Array{Int64,1}}()
+    res = Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}()
 
     for desc in function_descriptions
         num_args    = length(desc.argument_types)   # Get the number of arguments to the functions.
+        arg_type_array = collect(desc.argument_types)
         unmodifieds = ones(Int64, num_args)         # desc.output contains "modifies" so we default to true and then turn off based on desc.output.
         for j in desc.output
             unmodifieds[j] = 0
         end
-        res[(getFunctionFromString(desc.module_name, desc.function_name),desc.argument_types)] = unmodifieds
+        res[(getFunctionFromString(desc.module_name, desc.function_name),arg_type_array)] = unmodifieds
     end
 
     return res
@@ -392,3 +425,10 @@ function lookup_function_description(module_name :: String, function_name :: Str
     end
     return nothing
 end
+
+function lookup_function_description(func :: Function , argument_types :: Tuple)
+    mn = Base.module_name(Base.function_module(func, argument_types))
+    fn = Base.function_name(func)
+    return lookup_function_description(mn, fn, argument_types)
+end
+
