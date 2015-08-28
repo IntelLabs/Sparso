@@ -45,6 +45,14 @@ void CSR_MultiplyWithVector(
   double beta, const double *y,
   double gamma);
 
+// W = alpha*A*X + beta*Y + gamma
+void CSR_MultiplyWithDenseMatrix(
+  double *W, int k, int wRowStride, int wColumnStride,
+  double alpha, const CSR_Handle *A,
+  const double *X, int xRowStride, int xColumnStride,
+  double beta, const double *Y, int yRowStride, int yColumnStride,
+  double gamma);
+
 // C = A*diag(d)*B
 CSR_Handle *CSR_ADBInspect(
   const CSR_Handle *A, const CSR_Handle *B);
@@ -83,6 +91,13 @@ void pointwiseDivide(int n, double *w, const double *x, const double *y);
 void pointwiseMultiply(int n, double *w, const double *x, const double *y);
 // w = alpha*x + beta
 void waxpb(int n, double *w, double alpha, const double *x, double beta);
+
+void tallSkinnyDGEMM(
+  int transA, int transB,
+  int m, int n, int k,   
+  double alpha, const double *A, int lda,
+  const double *B, int ldb,
+  double beta, double *C, int ldc);
 
 #ifdef __cplusplus
 }

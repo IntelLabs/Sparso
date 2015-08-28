@@ -579,6 +579,30 @@ function WAXPB(alpha::Number, x::Vector, beta::Number)
   w
 end
 
+# W = alpha*A*X + beta*Y + gamma                                                                       
+function SpMDM!(W::StridedMatrix{Float64}, alpha::Number, A::SparseMatrixCSC, X::StridedMatrix{Float64}, beta::Number, Y::StridedMatrix{Float64}, gamma::Number)
+  assert(size(W, 2) == size(X, 2))
+  assert(size(W, 2) == size(Y, 2))
+  assert(size(W, 1) == size(A, 1))
+  assert(size(W, 1) == size(Y, 1))
+  assert(size(A, 2) == size(X, 1))
+
+  if DEFAULT_LIBRARY == PCL_LIB
+    A2 = CreateCSR(A)
+    ccall((:CSR_MultiplyWithDenseMatrix, LIB_PATH), Void,
+          (Ptr{Cdouble}, Cint, Cint, Cint, Cdouble, Ptr{Void}, Ptr{Cdouble}, Cint, Cint, Cdouble, Ptr{Cdouble}, Cint, Cint, Cdouble),
+          W, size(W, 2), stride(A, 1), stride(A, 2),
+          alpha, A2,
+          X, stride(X, 1), stride(X, 2),
+          beta, Y, stride(Y, 1), stride(Y, 2),
+          gamma)
+    DestroyCSR(A2)
+  else
+    # use Julia implementation
+    W = alpha * A * X + beta * Y + gamma
+  end
+end
+
 end   # end of module
 
 #function Base.A_mul_B!(alpha::Number, A::SparseMatrixCSC, x::Vector, beta::Number, y::Vector)

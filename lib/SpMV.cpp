@@ -18,4 +18,19 @@ void CSR_MultiplyWithVector(
   ((CSR *)A)->multiplyWithVector(w, alpha, x, beta, y, gamma);
 }
 
+void CSR_MultiplyWithDenseMatrix(
+  double *W, int k, int wRowStride, int wColumnStride,
+  double alpha, const CSR_Handle *A,
+  const double *X, int xRowStride, int xColumnStride,
+  double beta, const double *Y, int yRowStride, int yColumnStride,
+  double gamma)
+{
+  ((CSR *)A)->multiplyWithDenseMatrix(
+    W, k, wRowStride, wColumnStride,
+    alpha,
+    X, xRowStride, xColumnStride,
+    beta, Y, yRowStride, yColumnStride,
+    gamma);
 }
+
+} // extern "C"
