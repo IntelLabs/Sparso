@@ -2,11 +2,53 @@ include("../../src/SparseAccelerator.jl")
 include("./utils.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
-CompilerTools.LivenessAnalysis.set_debug_level(6)
-
 # The original pcg_symgs
-include("./pcg-symgs.jl")
+#include("./pcg-symgs.jl")
+function pcg_symgs(x, A, b, tol, maxiter)
+    L = tril(A)
+    U  = spdiagm(1./diag(A))*triu(A)
+    M = L*U
+    r = b - A * x
+    normr0 = norm(r)
+    rel_err = 1
+
+    z = copy(r)
+    Base.SparseMatrix.fwdTriSolve!(L, z)
+    Base.SparseMatrix.bwdTriSolve!(U, z)
+
+    p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
+    rz = dot(r, z)
+    k = 1
+    time1 = time()
+    while k <= maxiter
+        old_rz = rz
+        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        alpha = old_rz / dot(p, Ap)
+        x += alpha * p
+        r -= alpha * Ap
+        rel_err = norm(r)/normr0
+        if rel_err < tol 
+            break
+        end
+
+        z = copy(r)
+        println("iter ", k, ": sum z = ", sum(z), " z=", z)
+        
+        Base.SparseMatrix.fwdTriSolve!(L, z)
+        println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
+          # Could have written as z=L\z if \ is specialized for triangular
+          
+        Base.SparseMatrix.bwdTriSolve!(U, z)
+        println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
+          # Could have wrriten as z=U\z if \ is specialized for triangular
+
+        rz = dot(r, z)
+        beta = rz/old_rz
+        p = z + beta * p
+        k += 1
+    end
+    return x, k, rel_err
+end
 
 # This code is what we expect to generate by context-sensitive optimizations.
 # It is used for debugging purpose only
@@ -27,12 +69,12 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     k = 1
     time1 = time()
     
-    ___mknobA_8236 = (SparseAccelerator.new_matrix_knob)()
-    ___fknob_8238 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
-    (SparseAccelerator.add_mknob_to_fknob)(___mknobA_8236,___fknob_8238)
-    ___fknob_8258 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
-    (SparseAccelerator.add_mknob_to_fknob)(___mknobA_8236,___fknob_8258)
-    
+    __mknobA_8199 = (SparseAccelerator.new_matrix_knob)()
+    __fknob_8201 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8199,__fknob_8201)
+    __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8199,__fknob_8221)
+
     while k <= maxiter
         old_rz = rz
         Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
@@ -45,21 +87,22 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         end
 
         z = copy(r)
+        println("iter ", k, ": sum z = ", sum(z), " z=", z)
         
-        println("*** Before fwdTriSolve!, A =", A)
-        flush(STDOUT)
-        
-        SparseAccelerator.fwdTriSolve!(A, z, ___fknob_8238)
-        SparseAccelerator.bwdTriSolve!(A, z, ___fknob_8258)
+        SparseAccelerator.fwdTriSolve!(A,z,__fknob_8201)
+        println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
+            
+        SparseAccelerator.bwdTriSolve!(A,z,__fknob_8221)
+        println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
 
         rz = dot(r, z)
         beta = rz/old_rz
         p = z + beta * p
         k += 1
     end
-    (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",___fknob_8238)
-    (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",___fknob_8258)
-    (SparseAccelerator.delete_matrix_knob)(___mknobA_8236) # line 25:
+    (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",__fknob_8221)
+    (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",__fknob_8201)
+    (SparseAccelerator.delete_matrix_knob)(__mknobA_8199)
     
     return x, k, rel_err
 end
@@ -76,12 +119,12 @@ b       = ones(Float64, m)
 tol     = 1e-10
 maxiter = 1000
 
-#println("Original: ")
-#@acc x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
-#println("\tk=", k)
-#println("\trel_err=", rel_err)
-#flush(STDOUT)
+println("Original: ")
+x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
+println("\tsum of x=", sum(x))
+println("\tk=", k)
+println("\trel_err=", rel_err)
+flush(STDOUT)
 
 println("\n\nWith manual context-sensitive optimization: ")
 x       = zeros(Float64, m)
