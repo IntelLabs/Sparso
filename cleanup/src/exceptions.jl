@@ -41,3 +41,7 @@ end
 type AsymmetricMatrixMarketFile <: Exception
     filename
 end
+
+type PostPatternReplacementFailure <: Exception
+    pattern
+end

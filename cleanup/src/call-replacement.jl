@@ -440,9 +440,6 @@ function replace(
         return
     end
 
-    dprintln(1, 0, "\n\nReplace")
-    dsprintln(1, 1, symbol_info, ast)
-
     orig_ast = copy(ast)
     ast.head = substitute[1]
     empty!(ast.args)
@@ -450,11 +447,6 @@ function replace(
         arg = replacement_arg(substitute[i], orig_ast.args, symbol_info)
         push!(ast.args, arg)
     end
-    
-    dprintln(1, 0, "to")
-    dsprintln(1, 1, symbol_info, ast)
-    dprintln(1, 0, "according to pattern")
-    dprintln(1, 1, pattern)
 end
 
 @doc """ 
@@ -526,13 +518,23 @@ function match_replace(
             end
         end
         
+        dprintln(1, 0, "\n\nReplace")
+        dsprintln(1, 1, symbol_info, ast)
+
         replace(pattern, ast, symbol_info)
         
         if pattern.post_processing != do_nothing
             if !pattern.post_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
-                return false
+                # AST has already been changed by replace(). However, post 
+                # processing fails. That AST might be wrong. So abort 
+                throw(PostPatternReplacementFailure)
             end
         end
+        
+        dprintln(1, 0, "to")
+        dsprintln(1, 1, symbol_info, ast)
+        dprintln(1, 0, "according to pattern")
+        dprintln(1, 1, pattern)
         
         return true
     end

@@ -9,9 +9,13 @@ extern "C" {
 
 void* NewMatrixKnob();
 void  IncrementMatrixVersion(void* mknob);
+void* GetStructureProxy(void* mknob);
+void* GetDssHandle(void* mknob);
+void* GetMatrix(void* mknob);
 void  DeleteMatrixKnob(void* mknob);
 
 void  AddMatrixKnob(void* fknob, void* mknob);
+void* GetMatrixKnob(void* fknob, int i);
 
 void* NewForwardTriangularSolveKnob();
 void  DeleteForwardTriangularSolveKnob(void* fknob);
@@ -27,6 +31,10 @@ void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob);
     
+void* NewADBKnob();
+
+void DeleteADBKnob(void* fknob);
+
 void *ADBInspect(
     const void *A, const void *B, void* fknob);
 

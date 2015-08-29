@@ -31,7 +31,7 @@ struct MatrixKnob {
     bool         constant_valued;     // The matrix is a constant in value(and thus of course constant in structure).
     int          matrix_version;      // The latest version of the matrix. It may be incremented dynamically if the matrix is not constant-valued.
     bool         constant_structured; // A matrix might be changed, and thus its version updated, but its structure might stay the same
-    MatrixKnob * structure_proxy;     // The structure of another matrix might represent the structure of this matrix. 
+    CSR        * structure_proxy;     // The structure of another matrix might represent the structure of this matrix. 
 
     CSR        * A; // CSC used in Julia is often not be the best performing format. We want to decouple from it by having a shadow copy of the Julia CSC matrix in more optimized representation. For now, we fix it as CSR in SpMP. Later, we need to make it something like union so that we can change the matrix representation depending on the context
     CSR        * AT; // to save transpose of A
@@ -39,7 +39,8 @@ struct MatrixKnob {
     bool         is_symmetric;
 
     // auxiliary data structure
-    LevelSchedule *schedule;
+    LevelSchedule     *schedule;
+    _MKL_DSS_HANDLE_t dss_handle; 
 };
 
 // This is the base class of all function knobs
@@ -188,6 +189,24 @@ static void CreateOptimizedRepresentation(
     }
 }
 
+void* GetStructureProxy(void* mknob)
+{
+    MatrixKnob* m = (MatrixKnob*)mknob;
+    return (void*) (m->structure_proxy);
+}
+
+void* GetMatrix(void* mknob)
+{
+    MatrixKnob* m = (MatrixKnob*)mknob;
+    return (void*) (m->A);
+}
+
+void* GetDssHandle(void* mknob)
+{
+    MatrixKnob* m = (MatrixKnob*)mknob;
+    return (void*) (m->dss_handle);
+}
+
 void DeleteMatrixKnob(void* mknob)
 {
     MatrixKnob* m = (MatrixKnob*)mknob;
@@ -206,6 +225,12 @@ void AddMatrixKnob(void* fknob, void* mknob)
     FunctionKnob* f = (FunctionKnob*)fknob;
     MatrixKnob* m = (MatrixKnob*)mknob;
     f->mknobs.push_back(m);
+}
+
+void* GetMatrixKnob(void* fknob, int i)
+{
+    FunctionKnob* f = (FunctionKnob*)fknob;
+    return (void*)(f->mknobs[i]);
 }
 
 void* NewForwardTriangularSolveKnob()

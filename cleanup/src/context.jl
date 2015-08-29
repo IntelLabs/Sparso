@@ -33,7 +33,6 @@ end
 @doc """ 
 Post-processing function of a pattern: Gather context sensitive info of the call
 site at the given AST.
-This function is not used so far.
 """
 function gather_context_sensitive_info(
     ast           :: Expr,
@@ -118,41 +117,127 @@ function CS_ADAT_check(
 end
 
 @doc """ 
-Post-processing function of CS_ADAT_assign_pattern
+Post-processing function of CS_cholsolve_assign_pattern
 """
-function CS_ADAT_assign_post_replacement(
+function CS_cholsolve_assign_post_replacement(
     ast           :: Expr,
     call_sites    :: CallSites,
     fknob_creator :: String,
     fknob_deletor :: String
 )
-    # We need to replace B = A*D*A' into CSR_ADB(B, A', D, A, fknob). At this 
-    # moment, it is in the middle form of CSR_ADB(B, A, D, A). That means:
+    # The current AST is cholmod_factor_inverse_divide(y, R, t, fknob)
+    # TODO: If y is not allocated space (not live) before the loop, do it here.
+    # fknob is not added for now, which will be added automatically later.
+    return gather_context_sensitive_info(ast, call_sites, fknob_creator, fknob_deletor)
+end
+
+@doc """ 
+Post-processing function of CS_ADAT_pattern
+"""
+function CS_ADAT_post_replacement(
+    ast           :: Expr,
+    call_sites    :: CallSites,
+    fknob_creator :: String,
+    fknob_deletor :: String
+)
+    # We need to replace A*D*A' into CSR_ADB(A', D, A, fknob). At this 
+    # moment, it is in the middle form of CSR_ADB(A, D, A'). That means:
     # (1) Make a symbol AT. Insert AT = A' before the loop (This is to hoist A'
     #     out of loop)
-    # (2) Replace CSR_ADB(B, A, D, A) as CSR_ADB(B, AT, D, A).
+    # (2) Replace CSR_ADB(A, D, A') as CSR_ADB(AT, D, A).
     # fknob is not added for now, which will be added automatically later.
     action = InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
     push!(call_sites.actions, action)
 
-    A  = ast.args[3]
+    A  = ast.args[2]
     assert(typeof(A) == SymbolNode)
-    D = ast.args[4]
+    D = ast.args[3]
     AT = symbol(string("__", string(A.name), "T__"))
     stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
     
-    ast.args[3] = AT
+    ast.args[2] = AT
 
-    # We do not need to make matrix knobs for B, AT, D, and A here, because we
-    # know that the library function CSR_ADB is called only when the conditions
-    # in CS_ADAT_assign_pattern are met, and thus it can safely cache some
-    # intermediate results (the structure of A * AT) without checking if the
-    # matrices have ever been updated or not.
-    site = CallSite(ast, Vector(), fknob_creator, fknob_deletor)
-    push!(call_sites.sites, site)
-    return true
+    return gather_context_sensitive_info(ast, call_sites, fknob_creator, fknob_deletor)
 end
+
+@doc """
+The following patterns are to match the following source code
+    for 
+        ...
+        B = A*D*A' // A and D::SparseMatrixCSC{Float64,Int32}, D is diagnoal matrix
+        ...
+        R = cholfact_int32(B)
+        ...
+        dy = R\t2
+
+Then for each function call site, create a fknob. For each of them, for each
+SparseMatrix input and output, add a mknob to represent them. Even though
+a matrix might have not been allocated yet, we can still represent it
+with its mknob. The purpose of the fknobs are to let us find the mkobs shared
+accross functions. 
+
+Then for each function call site, we check some properties of the input mknobs;
+if they hold, we check th existence of some data of the output mknob; if they do
+not exist, create them; otherwise, directly use them.
+
+This procedure is general, and not limited to this specific case.
+
+The above code is transformed into 
+    # dy is used in cholmod_factor_inverse_divide(), and the pattern knows that
+    # we need to create dy ahead of time, if dy is NOT live befor the loop.
+    dy = Array(Cdouble, m)
+
+    create mknob for A, B, R 
+    create fknob for ADB, cholfact_int32, and cholmod_factor_inverse_divide
+    add mknob_A, B into fknob_ADB
+    add mknob_B, R into fknob_cholfact_int32
+    add mknob_R into fknob_cholmod_factor_inverse_divide
+    for
+        ...
+        # SparseAccelerator.ADB(A', D, A, fknob_ADB)
+        #   if fknob_ADB == NULL
+        #       return A * D * A'
+        #   get the input mknob_A from fknob_ADB
+        #   if !mknob_A->constant_structured (This check is actually already done by pattern matching)
+        #       return A * D * A'
+        #   get the output mknob_B from fknob_ADB
+        #   if mknob_B->structure_proxy == NULL
+        #       ADAT = adb_inspect(A', A), 
+        #       mknob_B->structure_proxy = ADAT
+        #       mknob_B->matrix = ADAT
+        #   d = diag(D)
+        #   adb_execute!(mknob_B->matrix, A', A, d)
+        B = SparseAccelerator.ADB(A', D, A, fknob_ADB)
+        ...
+        # SparseAccelerator.cholfact_int32(B, fknobcholfact_int32)
+        #   if fknobcholfact_int32 == NULL
+        #       return cholfact_int32(B)
+        #   get the input mknob_B from fknob_cholfact_int32
+        #   if mknob_B->structure_proxy == NULL || mknob_B->matrix == NULL
+        #       return cholfact_int32(B)
+        #   get the output mknob_R from fknob_cholfact_int32
+        #   if mknob_R->dss_handle == NULL
+        #       dss_handle = dss_analyze(mknob_B->structure_proxy)
+        #       mknob_R->dss_handle = dss_handle
+        #   dss_factor(mknob_R->dss_handle, mknob_B->matrix)
+        #   BUT HOW TO RETURN R?
+        
+        R = SparseAccelerator.cholfact_int32(B, fknob_cholfact_int32)
+        ...
+        
+        # cholmod_factor_inverse_divide(dy, R, t2, fknob_cholmod_factor_inverse_divide)
+        #   if fknob_cholmod_factor_inverse_divide == NULL
+        #       return R \ t2
+        #   get the input mknob_R from fknob_cholmod_factor_inverse_divide
+        #   if mknob_R->dss_handle == NULL
+        #       return R \ t2
+        #   else
+        #       opt = MKL_DSS_DEFAULTS
+        #       dss_solve!(mknob_R->dss_handle, t2, dy)
+
+        dy = cholmod_factor_inverse_divide(R, t2, fknob_cholmod_factor_inverse_divide)
+"""
 
 const CS_ADAT_AT_pattern = ExprPattern(
     "CS_ADAT_AT_pattern",
@@ -170,49 +255,21 @@ const CS_ADAT_pattern = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
     (nothing, nothing, nothing, nothing, CS_ADAT_AT_pattern),
     CS_ADAT_check,
-    (:NO_CHANGE, ),
-    do_nothing,
-    "",
-    ""
-)
-
-const CS_ADAT_assign_pattern = ExprPattern(
-    "CS_ADAT_assign_pattern",
-    (:(=), SparseMatrixCSC, SparseMatrixCSC),
-    (nothing, nothing, CS_ADAT_pattern),
-    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:ADB)),
-      :arg1, :aarg22, :aarg23, :aarg22),
-    CS_ADAT_assign_post_replacement,
+     :arg2, :arg3, :arg2),
+    CS_ADAT_post_replacement,
     "NewADBKnob",
     "DeleteADBKnob"
 )
 
-# Below are patterns on Cholesky factorization and solve. 
-# Different from others, we have not added any function knob creator or
-# deletor here, nor record the call sites: we simply hard replace the
-# original call with calls to our library, where we check if we have cached 
-# some constant structure to reuse. If not, we call the original Julia
-# function; otherwise, we avoid some redundant computation and return results faster.
 const CS_cholfact_int32_pattern = ExprPattern(
     "CS_cholfact_int32_pattern",
     (:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC{Float64, Int32}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:NO_CHANGE, ),
-    do_nothing,
-    "",
-    ""
-)
-
-const CS_cholfact_assign_pattern = ExprPattern(
-    "CS_cholfact_assign_pattern",
-    (:(=), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Base.SparseMatrix.CHOLMOD.Factor{Float64}),
-    (nothing, nothing, CS_cholfact_int32_pattern),
-    do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact)),
-     :arg1, :aarg22),
-    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_int32)),
+     :arg2),
+    gather_context_sensitive_info,
     "",
     ""
 )
@@ -235,11 +292,14 @@ const CS_cholsolve_assign_pattern = ExprPattern(
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholmod_factor_inverse_divide)),
      :arg1, :aarg22, :aarg23),
-    do_nothing,
+    CS_cholsolve_assign_post_replacement,
     "",
     ""
 )
 
+@doc """ 
+Pattern for foward triangular solver.
+"""
 const CS_fwdTriSolve!_pattern = ExprPattern(
     "CS_fwdTriSolve!_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:fwdTriSolve!)),
@@ -253,6 +313,9 @@ const CS_fwdTriSolve!_pattern = ExprPattern(
     "DeleteForwardTriangularSolveKnob"
 )
  
+@doc """
+Pattern for backward triangular solver.
+"""
 const CS_bwdTriSolve!_pattern = ExprPattern(
     "CS_bwdTriSolve!_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), GlobalRef(Base, :SparseMatrix), QuoteNode(:bwdTriSolve!)),
@@ -268,8 +331,8 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
 
 @doc """" Patterns that will actually transform the code. """
 CS_transformation_patterns = [
-    CS_ADAT_assign_pattern,
-    CS_cholfact_assign_pattern,
+    CS_ADAT_pattern,
+    CS_cholfact_int32_pattern,
     CS_cholsolve_assign_pattern,
     CS_fwdTriSolve!_pattern,
     CS_bwdTriSolve!_pattern

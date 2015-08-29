@@ -359,7 +359,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # info, and control flow graph.
         #LivenessAnalysis.set_use_inplace_naming_convention()
         symbol_info = build_symbol_dictionary(func_ast)
-        liveness    = LivenessAnalysis.from_expr(func_ast, no_mod = create_unmodified_args_dict())
+        liveness    = LivenessAnalysis.from_expr(func_ast)#, no_mod = create_unmodified_args_dict())
         cfg         = liveness.cfg
         loop_info   = Loops.compute_dom_loops(cfg)
 

@@ -20,10 +20,10 @@ tol     = 1e-10
 maxiter = 1000
 
 println("Original: ")
-#x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
-#println("\tk=", k)
-#println("\trel_err=", rel_err)
+x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
+println("\tsum of x=", sum(x))
+println("\tk=", k)
+println("\trel_err=", rel_err)
 
 println("\nAccelerated: ")
 x = zeros(Float64, m)
