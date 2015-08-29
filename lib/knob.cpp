@@ -8,6 +8,7 @@
 #include "SpMP/Utils.hpp"
 #include "SpMP/LevelSchedule.hpp"
 #include "SpMP/synk/barrier.hpp"
+#include <mkl.h>
 
 using namespace SpMP;
 
@@ -48,71 +49,16 @@ struct FunctionKnob {
     std::vector<MatrixKnob *> mknobs; // knobs for the matrix arguments of the function
 };
 
-// Function Knobs: each library function can choose to have a knob in order to take advantage of the context info in it.
+// Function Knobs: each library function can choose to have a function knob in 
+// order to take advantage of the context info in it.
 // Otherwise, without a knob, the function just behaviors as usual.
-class ForwardTriangularSolveKnob : public FunctionKnob {
-public:
-    ForwardTriangularSolveKnob() {
-        matrix_version = INVALID_VERSION; // No valid private info built yet
-        schedule = NULL;
-    }
-    
-    ~ForwardTriangularSolveKnob() {
-    }
-
-    void UpdateMatrixVersion(int new_version) {
-        matrix_version = new_version;
-    }
-
-private:
-    // Info private to the forward triangular solver.
-    int            matrix_version; // version of the matrix when the private info is built
-    LevelSchedule* schedule;
-
-    friend void ForwardTriangularSolve(
-        int numrows, int numcols, int* colptr, int* rowval, double* nzval,
-        double *y, const double *b, void* fknob);
-};
-
-class BackwardTriangularSolveKnob : public FunctionKnob {
-public:
-    BackwardTriangularSolveKnob() {
-        matrix_version = INVALID_VERSION; // No valid private info built yet
-    }
-    
-    ~BackwardTriangularSolveKnob() {
-    }
-
-    void UpdateMatrixVersion(int new_version) {
-        matrix_version = new_version;
-    }
-
-private:
-    // Info private to the backward triangular solver.
-    int            matrix_version; // version of the matrix when the private info is built
-
-    friend void BackwardTriangularSolve(
-        int numrows, int numcols, int* colptr, int* rowval, double* nzval,
-        double *y, const double *b, void* fknob);
-};
-
-class ADBKnob : public FunctionKnob {
-public:
-    ADBKnob() {
-        structure = NULL;
-    }
-    
-    ~ADBKnob() {
-        if (structure != NULL) {
-            delete (CSR *)structure;
-        }
-    }
-
-private:
-    CSR_Handle* structure;
-
-    friend void* ADBInspect(const void *A, const void *B, void* fknob);
-};
+// The function knobs here do not have private data to save, and thus they are
+// simply inheriting from the base class. 
+class ForwardTriangularSolveKnob : public FunctionKnob { };
+class BackwardTriangularSolveKnob : public FunctionKnob { };
+class ADBKnob : public FunctionKnob { };
+class CholfactKnob : public FunctionKnob { };
+class CholmodFactorInverseDivideKnob : public FunctionKnob { };
 
 /**************************** Usage of knobs *****************************/
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
@@ -258,56 +204,61 @@ void DeleteBackwardTriangularSolveKnob(void* fknob)
 }
 
 void ForwardTriangularSolve(
-    int numrows, int numcols, int* colptr, int* rowval, double* nzval,
+    int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
+    int A_numrows, int A_numcols, int* A_colptr, int* A_rowval, double* A_nzval,
     double *y, const double *b, void* fknob)
 {
-    CSR *A = NULL;
-    LevelSchedule *schedule;
+    CSR * L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval, 1);
+    L->computeInverseDiag();
+    
+    LevelSchedule* schedule = NULL;
     if (fknob == NULL) {
-        A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+        CSR* A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
         A->computeInverseDiag();
-
         schedule = new LevelSchedule;
         schedule->constructTaskGraph(*A);
     } else {
         ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
-        MatrixKnob* m = f->mknobs[0];
+        MatrixKnob* m = f->mknobs[0]; // This is the matrix knob for A
         assert(m != NULL);
-    
-        if ((m->schedule != NULL) && 
-            (m->constant_valued || m->constant_structured ||
-             f->matrix_version == m->matrix_version)) {
-            // FIXME: when matrix value has been changed (but not structure),
-            // we need to update the values of shadow copy
-            A = m->A;
-            if (!A->idiag) A->computeInverseDiag();
 
+        if ((m->schedule != NULL) && (m->constant_valued || m->constant_structured)) {
             schedule = m->schedule;
         } else {
-            CreateOptimizedRepresentation(m, numrows, numcols, colptr, rowval, nzval);
-            A = m->A;
+        printf("reaching here\n");
+        
+            CSR* A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
+            A->make0BasedIndexing();
             A->computeInverseDiag();
-
-            // Either no schedule, or is out of date
-            f->UpdateMatrixVersion(m->matrix_version);
             schedule = new LevelSchedule;
             schedule->constructTaskGraph(*A);
             m->schedule = schedule;
+        A->make1BasedIndexing();
+            int* invPerm = schedule->threadContToOrigPerm;
+    forwardSolve(*A, y, b, *schedule, invPerm);
+return;
         }
     }
-        
-    int* invPerm = schedule->threadContToOrigPerm;
-    forwardSolve(*A, y, b, *schedule, invPerm);
 
-    if (!fknob) delete A;
+    assert(L != NULL);
+    assert(schedule != NULL);
+
+    int* invPerm = schedule->threadContToOrigPerm;
+    forwardSolve(*L, y, b, *schedule, invPerm);
+
+    if (fknob == NULL) {
+        delete L;
+        delete schedule;
+    }
 }
 
 void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, const double *b, void* fknob)
 {
-    CSR *A = NULL;
+return;
+/*    CSR *A = NULL;
     LevelSchedule * schedule;
     if (fknob == NULL) {
         A = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
@@ -344,7 +295,7 @@ void BackwardTriangularSolve(
     backwardSolve(*A, y, b, *schedule, invPerm);
 
     if (!fknob) delete A;
-}
+*/}
 
 void* NewADBKnob()
 {
@@ -358,11 +309,28 @@ void DeleteADBKnob(void* fknob)
     delete f;
 }
 
-void* ADBInspect(const void *A, const void *B, void* fknob)
+void* NewCholfactKnob()
 {
-    assert(fknob != NULL);
-    ADBKnob* f = (ADBKnob*) fknob;
-    if (f->structure == NULL)
-        f->structure = CSR_ADBInspect((CSR_Handle *)A, (CSR_Handle *)B);
-    return (void*)(f->structure);
+    CholfactKnob* f = new CholfactKnob;
+    return (void*)f;
 }
+
+void DeleteCholfactKnob(void* fknob)
+{
+    CholfactKnob* f = (CholfactKnob*) fknob;
+    delete f;
+}
+
+void* NewCholmodFactorInverseDivideKnob()
+{
+    CholmodFactorInverseDivideKnob* f = new CholmodFactorInverseDivideKnob;
+    return (void*)f;
+}
+
+void DeleteCholmodFactorInverseDivideKnob(void* fknob)
+{
+    CholmodFactorInverseDivideKnob* f = (CholmodFactorInverseDivideKnob*) fknob;
+    delete f;
+}
+
+

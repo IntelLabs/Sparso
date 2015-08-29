@@ -63,34 +63,56 @@ function delete_function_knob(
     eval(expr)
 end
 
-@doc """ Context-sensitive forward triangular solver. """
+@doc """
+Context-sensitive forward triangular solver, equivalent to Base.SparseMatrix.
+fwdTriSolve!(L, b).
+
+Here we pass A, of which L is initially the lower triangle of it. We use A as a
+structure proxy of L (and U in bwdTriSolve!).
+
+We have to pass L (as well as U in bwdTriSolve!), as in GENERAL, we can not derive
+it from A: it is difficult for compiler to figure out that L (and U) is ALWAYS
+the lower (or upper) triangle of A in the whole program (And U is not exactly the
+upper triangle of A: there is some additional computation on it).
+"""
 function fwdTriSolve!(
-    A     :: SparseMatrixCSC, 
+    L     :: SparseMatrixCSC,
     b     :: Vector,
+    A     :: SparseMatrixCSC,
     fknob :: Ptr{Void}
  )
     y = zeros(Cdouble, length(b))
     ccall((:ForwardTriangularSolve, LIB_PATH), Void,
-              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
-               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-               pointer(y), pointer(b), fknob)
+           (
+            Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
+            Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
+            Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void},
+           ),
+            L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
+            A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+            pointer(y), pointer(b), fknob)
+println("\t\tFwdTriSolve! done: sum y = ", sum(y), " y=", y)
+#println("\t\tFwdTriSolve! done: sum b = ", sum(b), " b=", b)
     b = copy(y)
 end
 
-@doc """ Context-sensitive backward triangular solver. """
+@doc """ 
+Context-sensitive backward triangular solver. 
+"""
 function bwdTriSolve!(
     A     :: SparseMatrixCSC, 
-    b     :: Vector,
-    fknob :: Ptr{Void}
+    fknob :: Ptr{Void},
+    b     :: Vector
  )
     y = zeros(Cdouble, length(b))
     ccall((:BackwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-               pointer(y), pointer(b), fknob)
-    b = copy(y)
+               pointer(y), pointer(b), C_NULL) #fknob)
+println("\t\tBwdTriSolve! done: sum y = ", sum(y), " y=", y)
+println("\t\tBwdTriSolve! done: sum b = ", sum(b), " b=", b)
+    return y
 end
 
 @doc """ 
@@ -431,7 +453,7 @@ function ADB(
     if structure_proxy == C_NULL
         csrADB = ccall((:ADBInspect, LIB_PATH), Ptr{Void},
                         (Ptr{Void}, Ptr{Void}, Ptr{Void}),
-                         csrA, csrB, fknob)
+                         csrA, csrB)
         ccall((:SetStructureProxy, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_out, csrADB)
         ccall((:SetMatrix, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_out, csrADB)
     else

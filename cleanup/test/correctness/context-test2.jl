@@ -36,10 +36,13 @@ function pcg_symgs(x, A, b, tol, maxiter)
         
         Base.SparseMatrix.fwdTriSolve!(L, z)
         println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
+        println("\tL=", L)
           # Could have written as z=L\z if \ is specialized for triangular
           
+        println("\tU before backwadrd=", U)
         Base.SparseMatrix.bwdTriSolve!(U, z)
         println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
+        println("\tU=", U)
           # Could have wrriten as z=U\z if \ is specialized for triangular
 
         rz = dot(r, z)
@@ -89,11 +92,16 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         z = copy(r)
         println("iter ", k, ": sum z = ", sum(z), " z=", z)
         
-        SparseAccelerator.fwdTriSolve!(A,z,__fknob_8201)
+        z = SparseAccelerator.fwdTriSolve!(L, z, A,__fknob_8201)
         println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
-            
-        SparseAccelerator.bwdTriSolve!(A,z,__fknob_8221)
+        println("\tL=", L)
+
+        Base.SparseMatrix.bwdTriSolve!(U, z)
         println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
+        println("\tU=", U)
+            
+#        z = SparseAccelerator.bwdTriSolve!(A,__fknob_8221, z)
+#        println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
 
         rz = dot(r, z)
         beta = rz/old_rz
@@ -119,12 +127,12 @@ b       = ones(Float64, m)
 tol     = 1e-10
 maxiter = 1000
 
-println("Original: ")
-x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-println("\tsum of x=", sum(x))
-println("\tk=", k)
-println("\trel_err=", rel_err)
-flush(STDOUT)
+#println("Original: ")
+#x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
+#println("\tsum of x=", sum(x))
+#println("\tk=", k)
+#println("\trel_err=", rel_err)
+#flush(STDOUT)
 
 println("\n\nWith manual context-sensitive optimization: ")
 x       = zeros(Float64, m)

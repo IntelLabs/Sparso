@@ -24,7 +24,8 @@ void* NewBackwardTriangularSolveKnob();
 void  DeleteBackwardTriangularSolveKnob(void* fknob);
 
 void ForwardTriangularSolve(
-    int numrows, int numcols, int* colptr, int* rowval, double* nzval,
+    int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
+    int A_numrows, int A_numcols, int* A_colptr, int* A_rowval, double* A_nzval,
     double *y, const double *b, void* fknob);
 
 void BackwardTriangularSolve(
@@ -32,11 +33,13 @@ void BackwardTriangularSolve(
     double *y, const double *b, void* fknob);
     
 void* NewADBKnob();
+void  DeleteADBKnob(void* fknob);
 
-void DeleteADBKnob(void* fknob);
+void* NewCholfactKnob();
+void  DeleteCholfactKnob(void* fknob);
 
-void *ADBInspect(
-    const void *A, const void *B, void* fknob);
+void* NewCholmodFactorInverseDivideKnob();
+void  DeleteCholmodFactorInverseDivideKnob(void* fknob);
 
 /******************************************************************************/
 
