@@ -7,11 +7,18 @@ function new_matrix_knob()
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
 end
 
-@doc """ Increment the version of a matrix knob. """
+@doc """ Increment the version of a matrix. """
 function increment_matrix_version(
     mknob :: Ptr{Void}
 )
     ccall((:IncrementMatrixVersion, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+@doc """ Set the matrix as constant_structured. """
+function set_constant_structured(
+    mknob :: Ptr{Void}
+)
+    ccall((:SetConstantStructured, LIB_PATH), Void, (Ptr{Void},), mknob)
 end
 
 @doc """ Delete a matrix knob. """
@@ -91,7 +98,7 @@ function fwdTriSolve!(
             L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
             A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
             pointer(y), pointer(b), fknob)
-println("\t\tFwdTriSolve! done: sum y = ", sum(y), " y=", y)
+#println("\t\tFwdTriSolve! done: sum y = ", sum(y), " y=", y)
 #println("\t\tFwdTriSolve! done: sum b = ", sum(b), " b=", b)
     b = copy(y)
 end
