@@ -70,6 +70,19 @@ function delete_function_knob(
     eval(expr)
 end
 
+function replace_lower_with_UT(
+    A     :: SparseMatrixCSC,
+    U     :: SparseMatrixCSC
+)
+    ccall((:ReplaceLowerWithUT, LIB_PATH), Void,
+           (
+            Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
+            Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}
+           ),
+            A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+            U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval))
+end
+
 @doc """
 Context-sensitive forward triangular solver, equivalent to Base.SparseMatrix.
 fwdTriSolve!(L, b).
@@ -117,9 +130,9 @@ function bwdTriSolve!(
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(y), pointer(b), C_NULL) #fknob)
-println("\t\tBwdTriSolve! done: sum y = ", sum(y), " y=", y)
-println("\t\tBwdTriSolve! done: sum b = ", sum(b), " b=", b)
-    return y
+#println("\t\tBwdTriSolve! done: sum y = ", sum(y))#, " y=", y)
+#println("\t\tBwdTriSolve! done: sum b = ", sum(b), " b=", b)
+    b = copy(y)
 end
 
 @doc """ 

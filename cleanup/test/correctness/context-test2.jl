@@ -41,7 +41,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
           
         #println("\tU before backwadrd=", U)
         Base.SparseMatrix.bwdTriSolve!(U, z)
-#        println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
+#        println("\tBwdTriSolve! done: sum z = ", sum(z))#, " z=", z)
         #println("\tU=", U)
           # Could have wrriten as z=U\z if \ is specialized for triangular
 
@@ -79,6 +79,23 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
     (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8199,__fknob_8221)
 
+#println("L=", L)
+#println("U=", U)
+#println("A=", A)
+println("build A1")
+tic()
+A1 = copy(A)
+for i = 1 : size(A1, 1) 
+    for j = 1 : size(A1, 2) 
+        if i > j
+            A1[i, j] = U[j, i]
+        end
+    end
+end
+toc()
+println("A1 done")
+flush(STDOUT)
+
     while k <= maxiter
         old_rz = rz
         Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
@@ -95,12 +112,13 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         
 
         
-        z = SparseAccelerator.fwdTriSolve!(L, z, A,__fknob_8201)
+        z = SparseAccelerator.fwdTriSolve!(L, z, A1,__fknob_8201)
 #        println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
         #println("\tL=", L)
 
-        Base.SparseMatrix.bwdTriSolve!(U, z)
-#        println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
+        z = SparseAccelerator.bwdTriSolve!(A1,__fknob_8201, z)
+#        Base.SparseMatrix.bwdTriSolve!(U, z)
+#        println("\tBwdTriSolve! done: sum z = ", sum(z))#, " z=", z)
         #println("\tU=", U)
             
 #        z = SparseAccelerator.bwdTriSolve!(A,__fknob_8221, z)
@@ -119,9 +137,9 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
 end
 
 if length(ARGS) == 0
-#    m = 10
-#    A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-    A = matrix_market_read("tiny-diag.mtx", true, true)
+    m = 1000
+    A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
+#    A = matrix_market_read("tiny-diag.mtx", true, true)
 else
     A = matrix_market_read(ARGS[1], true, true)
 end

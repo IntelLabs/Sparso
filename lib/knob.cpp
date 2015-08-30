@@ -281,7 +281,7 @@ CSR* A = NULL;
 }
 
 void BackwardTriangularSolve(
-    int numrows, int numcols, int* colptr, int* rowval, double* nzval,
+    int A_numrows, int A_numcols, int* A_colptr, int* A_rowval, double* A_nzval,
     double *y, const double *b, void* fknob)
 {
 /*    CSR * L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval, 1);
@@ -299,26 +299,29 @@ L->print();
 fflush(stdout);
     L->make1BasedIndexing();
 */
+CSR* A = NULL;
     LevelSchedule* schedule = NULL;
     if (fknob == NULL) {
-        CSR* A   = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+        A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
         A->make0BasedIndexing();
         A->computeInverseDiag();
         schedule = new LevelSchedule;
         schedule->constructTaskGraph(*A);
         A->make1BasedIndexing();
     } else {
-        ForwardTriangularSolveKnob* f = (ForwardTriangularSolveKnob*) fknob;
+        BackwardTriangularSolveKnob* f = (BackwardTriangularSolveKnob*) fknob;
         assert(f->mknobs.size() == 1);
         MatrixKnob* m = f->mknobs[0]; // This is the matrix knob for A
         assert(m != NULL);
 
         if ((m->schedule != NULL) && (m->constant_valued || m->constant_structured)) {
             schedule = m->schedule;
+            A        = m->A;
         } else {
-        printf("reaching here\n");
+        assert(false);
+//        printf("reaching here\n");
         
-            CSR* A   = new CSR(numrows, numcols, colptr, rowval, nzval, 1);
+            A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
             A->make0BasedIndexing();
             A->computeInverseDiag();
             schedule = new LevelSchedule;
@@ -328,24 +331,24 @@ fflush(stdout);
 //A->print();
 //fflush(stdout);
             A->make1BasedIndexing();
+            m->A = A;
 
-            int* invPerm = schedule->threadContToOrigPerm;
-    backwardSolve(*A, y, b, *schedule, invPerm);
-return;
+//            int* invPerm = schedule->threadContToOrigPerm;
+//    forwardSolve(*A, y, b, *schedule, invPerm);
+//return;
         }
     }
 /*
     assert(L != NULL);
     assert(schedule != NULL);
-
-    int* invPerm = schedule->threadContToOrigPerm;
-    forwardSolve(*L, y, b, *schedule, invPerm);
 */
+    int* invPerm = schedule->threadContToOrigPerm;
+    backwardSolve(*A, y, b, *schedule, invPerm);
+
     if (fknob == NULL) {
 //        delete L;
         delete schedule;
     }
-
 }
 
 void* NewADBKnob()
