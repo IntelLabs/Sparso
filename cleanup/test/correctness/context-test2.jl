@@ -32,18 +32,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
         end
 
         z = copy(r)
-#        println("iter ", k, ": sum z = ", sum(z), " z=", z)
-        
         Base.SparseMatrix.fwdTriSolve!(L, z)
-#        println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
-        #println("\tL=", L)
-          # Could have written as z=L\z if \ is specialized for triangular
-          
-        #println("\tU before backwadrd=", U)
         Base.SparseMatrix.bwdTriSolve!(U, z)
-#        println("\tBwdTriSolve! done: sum z = ", sum(z))#, " z=", z)
-        #println("\tU=", U)
-          # Could have wrriten as z=U\z if \ is specialized for triangular
 
         rz = dot(r, z)
         beta = rz/old_rz
@@ -79,22 +69,24 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
     (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8199,__fknob_8221)
 
-#println("L=", L)
-#println("U=", U)
-#println("A=", A)
-println("build A1")
-tic()
-A1 = copy(A)
-for i = 1 : size(A1, 1) 
-    for j = 1 : size(A1, 2) 
-        if i > j
-            A1[i, j] = U[j, i]
+    # THe Fwd/bwdTriSolve functions in SpMP expect CSR input A. So far, in knob.cpp,
+    # Forward/backwardTriangularSolve use A not only as a structure proxy of L and U,
+    # but also a value proxy. That means, we must construct A such that its upper
+    # part is L', and lower part is U', and then we can call the library. This is the
+    # purpose of this piece of code. It is really slow...
+    println("build A1")
+    tic()
+    A1 = copy(A)
+    for i = 1 : size(A1, 1) 
+        for j = 1 : size(A1, 2) 
+            if i > j
+                A1[i, j] = U[j, i]
+            end
         end
     end
-end
-toc()
-println("A1 done")
-flush(STDOUT)
+    toc()
+    println("A1 done")
+    flush(STDOUT)
 
     while k <= maxiter
         old_rz = rz
@@ -108,21 +100,8 @@ flush(STDOUT)
         end
 
         z = copy(r)
-#        println("iter ", k, ": sum z = ", sum(z), " z=", z)
-        
-
-        
         z = SparseAccelerator.fwdTriSolve!(L, z, A1,__fknob_8201)
-#        println("\tFwdTriSolve! done: sum z = ", sum(z), " z=", z)
-        #println("\tL=", L)
-
         z = SparseAccelerator.bwdTriSolve!(A1,__fknob_8201, z)
-#        Base.SparseMatrix.bwdTriSolve!(U, z)
-#        println("\tBwdTriSolve! done: sum z = ", sum(z))#, " z=", z)
-        #println("\tU=", U)
-            
-#        z = SparseAccelerator.bwdTriSolve!(A,__fknob_8221, z)
-#        println("\tBwdTriSolve! done: sum z = ", sum(z), " z=", z)
 
         rz = dot(r, z)
         beta = rz/old_rz

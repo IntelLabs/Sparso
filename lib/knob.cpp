@@ -209,27 +209,40 @@ void DeleteBackwardTriangularSolveKnob(void* fknob)
     //delete f; FIXME
 }
 
+//
+// Forward triangular solve Ly = b, with A as the structure proxy of L.
+// 
+// ISSUES: 
+// 1. So far, A is treated not only as a structure proxy, but also as
+// as value proxy. This is not what we expected. However, if I want to use
+// A just as a structure proxy, and use L itself for the value, the call to 
+// forwardSolve(*L, y, b, *schedule, invPerm) throws segmentation fault. The
+// reason is: L is not in the expected form to SpMP. It seems that to SpMP,
+// a lower triangular matrix is represented with (1) non-diagonals, and (2) 
+// idiag. However, in the incoming paramters L_colptr, L_rowval and L_nzval, 
+// they include diagonals as well.
+// 2. CSC vs. CSR (i.e. A vs. A'). Another hidden assumption of this function
+// is it is forward solve for CSR array A. However, A is in CSC originally. So
+// calling this function is actually forward solve for CSR array A'. 
+// Now that A is not symmetric in value, but just in structure. Before calling
+// this function, we have to compose A as (L + spdiagm(1./diag(A) * triu(A))'.
+// Then we can call this function, and use A reliably as a value proxy of L.
+// That is why I added the bandage in context-test2.jl pcg_symgs_with_context_opt().
+// Please think how to get rid of this overhead. I think we have to use A only
+// as structure proxy of L and U, NOT as value proxy. But then we have to solve 
+// issue 1 above.
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     int A_numrows, int A_numcols, int* A_colptr, int* A_rowval, double* A_nzval,
     double *y, const double *b, void* fknob)
 {
-/*    CSR * L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval, 1);
-  L->make0BasedIndexing();
+/*
+    CSR * L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval, 1);
+    L->make0BasedIndexing();
     L->computeInverseDiag();
-        for (int i = 0; i < L_numrows; i++) {
-            for (int j = L->rowptr[i]; j < L->rowptr[i + 1]; j++) {
-                if (i == L->colidx[j]) {
-                    L->values[j] = 0.0;
-                }
-            }
-        }
-printf("L =");
-L->print();
-fflush(stdout);
     L->make1BasedIndexing();
 */
-CSR* A = NULL;
+    CSR* A = NULL;
     LevelSchedule* schedule = NULL;
     if (fknob == NULL) {
         A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
@@ -248,29 +261,23 @@ CSR* A = NULL;
             schedule = m->schedule;
             A        = m->A;
         } else {
-//        printf("reaching here\n");
-        
+            // So far, this function is used only when A is constant valued. So 
+            // maybe we do not need to create a copy in this function. But it may
+            // be useful for other places.
+            //CreateOptimizedRepresentation(m, numrows, numcols, colptr, rowval, nzval);
             A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
             A->make0BasedIndexing();
             A->computeInverseDiag();
             schedule = new LevelSchedule;
             schedule->constructTaskGraph(*A);
             m->schedule = schedule;
-//printf("A =");
-//A->print();
-//fflush(stdout);
             A->make1BasedIndexing();
             m->A = A;
-
-//            int* invPerm = schedule->threadContToOrigPerm;
-//    forwardSolve(*A, y, b, *schedule, invPerm);
-//return;
         }
     }
-/*
-    assert(L != NULL);
+//    assert(L != NULL);
     assert(schedule != NULL);
-*/
+    
     int* invPerm = schedule->threadContToOrigPerm;
     forwardSolve(*A, y, b, *schedule, invPerm);
 
@@ -284,22 +291,7 @@ void BackwardTriangularSolve(
     int A_numrows, int A_numcols, int* A_colptr, int* A_rowval, double* A_nzval,
     double *y, const double *b, void* fknob)
 {
-/*    CSR * L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval, 1);
-  L->make0BasedIndexing();
-    L->computeInverseDiag();
-        for (int i = 0; i < L_numrows; i++) {
-            for (int j = L->rowptr[i]; j < L->rowptr[i + 1]; j++) {
-                if (i == L->colidx[j]) {
-                    L->values[j] = 0.0;
-                }
-            }
-        }
-printf("L =");
-L->print();
-fflush(stdout);
-    L->make1BasedIndexing();
-*/
-CSR* A = NULL;
+    CSR* A = NULL;
     LevelSchedule* schedule = NULL;
     if (fknob == NULL) {
         A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
@@ -319,34 +311,22 @@ CSR* A = NULL;
             A        = m->A;
         } else {
         assert(false);
-//        printf("reaching here\n");
-        
             A   = new CSR(A_numrows, A_numcols, A_colptr, A_rowval, A_nzval, 1);
             A->make0BasedIndexing();
             A->computeInverseDiag();
             schedule = new LevelSchedule;
             schedule->constructTaskGraph(*A);
             m->schedule = schedule;
-//printf("A =");
-//A->print();
-//fflush(stdout);
             A->make1BasedIndexing();
             m->A = A;
-
-//            int* invPerm = schedule->threadContToOrigPerm;
-//    forwardSolve(*A, y, b, *schedule, invPerm);
-//return;
         }
     }
-/*
-    assert(L != NULL);
     assert(schedule != NULL);
-*/
+    
     int* invPerm = schedule->threadContToOrigPerm;
     backwardSolve(*A, y, b, *schedule, invPerm);
 
     if (fknob == NULL) {
-//        delete L;
         delete schedule;
     }
 }
