@@ -193,7 +193,7 @@ function discover_a_SpMV(ast, call_sites :: CallSites, top_level_number, is_top_
                 length(args) == 3 && 
                 type_of_ast_node(args[2], call_sites.symbol_info) <: SparseMatrixCSC &&
                 type_of_ast_node(args[3], call_sites.symbol_info) <: Vector
-                    site = CallSite(ast, Vector(), nothing, nothing)
+                    site = CallSite(ast, Vector(), Vector(), nothing, nothing)
                     push!(call_sites.sites, site) 
             end
         end

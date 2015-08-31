@@ -260,14 +260,16 @@ end
 @doc """
 A call sites of interesting functions (like SpMV, triangular solver, etc.). From
 the AST of the call, we may figure out the matrices in its arguments so that we 
-may create a matrix knob for it. We may also create a function knob for the call
-site, and may delete the knob later.
+may create a matrix knob for it. Some matrices need track the versions of values,
+recorded in matrices_to_track_values. We may also create a function knob for the
+call site, and may delete the knob later.
 """
 type CallSite
-    ast           :: Expr 
-    matrices      :: Vector # Vector{Sym} 
-    fknob_creator :: String # A library function to create a function knob for this call site
-    fknob_deletor :: String # A library function to delete the function knob for this call site
+    ast                      :: Expr 
+    matrices                 :: Vector # Vector{Sym}
+    matrices_to_track_values :: Vector
+    fknob_creator            :: String # A library function to create a function knob for this call site
+    fknob_deletor            :: String # A library function to delete the function knob for this call site
 end
 
 @doc """
@@ -359,7 +361,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # info, and control flow graph.
         #LivenessAnalysis.set_use_inplace_naming_convention()
         symbol_info = build_symbol_dictionary(func_ast)
-        liveness    = LivenessAnalysis.from_expr(func_ast)#, no_mod = create_unmodified_args_dict())
+        liveness    = LivenessAnalysis.from_expr(func_ast, no_mod = create_unmodified_args_dict())
         cfg         = liveness.cfg
         loop_info   = Loops.compute_dom_loops(cfg)
 

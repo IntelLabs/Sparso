@@ -527,7 +527,11 @@ function match_replace(
             if !pattern.post_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
                 # AST has already been changed by replace(). However, post 
                 # processing fails. That AST might be wrong. So abort 
-                throw(PostPatternReplacementFailure)
+                dprintln(1, 0, "to")
+                dsprintln(1, 1, symbol_info, ast)
+                dprintln(1, 0, "according to pattern but post-processing failed.")
+                dprintln(1, 1, pattern)
+                throw(PostPatternReplacementFailure(pattern))
             end
         end
         

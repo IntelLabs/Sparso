@@ -97,14 +97,12 @@ function propagate_last_structure(
 )
     A = last(ast.args)
     structure = get_structure_proxy(A) 
-    if structure == nothing
-        return false
-    end
-    
-    if ast.head == :(=)
-        set_structure_proxy(ast.args[1], structure_proxies[A])
-    else
-        set_structure_proxy(ast, structure_proxies[A])
+    if structure != nothing
+        if ast.head == :(=)
+            set_structure_proxy(ast.args[1], structure_proxies[A])
+        else
+            set_structure_proxy(ast, structure_proxies[A])
+        end
     end
     return true
 end

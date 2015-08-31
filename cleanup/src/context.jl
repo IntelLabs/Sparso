@@ -41,18 +41,19 @@ function gather_context_sensitive_info(
     fknob_deletor :: String
 )
     symbol_info = call_sites.symbol_info
-    site        = CallSite(ast, Vector(), fknob_creator, fknob_deletor)
+    site        = CallSite(ast, Vector(), Vector(), fknob_creator, fknob_deletor)
+    if type_of_ast_node(ast, symbol_info) <: AbstractSparseMatrix
+        result = symbol("result")
+        push!(site.matrices, result)
+    end
     for arg in ast.args
         if type_of_ast_node(arg, symbol_info) <: AbstractSparseMatrix
             if typeof(arg) != Symbol && typeof(arg) != SymbolNode && typeof(arg) != GenSym
-                # So far, we need every matrix that the library may take advantage
-                # of its properties (like constant value or structure) is a Symbol,
-                # SymbolNode, or GenSym.
-                # TODO: remove this restriction in future. Allow a matrix to be
-                # an Expr (i.e. the result of an Expr)
-                return false
+                temp_symbol = symbol("arg")
+                push!(site.matrices, temp_symbol)
+            else 
+                push!(site.matrices, typeof(arg) == SymbolNode ? arg.name : arg)
             end
-            push!(site.matrices, typeof(arg) == SymbolNode ? arg.name : arg)
         end
     end
     push!(call_sites.sites, site)
@@ -80,7 +81,7 @@ function CS_fwdBwdTriSolve!_post_process(
     # Remember this call site so that we will add a fknob for it later: So that 
     # the library willl remember that dependence graph (or its schedule) inside
     # the fknob.
-    site        = CallSite(ast, Vector(), fknob_creator, fknob_deletor)
+    site        = CallSite(ast, Vector(), Vector(), fknob_creator, fknob_deletor)
     symbol_info = call_sites.symbol_info
     assert(type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix)
     push!(site.matrices, typeof(A) == SymbolNode ? A.name : A)
@@ -152,7 +153,8 @@ function CS_ADAT_post_replacement(
     A  = ast.args[2]
     assert(typeof(A) == SymbolNode)
     D = ast.args[3]
-    AT = symbol(string("__", string(A.name), "T__"))
+    AT = copy(A)
+    AT.name = symbol(string("__", string(A.name), "T__"))
     stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
     
@@ -270,8 +272,8 @@ const CS_cholfact_int32_pattern = ExprPattern(
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_int32)),
      :arg2),
     gather_context_sensitive_info,
-    "",
-    ""
+    "NewCholfactKnob",
+    "DeleteCholfactKnob"
 )
 
 const CS_cholsolve_pattern = ExprPattern(
@@ -293,8 +295,8 @@ const CS_cholsolve_assign_pattern = ExprPattern(
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholmod_factor_inverse_divide)),
      :arg1, :aarg22, :aarg23),
     CS_cholsolve_assign_post_replacement,
-    "",
-    ""
+    "NewCholmodFactorInverseDivideKnob",
+    "DeleteCholmodFactorInverseDivideKnob"
 )
 
 @doc """ 
@@ -343,7 +345,7 @@ Create statements that will create a matrix knob for matrix M.
 """
 function create_new_matrix_knob(
     new_stmts :: Vector{Statement},
-    M         :: Sym
+    M         :: Union{Sym, Expr}
 )
     mknob = gensym(string("mknob", string(M)))
     new_stmt = Expr(:(=), mknob,
@@ -464,7 +466,7 @@ function context_info_discovery(
     # functions. Create matrix-specific knobs for the matrices inputs.
     # First, create matrix knobs, as they will be needed for creating the function
     # knobs.
-    matrix_knobs         = Dict{Sym, Symbol}()
+    matrix_knobs         = Dict{Any, Symbol}()
     action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
     push!(actions, action_before_region)
     for call_site in call_sites.sites
@@ -475,15 +477,17 @@ function context_info_discovery(
                 mknob = create_new_matrix_knob(action_before_region.new_stmts, M)
                 matrix_knobs[M] = mknob
             end
-            mknob = matrix_knobs[M]
 
-            # Create statements that will update the knob before every
-            # statement that defines the matrix
-            if haskey(var_defs, M)
-                for (bb, stmt_idx) in var_defs[M]
-                    action = InsertBeforeStatement(Vector{Statement}(), bb, stmt_idx)
-                    push!(actions, action)
-                    create_increment_matrix_version(action.new_stmts, mknob)
+            if in(M, call_site.matrices_to_track_values)
+                # Create statements that will update the knob before every
+                # statement that defines the matrix
+                if haskey(var_defs, M)
+                    for (bb, stmt_idx) in var_defs[M]
+                        action = InsertBeforeStatement(Vector{Statement}(), bb, stmt_idx)
+                        push!(actions, action)
+                        mknob = matrix_knobs[M]
+                        create_increment_matrix_version(action.new_stmts, mknob)
+                    end
                 end
             end
         end

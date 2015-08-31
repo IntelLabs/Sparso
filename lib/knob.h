@@ -9,6 +9,7 @@ extern "C" {
 
 void* NewMatrixKnob();
 void  IncrementMatrixVersion(void* mknob);
+void  SetConstantStructured(void* mknob);
 void* GetStructureProxy(void* mknob);
 void* GetDssHandle(void* mknob);
 void* GetMatrix(void* mknob);
