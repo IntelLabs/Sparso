@@ -132,7 +132,7 @@ static void CreateOptimizedRepresentation(
     if (!AT->isSymmetric(true, true)) {
       m->is_symmetric = false;
 
-      m->AT = AT->transpose();
+      m->A = AT->transpose();
       m->AT = AT;
     }
     else {
