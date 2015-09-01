@@ -1,8 +1,24 @@
 Testing sanity-test1: Pass
 Testing sanity-test2: Pass
 Testing sanity-test3: Pass
+Testing context-test1: FAIL. See context-test1.log
 Testing context-test2: Pass
-Total: 4
-Pass : 4
-Fail : 0
-
+Testing context-test3: FAIL. See context-test3.log
+Testing context-test4: FAIL. See context-test4.log
+Testing liveness-test1: FAIL. See liveness-test1.log
+Testing call-replacement-test1: Pass
+Testing call-replacement-test2: Pass
+Testing call-replacement-test3: Pass
+Testing call-replacement-test4: Pass
+Testing call-replacement-test5: Pass
+Testing call-replacement-test6: Pass
+Testing call-replacement-test7: Pass
+Testing call-replacement-test8: Pass
+Testing call-replacement-test9: FAIL. See call-replacement-test9.log
+Testing call-replacement-test10: FAIL. See call-replacement-test10.log
+Testing call-replacement-test11: FAIL. See call-replacement-test11.log
+Testing call-replacement-test12: FAIL. See call-replacement-test12.log
+Testing name-resolution-test1: Pass
+Total: 21
+Pass : 13
+Fail : 8

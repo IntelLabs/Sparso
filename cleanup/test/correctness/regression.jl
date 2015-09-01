@@ -16,13 +16,15 @@ end
 
 immutable Test
     name     :: String
-    command  :: Cmd
+    command  :: String
     patterns :: Vector{TestPattern}
 end
 
+julia_command = "julia"
+
 const sanity_test1 = Test(
     "sanity-test1",
-    `julia sanity-test1.jl`,
+    "sanity-test1.jl",
     [
         TestPattern(r" {4,4}1 tab",
                      "Test tabbed output facility: 1 tab."
@@ -38,7 +40,7 @@ const sanity_test1 = Test(
 
 const sanity_test2 = Test(
     "sanity-test2",
-    `julia sanity-test2.jl`,
+    "sanity-test2.jl",
     [
         TestPattern(r"I do nothing!",
                      "Test if optimization framework adds a new optimization pass."
@@ -48,7 +50,7 @@ const sanity_test2 = Test(
 
 const sanity_test3 = Test(
     "sanity-test3",
-    `julia sanity-test3.jl`,
+    "sanity-test3.jl",
     [
         TestPattern(r"New AST:(.|\n)*return A::Base.SparseMatrix.SparseMatrixCSC.*x::Array",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
@@ -56,9 +58,19 @@ const sanity_test3 = Test(
     ]
 )
 
+const context_test1 = Test(
+    "context-test1",
+    "context-test1.jl small-diag.mtx",
+    [
+        TestPattern(r"Original:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131954942e-13(.|\n)*New AST:(.|\n)*",
+                     "Test pcg_symgs"
+        )
+    ]
+)
+
 const context_test2 = Test(
     "context-test2",
-    `julia context-test2.jl small-diag.mtx`,
+    "context-test2.jl small-diag.mtx",
     [
         TestPattern(r"Original:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131954942e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131217335e-13",
                      "Test pcg_symgs_with_context_opt"
@@ -66,12 +78,196 @@ const context_test2 = Test(
     ]
 )
 
+const context_test3 = Test(
+    "context-test3",
+    "context-test3.jl ipm/mps/osa-14",
+    [
+        TestPattern(r"TODO",
+                     "Running the original and accelerated ipm-ref"
+        )
+    ]
+)
+
+const context_test4 = Test(
+    "context-test4",
+    "context-test4.jl ipm/mps/osa-14",
+    [
+        TestPattern(r"TODO",
+                     "TODO"
+        )
+    ]
+)
+
+const liveness_test1 = Test(
+    "liveness-test1",
+    "liveness-test1.jl small-diag.mtx",
+    [
+        TestPattern(r"Def",
+                     "Test liveness for cg."
+        )
+    ]
+)
+
+const call_replacement_test1 = Test(
+    "call-replacement-test1",
+    "call-replacement-test1.jl small-diag.mtx",
+    [
+        TestPattern(r"AST:(.|\n)*Main.dot(.|\n)*New AST(.|\n)*SparseAccelerator,:dot",
+                     "Test call replacement of Main.dot with SparseAccelerator.dot."
+        )
+    ]
+)
+
+const call_replacement_test2 = Test(
+    "call-replacement-test2",
+    "call-replacement-test2.jl small-diag.mtx",
+    [
+        TestPattern(r"AST:(.|\n)*A::Base.SparseMatrix.SparseMatrixCSC.*\* x::Array(.|\n)*New AST(.|\n)*SparseAccelerator,:SpMV.*A::Base.SparseMatrix.SparseMatrixCSC.*,x::Array",
+                     "Test call replacement of * with SparseAccelerator.SpMV."
+        )
+    ]
+)
+
+const call_replacement_test3 = Test(
+    "call-replacement-test3",
+    "call-replacement-test3.jl small-diag.mtx",
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
+                     "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
+        )
+    ]
+)
+
+const call_replacement_test4 = Test(
+    "call-replacement-test4",
+    "call-replacement-test4.jl small-diag.mtx",
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
+                     "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
+        )
+    ]
+)
+
+const call_replacement_test5 = Test(
+    "call-replacement-test5",
+    "call-replacement-test5.jl small-diag.mtx",
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},alpha::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for x += alpha * p."
+        )
+    ]
+)
+
+const call_replacement_test6 = Test(
+    "call-replacement-test6",
+    "call-replacement-test6.jl small-diag.mtx",
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},-alpha::Float64::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for x -= alpha * p."
+        )
+    ]
+)
+
+const call_replacement_test7 = Test(
+    "call-replacement-test7",
+    "call-replacement-test7.jl small-diag.mtx",
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,r::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for p = r + beta * p."
+        )
+    ]
+)
+
+const call_replacement_test8 = Test(
+    "call-replacement-test8",
+    "call-replacement-test8.jl tiny-diag.mtx",
+    [
+        TestPattern(r"Original:(.|\n)*sum of p=5.921969247266187e71(.|\n)*New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)(.|\n)*end::Array\{Float64,1\}\)\)\)\n(\*)+(\s)+sum of p=1.7721860479424595e104",
+                     "Test call replacement of SpMV! in simple page rank."
+        )
+    ]
+)
+
+const call_replacement_test9 = Test(
+    "call-replacement-test9",
+    "call-replacement-test9.jl small-diag.mtx",
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+const call_replacement_test10 = Test(
+    "call-replacement-test10",
+    "call-replacement-test10.jl small-diag.mtx",
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+const call_replacement_test11 = Test(
+    "call-replacement-test11",
+    "call-replacement-test11.jl small-diag.mtx",
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+const call_replacement_test12 = Test(
+    "call-replacement-test12",
+    "call-replacement-test12.jl small-diag.mtx",
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+
+const name_resolution_test1 = Test(
+    "name-resolution-test1",
+    "name-resolution-test1.jl small-diag.mtx",
+    [
+        TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*Module name: Main\nFunction name: \*",
+                     "Test name resolution."
+        )
+    ]
+)
+
 const tests = [
+    name_resolution_test1,
     sanity_test1,
     sanity_test2,
     sanity_test3,
-    context_test2
+    context_test1,
+    context_test2,
+    context_test3,
+    context_test4,
+    liveness_test1,
+    call_replacement_test1,
+    call_replacement_test2,
+    call_replacement_test3,
+    call_replacement_test4,
+    call_replacement_test5,
+    call_replacement_test6,
+    call_replacement_test7,
+    call_replacement_test8,
+    call_replacement_test9,
+    call_replacement_test10,
+    call_replacement_test11,
+    call_replacement_test12,
+    name_resolution_test1
 ]
+
+if length(ARGS) > 0
+  julia_command = ARGS[1]
+  println("Using Julia command: ", julia_command)
+end
 
 fail = 0
 succ = 0
@@ -83,7 +279,13 @@ for test in tests
     file = open(log, "w+")
     redirect_stderr(file)
     redirect_stdout(file)
-    output     = readall(test.command)
+    output = ""
+    try
+        split_res = split(test.command)
+        output = readall(`$julia_command $split_res`)
+    catch ex
+       println("exception = ", ex)
+    end
     successful = true
     for pattern in test.patterns
         m = match(pattern.pattern, output)
@@ -115,3 +317,4 @@ end
 println("Total: ", fail + succ)
 println("Pass : ", succ)
 println("Fail : ", fail)
+flush(STDOUT)
