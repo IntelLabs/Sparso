@@ -2,7 +2,7 @@ Testing sanity-test1: Pass
 Testing sanity-test2: Pass
 Testing sanity-test3: Pass
 Testing context-test2: Pass
-Total: 4
+Testing liveness-test1: FAIL. See liveness-test1.log
+Total: 5
 Pass : 4
-Fail : 0
-
+Fail : 1

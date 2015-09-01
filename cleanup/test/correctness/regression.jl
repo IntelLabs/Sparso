@@ -66,11 +66,22 @@ const context_test2 = Test(
     ]
 )
 
+const liveness_test1 = Test(
+    "liveness-test1",
+    `julia liveness-test1.jl small-diag.mtx`,
+    [
+        TestPattern(r"Def",
+                     "Test liveness for cg."
+        )
+    ]
+)
+
 const tests = [
     sanity_test1,
     sanity_test2,
     sanity_test3,
-    context_test2
+    context_test2,
+    liveness_test1
 ]
 
 fail = 0
@@ -83,7 +94,11 @@ for test in tests
     file = open(log, "w+")
     redirect_stderr(file)
     redirect_stdout(file)
-    output     = readall(test.command)
+    output = ""
+    try
+        output = readall(test.command)
+    catch ex
+    end
     successful = true
     for pattern in test.patterns
         m = match(pattern.pattern, output)
@@ -115,3 +130,4 @@ end
 println("Total: ", fail + succ)
 println("Pass : ", succ)
 println("Fail : ", fail)
+flush(STDOUT)
