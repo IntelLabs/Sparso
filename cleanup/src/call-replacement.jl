@@ -204,8 +204,8 @@ const SpMV_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :arg2, :arg3, :arg4, :arg5, :arg6),
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+     :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
     do_nothing,
     "",
     ""

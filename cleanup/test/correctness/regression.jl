@@ -76,6 +76,26 @@ const context_test2 = Test(
     ]
 )
 
+const context_test3 = Test(
+    "context-test3",
+    `julia context-test3.jl ipm/mps/osa-14`,
+    [
+        TestPattern(r"TODO",
+                     "Running the original and accelerated ipm-ref"
+        )
+    ]
+)
+
+const context_test4 = Test(
+    "context-test4",
+    `julia context-test4.jl ipm/mps/osa-14`,
+    [
+        TestPattern(r"TODO",
+                     "TODO"
+        )
+    ]
+)
+
 const liveness_test1 = Test(
     "liveness-test1",
     `julia liveness-test1.jl small-diag.mtx`,
@@ -106,15 +126,140 @@ const call_replacement_test2 = Test(
     ]
 )
 
+const call_replacement_test3 = Test(
+    "call-replacement-test3",
+    `julia  call-replacement-test3.jl small-diag.mtx`,
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
+                     "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
+        )
+    ]
+)
+
+const call_replacement_test4 = Test(
+    "call-replacement-test4",
+    `julia  call-replacement-test4.jl small-diag.mtx`,
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
+                     "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
+        )
+    ]
+)
+
+const call_replacement_test5 = Test(
+    "call-replacement-test5",
+    `julia  call-replacement-test5.jl small-diag.mtx`,
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},alpha::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for x += alpha * p."
+        )
+    ]
+)
+
+const call_replacement_test6 = Test(
+    "call-replacement-test6",
+    `julia  call-replacement-test6.jl small-diag.mtx`,
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},-alpha::Float64::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for x -= alpha * p."
+        )
+    ]
+)
+
+const call_replacement_test7 = Test(
+    "call-replacement-test7",
+    `julia  call-replacement-test7.jl small-diag.mtx`,
+    [
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,r::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for p = r + beta * p."
+        )
+    ]
+)
+
+const call_replacement_test8 = Test(
+    "call-replacement-test8",
+    `julia  call-replacement-test8.jl tiny-diag.mtx`,
+    [
+        TestPattern(r"Original:(.|\n)*sum of p=5.921969247266187e71(.|\n)*New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)(.|\n)*end::Array\{Float64,1\}\)\)\)\n(\*)+(\s)+sum of p=1.7721860479424595e104",
+                     "Test call replacement of SpMV! in simple page rank."
+        )
+    ]
+)
+
+const call_replacement_test9 = Test(
+    "call-replacement-test9",
+    `julia  call-replacement-test9.jl small-diag.mtx`,
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+const call_replacement_test10 = Test(
+    "call-replacement-test10",
+    `julia  call-replacement-test10.jl small-diag.mtx`,
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+const call_replacement_test11 = Test(
+    "call-replacement-test11",
+    `julia  call-replacement-test11.jl small-diag.mtx`,
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+const call_replacement_test12 = Test(
+    "call-replacement-test12",
+    `julia  call-replacement-test12.jl small-diag.mtx`,
+    [
+        TestPattern(r"TODO",
+                     "Test call replacement of TODO."
+        )
+    ]
+)
+
+
+const name_resolution_test1 = Test(
+    "name-resolution-test1",
+    `julia  name-resolution-test1.jl small-diag.mtx`,
+    [
+        TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*Module name: Main\nFunction name: \*",
+                     "Test name resolution."
+        )
+    ]
+)
+
 const tests = [
+    name_resolution_test1,
     sanity_test1,
     sanity_test2,
     sanity_test3,
     context_test1,
     context_test2,
+    context_test3,
+    context_test4,
     liveness_test1,
     call_replacement_test1,
-    call_replacement_test2
+    call_replacement_test2,
+    call_replacement_test3,
+    call_replacement_test4,
+    call_replacement_test5,
+    call_replacement_test6,
+    call_replacement_test7,
+    call_replacement_test8,
+    call_replacement_test9,
+    call_replacement_test10,
+    call_replacement_test11,
+    call_replacement_test12,
+    name_resolution_test1
 ]
 
 fail = 0
