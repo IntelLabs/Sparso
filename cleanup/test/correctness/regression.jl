@@ -56,6 +56,16 @@ const sanity_test3 = Test(
     ]
 )
 
+const context_test1 = Test(
+    "context-test1",
+    `julia context-test1.jl small-diag.mtx`,
+    [
+        TestPattern(r"Original:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131954942e-13(.|\n)*New AST:(.|\n)*",
+                     "Test pcg_symgs"
+        )
+    ]
+)
+
 const context_test2 = Test(
     "context-test2",
     `julia context-test2.jl small-diag.mtx`,
@@ -76,12 +86,35 @@ const liveness_test1 = Test(
     ]
 )
 
+const call_replacement_test1 = Test(
+    "call-replacement-test1",
+    `julia  call-replacement-test1.jl small-diag.mtx`,
+    [
+        TestPattern(r"AST:(.|\n)*Main.dot(.|\n)*New AST(.|\n)*SparseAccelerator,:dot",
+                     "Test call replacement of Main.dot with SparseAccelerator.dot."
+        )
+    ]
+)
+
+const call_replacement_test2 = Test(
+    "call-replacement-test2",
+    `julia  call-replacement-test2.jl small-diag.mtx`,
+    [
+        TestPattern(r"AST:(.|\n)*A::Base.SparseMatrix.SparseMatrixCSC.*\* x::Array(.|\n)*New AST(.|\n)*SparseAccelerator,:SpMV.*A::Base.SparseMatrix.SparseMatrixCSC.*,x::Array",
+                     "Test call replacement of * with SparseAccelerator.SpMV."
+        )
+    ]
+)
+
 const tests = [
     sanity_test1,
     sanity_test2,
     sanity_test3,
+    context_test1,
     context_test2,
-    liveness_test1
+    liveness_test1,
+    call_replacement_test1,
+    call_replacement_test2
 ]
 
 fail = 0
