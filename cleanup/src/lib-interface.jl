@@ -2,13 +2,37 @@
 
 const LIB_PATH = libcsr
 
-@doc """ Create a new matrix knob. """
+@doc """
+Create a knob for a matrix with the given properties of it.
+
+Properties: 
+constant_valued:        The matrix is a constant in value. It implies 
+                        constant_structured below.
+constant_structured:    The matrix has always the same structure, even if its
+                        value may be changed.
+is_symmetric:           The matrix is symmetric in value.
+                        It implies is_structure_symmetric below.
+is_structure_symmetric: The matrix is symmetric in structure.
+is_structure_only :     Only the structure of matrix should be used.
+"""
+
+ 
 function new_matrix_knob(
-    A     :: SparseMatrixCSC
+    A                      :: SparseMatrixCSC;
+    constant_valued        = false,
+    constant_structured    = false,
+    is_symmetric           = false,
+    is_structure_symmetric = false,
+    is_structure_only      = false
  )
+    assert(!constant_valued || constant_structured)
+    assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
-                   (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
-                   A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval))
+                   (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+                    Bool, Bool, Bool, Bool, Bool),
+                   A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+                   constant_valued, constant_structured, is_symmetric,
+                   is_structure_symmetric, is_structure_only)
 end
 
 @doc """ Increment the version of a matrix. """

@@ -10,7 +10,9 @@ extern "C" {
 struct MatrixKnob;
 struct FunctionKnob;
 
-MatrixKnob* NewMatrixKnob(int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval);
+MatrixKnob* NewMatrixKnob(int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval,
+    bool constant_valued, bool constant_structured, bool is_symmetric, 
+    bool is_structure_symmetric, bool is_structure_only);
 void  IncrementMatrixVersion(MatrixKnob* mknob);
 void  SetConstantValued(MatrixKnob* mknob);
 void  SetConstantStructured(MatrixKnob* mknob);
