@@ -72,7 +72,7 @@ const context_test2 = Test(
     "context-test2",
     "context-test2.jl small-diag.mtx",
     [
-        TestPattern(r"Original:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131954942e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131217335e-13",
+        TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434107334e-5(.|\n)*rel_err=6.382732220893931e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434515133e-5(.|\n)*rel_err=6.629156171119774e-11",
                      "Test pcg_symgs_with_context_opt"
         )
     ]
