@@ -5,113 +5,174 @@ using SparseAccelerator
 # The original pcg_symgs
 #include("./pcg-symgs.jl")
 function pcg_symgs(x, A, b, tol, maxiter)
+    total_time = time()
+  
+    trsv_time = 0.
+    spmv_time = 0.
+    dot_time = 0.
+    blas1_time = 0.
+
     L = tril(A)
-    U  = spdiagm(1./diag(A))*triu(A)
-    M = L*U
+    U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
+
+    spmv_time -= time()
     r = b - A * x
+    spmv_time += time()
+
+    blas1_time -= time()
     normr0 = norm(r)
+    z = copy(r)
+    blas1_time += time()
+
     rel_err = 1
 
-    z = copy(r)
+    trsv_time -= time()
     Base.SparseMatrix.fwdTriSolve!(L, z)
     Base.SparseMatrix.bwdTriSolve!(U, z)
+    trsv_time += time()
 
+    blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
+    blas1_time += time()
+
     k = 1
-    time1 = time()
     while k <= maxiter
         old_rz = rz
-        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+
+        spmv_time -= time()
+        Ap = A*p 
+        spmv_time += time()
+
+        blas1_time -= time()
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
         rel_err = norm(r)/normr0
+        blas1_time += time()
+
         if rel_err < tol 
             break
         end
 
+        blas1_time -= time()
         z = copy(r)
+        blas1_time += time()
+
+        trsv_time -= time()
         Base.SparseMatrix.fwdTriSolve!(L, z)
         Base.SparseMatrix.bwdTriSolve!(U, z)
+        trsv_time += time()
 
+        blas1_time -= time()
         rz = dot(r, z)
         beta = rz/old_rz
         p = z + beta * p
+        blas1_time += time()
+
         k += 1
     end
+
+    total_time = time() - total_time
+    println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
+
     return x, k, rel_err
 end
 
 # This code is what we expect to generate by context-sensitive optimizations.
 # It is used for debugging purpose only
 function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
+    total_time = time()
+  
+    trsv_time = 0.
+    spmv_time = 0.
+    dot_time = 0.
+    blas1_time = 0.
+
     L = tril(A)
-    U  = spdiagm(1./diag(A))*triu(A)
-    M = L*U
+    U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
+
+    spmv_time -= time()
     r = b - A * x
+    spmv_time += time()
+
+    blas1_time -= time()
     normr0 = norm(r)
+    z = copy(r)
+    blas1_time += time()
+
     rel_err = 1
 
-    z = copy(r)
+    trsv_time -= time()
     Base.SparseMatrix.fwdTriSolve!(L, z)
     Base.SparseMatrix.bwdTriSolve!(U, z)
+    trsv_time += time()
 
+    blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     rz = dot(r, z)
-    k = 1
-    time1 = time()
-    
-    __mknobA_8199 = (SparseAccelerator.new_matrix_knob)()
-    (SparseAccelerator.set_constant_structured)(__mknobA_8199)
-    __fknob_8201 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8199,__fknob_8201)
-    __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8199,__fknob_8221)
+    blas1_time += time()
 
-    # THe Fwd/bwdTriSolve functions in SpMP expect CSR input A. So far, in knob.cpp,
-    # Forward/backwardTriangularSolve use A not only as a structure proxy of L and U,
-    # but also a value proxy. That means, we must construct A such that its upper
-    # part is L', and lower part is U', and then we can call the library. This is the
-    # purpose of this piece of code. It is really slow...
-    println("build A1")
-    tic()
-    A1 = copy(A)
-    for i = 1 : size(A1, 1) 
-        for j = 1 : size(A1, 2) 
-            if i > j
-                A1[i, j] = U[j, i]
-            end
-        end
-    end
-    toc()
-    println("A1 done")
-    flush(STDOUT)
+    k = 1
+
+    __mknobA = (SparseAccelerator.new_matrix_knob)(A)
+    __mknobL = (SparseAccelerator.new_matrix_knob)(L) # matrix knob for L
+    __mknobU = (SparseAccelerator.new_matrix_knob)(U) # matrix knob for L
+
+    (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
+    (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
+
+    (SparseAccelerator.set_constant_valued)(__mknobA)
+    (SparseAccelerator.set_value_symmetric)(__mknobA)
+    (SparseAccelerator.set_constant_valued)(__mknobL)
+    (SparseAccelerator.set_constant_valued)(__mknobU)
+    __fknob_8201 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
+    __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
 
     while k <= maxiter
         old_rz = rz
-        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+
+        spmv_time -= time()
+        Ap = A*p
+        spmv_time += time()
+
+        blas1_time -= time()
         alpha = old_rz / dot(p, Ap)
         x += alpha * p
         r -= alpha * Ap
         rel_err = norm(r)/normr0
+        blas1_time += time()
+
         if rel_err < tol 
             break
         end
 
+        blas1_time -= time()
         z = copy(r)
-        z = SparseAccelerator.fwdTriSolve!(L, z, A1,__fknob_8201)
-        z = SparseAccelerator.bwdTriSolve!(A1,__fknob_8201, z)
+        blas1_time += time()
 
+        trsv_time -= time()
+        SparseAccelerator.fwdTriSolve!(L, z, __fknob_8201)
+        SparseAccelerator.bwdTriSolve!(U, z, __fknob_8221)
+        trsv_time += time()
+
+        blas1_time -= time()
         rz = dot(r, z)
         beta = rz/old_rz
         p = z + beta * p
+        blas1_time += time()
+
         k += 1
     end
     (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",__fknob_8221)
     (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",__fknob_8201)
-    (SparseAccelerator.delete_matrix_knob)(__mknobA_8199)
+    (SparseAccelerator.delete_matrix_knob)(__mknobL)
     
+    total_time = time() - total_time
+    println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
+
     return x, k, rel_err
 end
 
