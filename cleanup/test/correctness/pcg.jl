@@ -33,7 +33,7 @@ end
 
 
 m = 10
-A = generate_symmetric_sparse_matrix(m)
+A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
 x = repmat([1/m], m)
 b   = ones(Float64, m)
 tol = 1e-10
