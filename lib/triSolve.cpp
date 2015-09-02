@@ -17,18 +17,20 @@ using namespace SpMP;
  * Reference sequential sparse triangular solver
  */
 template<int BASE = 0>
-static void forwardSolveRef_(const CSR& A, double y[], const double b[])
+static void forwardSolveRef_(CSR& A, double y[], const double b[])
 {
+  A.computeInverseDiag();
+
   for (int i = 0; i < A.m; ++i) {
     double sum = b[i];
     for (int j = A.rowptr[i] - BASE; j < A.rowptr[i + 1] - BASE; ++j) {
       sum -= A.values[j]*y[A.colidx[j] - BASE];
     }
-    y[i] = sum*A.idiag[i];
+    y[i] += sum*A.idiag[i];
   } // for each row
 }
 
-void forwardSolveRef(const CSR& A, double y[], const double b[])
+void forwardSolveRef(CSR& A, double y[], const double b[])
 {
   if (0 == A.base) {
     forwardSolveRef_<0>(A, y, b);
@@ -40,18 +42,20 @@ void forwardSolveRef(const CSR& A, double y[], const double b[])
 }
 
 template<int BASE = 0>
-static void backwardSolveRef_(const CSR& A, double y[], const double b[])
+static void backwardSolveRef_(CSR& A, double y[], const double b[])
 {
+  A.computeInverseDiag();
+
   for (int i = A.m - 1; i >= 0; --i) {
     double sum = b[i];
     for (int j = A.rowptr[i] - BASE; j < A.rowptr[i + 1] - BASE; ++j) {
       sum -= A.values[j]*y[A.colidx[j] - BASE];
     }
-    y[i] = sum;
+    y[i] += sum*A.idiag[i];
   } // for each row
 }
 
-void backwardSolveRef(const CSR& A, double y[], const double b[])
+void backwardSolveRef(CSR& A, double y[], const double b[])
 {
   if (0 == A.base) {
     backwardSolveRef_<0>(A, y, b);
@@ -68,10 +72,12 @@ void backwardSolveRef(const CSR& A, double y[], const double b[])
  */
 template<int BASE = 0>
 static void forwardSolve_(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
   const int *perm)
 {
+  A.computeInverseDiag();
+
 #pragma omp parallel
   {
     int nthreads = omp_get_num_threads();
@@ -102,7 +108,7 @@ static void forwardSolve_(
         for (int j = A.rowptr[row] - BASE; j < A.rowptr[row + 1] - BASE; ++j) {
           sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
-        y[row] = sum*A.idiag[row];
+        y[row] += sum*A.idiag[row];
       }
 
       SPMP_LEVEL_SCHEDULE_NOTIFY;
@@ -111,7 +117,7 @@ static void forwardSolve_(
 }
 
 void forwardSolve(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule, const int *perm)
 {
   if (0 == A.base) {
@@ -129,10 +135,12 @@ void forwardSolve(
  */
 template<int BASE = 0>
 static void backwardSolve_(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule,
   const int *perm)
 {
+  A.computeInverseDiag();
+
 #pragma omp parallel
   {
     int nthreads = omp_get_num_threads();
@@ -163,7 +171,7 @@ static void backwardSolve_(
         for (int j = A.rowptr[row + 1] - 1 - BASE; j >= A.rowptr[row] - BASE; --j) {
           sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
-        y[row] = sum;
+        y[row] += sum*A.idiag[i];
       }
 
       SPMP_LEVEL_SCHEDULE_NOTIFY;
@@ -172,7 +180,7 @@ static void backwardSolve_(
 }
 
 void backwardSolve(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule, const int *perm)
 {
   if (0 == A.base) {
@@ -190,9 +198,11 @@ void backwardSolve(
  */
 template<int BASE = 0>
 static void forwardSolveWithReorderedMatrix_(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
+  A.computeInverseDiag();
+
 #pragma omp parallel
   {
     int nthreads = omp_get_num_threads();
@@ -222,7 +232,7 @@ static void forwardSolveWithReorderedMatrix_(
         for (int j = A.rowptr[i] - BASE; j < A.rowptr[i + 1] - BASE; ++j) {
           sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
-        y[i] = sum*A.idiag[i];
+        y[i] += sum*A.idiag[i];
       }
 
       SPMP_LEVEL_SCHEDULE_NOTIFY;
@@ -231,7 +241,7 @@ static void forwardSolveWithReorderedMatrix_(
 }
 
 void forwardSolveWithReorderedMatrix(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
   if (0 == A.base) {
@@ -249,9 +259,11 @@ void forwardSolveWithReorderedMatrix(
  */
 template<int BASE = 0>
 static void backwardSolveWithReorderedMatrix_(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
+  A.computeInverseDiag();
+
 #pragma omp parallel
   {
     int nthreads = omp_get_num_threads();
@@ -281,7 +293,7 @@ static void backwardSolveWithReorderedMatrix_(
         for (int j = A.rowptr[i + 1] - 1 - BASE; j >= A.rowptr[i] - BASE; --j) {
           sum -= A.values[j]*y[A.colidx[j] - BASE];
         }
-        y[i] = sum;
+        y[i] += sum*A.idiag[i];
       }
 
       SPMP_LEVEL_SCHEDULE_NOTIFY;
@@ -290,7 +302,7 @@ static void backwardSolveWithReorderedMatrix_(
 }
 
 void backwardSolveWithReorderedMatrix(
-  const CSR& A, double y[], const double b[],
+  CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
   if (0 == A.base) {

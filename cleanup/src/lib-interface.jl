@@ -3,8 +3,12 @@
 const LIB_PATH = libcsr
 
 @doc """ Create a new matrix knob. """
-function new_matrix_knob()
-    mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void}, ())
+function new_matrix_knob(
+    A     :: SparseMatrixCSC
+ )
+    mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
+                   (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+                   A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval))
 end
 
 @doc """ Increment the version of a matrix. """
@@ -15,11 +19,46 @@ function increment_matrix_version(
 end
 
 @doc """ Set the matrix as constant_structured. """
+function set_constant_valued(
+    mknob :: Ptr{Void}
+)
+    ccall((:SetConstantValued, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+@doc """ Set the matrix as constant_structured. """
 function set_constant_structured(
     mknob :: Ptr{Void}
 )
     ccall((:SetConstantStructured, LIB_PATH), Void, (Ptr{Void},), mknob)
 end
+
+@doc """ Set the matrix as value symmetric. """
+function set_value_symmetric(
+    mknob :: Ptr{Void}
+)
+    ccall((:SetValueSymmetric, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+@doc """ Set the matrix as structurally symmetric. """
+function set_structure_symmetric(
+    mknob :: Ptr{Void}
+)
+    ccall((:SetStructureSymmetric, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+@doc """ set matrix derivative """
+function set_derivative(
+    mknob           :: Ptr{Void},
+    derivative_type :: Int,
+    derivative      :: Ptr{Void}
+)
+    ccall((:SetDerivative, LIB_PATH), Void, (Ptr{Void}, Cint, Ptr{Void}), mknob, derivative_type, derivative)
+end
+
+const DERIVATIVE_TYPE_TRANSPOSE = 0
+const DERIVATIVE_TYPE_SYMMETRIC = 1
+const DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2
+const DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3
 
 @doc """ Delete a matrix knob. """
 function delete_matrix_knob(
@@ -86,53 +125,38 @@ end
 @doc """
 Context-sensitive forward triangular solver, equivalent to Base.SparseMatrix.
 fwdTriSolve!(L, b).
-
-Here we pass A, of which L is initially the lower triangle of it. We use A as a
-structure proxy of L (and U in bwdTriSolve!).
-
-We have to pass L (as well as U in bwdTriSolve!), as in GENERAL, we can not derive
-it from A: it is difficult for compiler to figure out that L (and U) is ALWAYS
-the lower (or upper) triangle of A in the whole program (And U is not exactly the
-upper triangle of A: there is some additional computation on it).
 """
 function fwdTriSolve!(
     L     :: SparseMatrixCSC,
     b     :: Vector,
-    A     :: SparseMatrixCSC,
     fknob :: Ptr{Void}
  )
-    y = zeros(Cdouble, length(b))
     ccall((:ForwardTriangularSolve, LIB_PATH), Void,
            (
-            Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
             Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void},
            ),
             L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
-            A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-            pointer(y), pointer(b), fknob)
+            pointer(b), pointer(b), fknob)
 #println("\t\tFwdTriSolve! done: sum y = ", sum(y), " y=", y)
 #println("\t\tFwdTriSolve! done: sum b = ", sum(b), " b=", b)
-    b = copy(y)
 end
 
 @doc """ 
 Context-sensitive backward triangular solver. 
 """
 function bwdTriSolve!(
-    A     :: SparseMatrixCSC, 
-    fknob :: Ptr{Void},
-    b     :: Vector
+    U     :: SparseMatrixCSC, 
+    b     :: Vector,
+    fknob :: Ptr{Void}
  )
-    y = zeros(Cdouble, length(b))
     ccall((:BackwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
-               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-               pointer(y), pointer(b), C_NULL) #fknob)
+               U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval),
+               pointer(b), pointer(b), fknob) #fknob)
 #println("\t\tBwdTriSolve! done: sum y = ", sum(y))#, " y=", y)
 #println("\t\tBwdTriSolve! done: sum b = ", sum(b), " b=", b)
-    b = copy(y)
 end
 
 @doc """ 
@@ -452,7 +476,6 @@ ADB(A', D, B', fknob_ADB) functionality:
        output mknob->matrix = ADAT
    d = diag(D)
    adb_execute!(output mknob->matrix, A', A, d)
-
 """
 function ADB(
     AT    :: SparseMatrixCSC,

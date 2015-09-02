@@ -7,40 +7,67 @@ extern "C" {
 
 /**************** Below is the interface for Julia *********************/
 
-void* NewMatrixKnob();
-void  IncrementMatrixVersion(void* mknob);
-void  SetConstantStructured(void* mknob);
-void* GetStructureProxy(void* mknob);
-void* GetDssHandle(void* mknob);
-void* GetMatrix(void* mknob);
-void  DeleteMatrixKnob(void* mknob);
+struct MatrixKnob;
+struct FunctionKnob;
 
-void  AddMatrixKnob(void* fknob, void* mknob);
-void* GetMatrixKnob(void* fknob, int i);
+MatrixKnob* NewMatrixKnob(int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval);
+void  IncrementMatrixVersion(MatrixKnob* mknob);
+void  SetConstantValued(MatrixKnob* mknob);
+void  SetConstantStructured(MatrixKnob* mknob);
+void  SetValueSymmetric(MatrixKnob* mknob);
+void  SetStructureSymmetric(MatrixKnob *mknob);
+void  SetStructureOnly(MatrixKnob *mknob);
+void* GetDssHandle(MatrixKnob* mknob);
+void* GetMatrix(MatrixKnob* mknob);
+void  DeleteMatrixKnob(MatrixKnob* mknob);
 
-void* NewForwardTriangularSolveKnob();
-void  DeleteForwardTriangularSolveKnob(void* fknob);
+/**
+ * Compiler lets the library knows if simple derivatives of the given matrix is already
+ * available to avoid constructing them again.
+ */
+typedef enum
+{
+    DERIVATIVE_TYPE_TRANSPOSE = 0,
+    DERIVATIVE_TYPE_SYMMETRIC = 1,
+      /**< Proxy has sparsity structure of symmetric version of original matrix
+           In Julia notation, orig == tril(derivative) && issym(derivative) */
+    DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2,
+      /**< Proxy has sparsity structure of lower triangular of original matrix
+           In Julia notation, tril(orig) == derivative */
+    DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3,
+      /**< Proxy has sparsity structure of upper triangular of original matrix
+           In Julia notation, triu(orig) == derivative */
+    DERIVATIVE_TYPE_COUNT,
+} DerivativeType;
 
-void* NewBackwardTriangularSolveKnob();
-void  DeleteBackwardTriangularSolveKnob(void* fknob);
+MatrixKnob* GetDerivative(MatrixKnob* mknob, DerivativeType type);
+void  SetDerivative(MatrixKnob* mknob, DerivativeType type, MatrixKnob *derivative);
+
+void  AddMatrixKnob(FunctionKnob* fknob, MatrixKnob* mknob);
+MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i);
+
+FunctionKnob* NewForwardTriangularSolveKnob();
+void  DeleteForwardTriangularSolveKnob(FunctionKnob* fknob);
+
+FunctionKnob* NewBackwardTriangularSolveKnob();
+void  DeleteBackwardTriangularSolveKnob(FunctionKnob* fknob);
 
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
-    int A_numrows, int A_numcols, int* A_colptr, int* A_rowval, double* A_nzval,
-    double *y, const double *b, void* fknob);
+    double *y, const double *b, FunctionKnob* fknob);
 
 void BackwardTriangularSolve(
-    int numrows, int numcols, int* colptr, int* rowval, double* nzval,
-    double *y, const double *b, void* fknob);
+    int U_numrows, int U_numcols, int* U_colptr, int* U_rowval, double* U_nzval,
+    double *y, const double *b, FunctionKnob* fknob);
     
-void* NewADBKnob();
-void  DeleteADBKnob(void* fknob);
+FunctionKnob* NewADBKnob();
+void  DeleteADBKnob(FunctionKnob* fknob);
 
-void* NewCholfactKnob();
-void  DeleteCholfactKnob(void* fknob);
+FunctionKnob* NewCholfactKnob();
+void  DeleteCholfactKnob(FunctionKnob* fknob);
 
-void* NewCholmodFactorInverseDivideKnob();
-void  DeleteCholmodFactorInverseDivideKnob(void* fknob);
+FunctionKnob* NewCholmodFactorInverseDivideKnob();
+void  DeleteCholmodFactorInverseDivideKnob(FunctionKnob* fknob);
 
 /******************************************************************************/
 
