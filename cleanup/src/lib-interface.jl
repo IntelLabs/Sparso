@@ -131,17 +131,15 @@ function fwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
-    y = zeros(Cdouble, length(b))
     ccall((:ForwardTriangularSolve, LIB_PATH), Void,
            (
             Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void},
            ),
             L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
-            pointer(y), pointer(b), fknob)
+            pointer(b), pointer(b), fknob)
 #println("\t\tFwdTriSolve! done: sum y = ", sum(y), " y=", y)
 #println("\t\tFwdTriSolve! done: sum b = ", sum(b), " b=", b)
-    b[:] = y
 end
 
 @doc """ 
@@ -152,15 +150,13 @@ function bwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
-    y = zeros(Cdouble, length(b))
     ccall((:BackwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
                U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval),
-               pointer(y), pointer(b), fknob) #fknob)
+               pointer(b), pointer(b), fknob) #fknob)
 #println("\t\tBwdTriSolve! done: sum y = ", sum(y))#, " y=", y)
 #println("\t\tBwdTriSolve! done: sum b = ", sum(b), " b=", b)
-    b[:] = y
 end
 
 @doc """ 
