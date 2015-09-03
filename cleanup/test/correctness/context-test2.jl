@@ -140,7 +140,33 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
     (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
 
+    # Set up reordering:
+    # Let SparseAccelerator.fwdTriSolve! decides what permutation/inverse
+    # permutation vector should be, and reorders its inputs andoutputs accordingly.
+    # Other functions just respect the decision, makes no decision, nor does any
+    # reordering.
+    (SparseAccelerator.set_reordering_decision_maker)(__fknob_8201)
+
+    perm                         = C_NULL
+    inv_perm                     = C_NULL
+    reordering_on_back_edge_done = false
+    initial_reordering_done      = false
     while k <= maxiter
+        if initial_reordering_done && !reordering_on_back_edge_done
+            # This is the first time the execution reaches here (along the 
+            # backedge of the loop) after the initial reordering was done.
+            # Reorder all the arrays that are affected by the other
+            # already-reordered arrays.
+            assert(perm != C_NULL && inv_perm != C_NULL)
+
+            A = copy(A)
+            SparseAccelerator.reorder_matrix(A, new_A, perm, inv_perm, false, true, true)
+            A = new_A
+
+            reordering_on_back_edge_done = true
+        end
+    
+    
         old_rz = rz
 
         spmv_time -= time()
@@ -169,6 +195,34 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         trsv_time -= time()
         #Base.SparseMatrix.fwdTriSolve!(L, z)
         SparseAccelerator.fwdTriSolve!(L, z, __fknob_8201)
+
+        if !initial_reordering_done
+            perm, inv_perm = SparseAccelerator.get_reordering_vectors(__fknob_8201)
+            if perm != C_NULL
+                assert(inv_perm != C_NULL)
+
+                # This is the first time fwdTriSolve! has decided to do reordering.
+                # Its own inputs and outputs (L and z) have already been reordered.
+                # We need to reorder other arrays that affected by L and z in the
+                # subsequent execution.
+                new_U = copy(U)
+                SparseAccelerator.reorder_matrix(U, new_U, perm, inv_perm, false, true, true)
+                U = new_U
+                
+                new_r = copy(r)
+                SparseAccelerator.reorder_vector(r, new_r, perm)
+                r = new_r
+                
+                new_p = copy(p)
+                SparseAccelerator.reorder_vector(p, new_p, perm)
+                p = new_p
+
+                initial_reordering_done = true
+                # For any static program point from here to the end of the loop,
+                # any array that needs to be reordered has been reordered.
+            end
+        end
+
         #Base.SparseMatrix.bwdTriSolve!(U, z)
         SparseAccelerator.bwdTriSolve!(U, z, __fknob_8221)
         trsv_time += time()
@@ -183,6 +237,15 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
 
         k += 1
     end
+
+    if reordering_on_back_edge_done
+        # Reverse reorder live arrays that have been reordered.
+        # Only x will live out here, and it is reordered only if reordering_on_back_edge_done
+        new_x = copy(x)
+        SparseAccelerator.reverse_reorder_vector(x, new_x, perm)
+        x = new_x
+    end
+    
     (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",__fknob_8221)
     (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",__fknob_8201)
     (SparseAccelerator.delete_matrix_knob)(__mknobL)
