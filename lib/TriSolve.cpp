@@ -4,14 +4,16 @@
 #include <climits>
 #include <cfloat>
 #include <omp.h>
-#include "triSolve.hpp"
+#include "TriSolve.hpp"
 #include "CSR_Interface.h"
 #include "SpMP/CSR.hpp"
 #include "SpMP/LevelSchedule.hpp"
 #include "SpMP/synk/barrier.hpp"
 
 using namespace std;
-using namespace SpMP;
+
+namespace SpMP
+{
 
 /**
  * Reference sequential sparse triangular solver
@@ -32,11 +34,11 @@ static void forwardSolveRef_(CSR& A, double y[], const double b[])
 
 void forwardSolveRef(CSR& A, double y[], const double b[])
 {
-  if (0 == A.base) {
+  if (0 == A.getBase()) {
     forwardSolveRef_<0>(A, y, b);
   }
   else {
-    assert(1 == A.base);
+    assert(1 == A.getBase());
     forwardSolveRef_<1>(A, y, b);
   }
 }
@@ -57,11 +59,11 @@ static void backwardSolveRef_(CSR& A, double y[], const double b[])
 
 void backwardSolveRef(CSR& A, double y[], const double b[])
 {
-  if (0 == A.base) {
+  if (0 == A.getBase()) {
     backwardSolveRef_<0>(A, y, b);
   }
   else {
-    assert(1 == A.base);
+    assert(1 == A.getBase());
     backwardSolveRef_<1>(A, y, b);
   }
 }
@@ -120,11 +122,11 @@ void forwardSolve(
   CSR& A, double y[], const double b[],
   const LevelSchedule& schedule, const int *perm)
 {
-  if (0 == A.base) {
+  if (0 == A.getBase()) {
     forwardSolve_<0>(A, y, b, schedule, perm);
   }
   else {
-    assert(1 == A.base);
+    assert(1 == A.getBase());
     forwardSolve_<1>(A, y, b, schedule, perm);
   }
 }
@@ -183,11 +185,11 @@ void backwardSolve(
   CSR& A, double y[], const double b[],
   const LevelSchedule& schedule, const int *perm)
 {
-  if (0 == A.base) {
+  if (0 == A.getBase()) {
     backwardSolve_<0>(A, y, b, schedule, perm);
   }
   else {
-    assert(1 == A.base);
+    assert(1 == A.getBase());
     backwardSolve_<1>(A, y, b, schedule, perm);
   }
 }
@@ -244,11 +246,11 @@ void forwardSolveWithReorderedMatrix(
   CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
-  if (0 == A.base) {
+  if (0 == A.getBase()) {
     forwardSolveWithReorderedMatrix_<0>(A, y, b, schedule);
   }
   else {
-    assert(1 == A.base);
+    assert(1 == A.getBase());
     forwardSolveWithReorderedMatrix_<1>(A, y, b, schedule);
   }
 }
@@ -305,11 +307,13 @@ void backwardSolveWithReorderedMatrix(
   CSR& A, double y[], const double b[],
   const LevelSchedule& schedule)
 {
-  if (0 == A.base) {
+  if (0 == A.getBase()) {
     backwardSolveWithReorderedMatrix_<0>(A, y, b, schedule);
   }
   else {
-    assert(1 == A.base);
+    assert(1 == A.getBase());
     backwardSolveWithReorderedMatrix_<1>(A, y, b, schedule);
   }
 }
+
+} // namespace SpMP

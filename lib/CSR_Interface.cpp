@@ -14,7 +14,7 @@ using namespace SpMP;
 
 extern "C" {
 
-CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v, int base)
+CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v)
 {
   CSR *ret = new CSR;
 
@@ -23,7 +23,6 @@ CSR_Handle *CSR_Create(int numRows, int numCols, int *i, int *j, double *v, int 
   ret->rowptr = i;
   ret->colidx = j;
   ret->values = v;
-  ret->base = base;
   
   return (CSR_Handle *)ret;
 }
@@ -105,7 +104,7 @@ void CSR_Statistics(double *_stats)
 // oneBasedInput: true if the i and j are 1-based indexing.
 // oneBasedOutput: true if i1 and j1 should be 1-based indexing  
 void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int *i1, int *j1, double *v1, 
-                 int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput)
+                 int *perm, int *inversePerm, bool getPermutation, bool oneBasedOutput)
 {
     double t1, t2, t3, t4, t5;
 #ifdef PERF_TUNE
@@ -117,7 +116,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     assert(j != j1);    
     assert(v != v1);
     
-    CSR *A = new CSR(numRows, numCols, i, j, v, oneBasedInput ? 1 : 0);
+    CSR *A = new CSR(numRows, numCols, i, j, v);
 
 #ifdef PERF_TUNE
     int orig_bw = A->getBandwidth();
@@ -132,7 +131,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     t3 = omp_get_wtime();
 #endif
 
-    CSR *newA = new CSR(numRows, numCols, i1, j1, v1, oneBasedInput ? 1 : 0);
+    CSR *newA = new CSR(numRows, numCols, i1, j1, v1);
     A->permuteRowptr(newA, inversePerm);
     A->permuteMain(newA, perm, inversePerm);
     

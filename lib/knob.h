@@ -10,10 +10,12 @@ extern "C" {
 struct MatrixKnob;
 struct FunctionKnob;
 
-MatrixKnob* NewMatrixKnob(int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval,
+/**
+ * colptr/rowval/nzval: CSC representation of sparse matrix
+ */
+MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval,
     bool constant_valued, bool constant_structured, bool is_symmetric, 
     bool is_structure_symmetric, bool is_structure_only);
-void  IncrementMatrixVersion(MatrixKnob* mknob);
 void  SetConstantValued(MatrixKnob* mknob);
 void  SetConstantStructured(MatrixKnob* mknob);
 void  SetValueSymmetric(MatrixKnob* mknob);
@@ -24,26 +26,42 @@ void* GetMatrix(MatrixKnob* mknob);
 void  DeleteMatrixKnob(MatrixKnob* mknob);
 
 /**
- * Compiler lets the library knows if simple derivatives of the given matrix is already
+ * Compiler lets the library know if simple derivatives of the given matrix is already
  * available to avoid constructing them again.
  */
 typedef enum
 {
     DERIVATIVE_TYPE_TRANSPOSE = 0,
+      /**< Derivative is transpose of the original matrix.
+           For value derivative, in Julia notation, orig == derivative'
+           For structure derivative, spones(orig) == spones(derivative') */
     DERIVATIVE_TYPE_SYMMETRIC = 1,
-      /**< Proxy has sparsity structure of symmetric version of original matrix
-           In Julia notation, orig == tril(derivative) && issym(derivative) */
+      /**< Derivative is a symmetric version of original matrix.
+           For value derivative, original + original' - diag(original) == derivative
+           For structure derivative, spones(original) + spones(original') == spones(derivative) */
     DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2,
-      /**< Proxy has sparsity structure of lower triangular of original matrix
-           In Julia notation, tril(orig) == derivative */
+      /**< Derivative is lower triangular of original matrix
+           For value derivative, tril(original) == derivative
+           For structure derivative, spones(tril(original)) == spones(derivative)
+           if A is lower triangular derivative of B, then B is symmetric derivative of A */
     DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3,
-      /**< Proxy has sparsity structure of upper triangular of original matrix
-           In Julia notation, triu(orig) == derivative */
+      /**< Derivative is upper triangular of original matrix
+           For value derivative, triu(original) == derivative
+           For structure derivative, spones(triu(original)) == spones(derivative) 
+           if A is upper triangular derivative of B, then B is symmetric derivative of B */
     DERIVATIVE_TYPE_COUNT,
 } DerivativeType;
 
 MatrixKnob* GetDerivative(MatrixKnob* mknob, DerivativeType type);
 void  SetDerivative(MatrixKnob* mknob, DerivativeType type, MatrixKnob *derivative);
+
+/**
+ * Structural derivatives are where we are only interested in structures.
+ * For example, SetStructureDerivative(A, DERIVATIVE_TYPE_TRANSPOSE, B) means
+ * spones(A) == spones(B')
+ */
+MatrixKnob* GetStructureDerivative(MatrixKnob* mknob, DerivativeType type);
+void  SetStructureDerivative(MatrixKnob* mknob, DerivativeType type, MatrixKnob *derivative);
 
 void  AddMatrixKnob(FunctionKnob* fknob, MatrixKnob* mknob);
 MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i);

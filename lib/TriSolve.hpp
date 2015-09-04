@@ -3,8 +3,11 @@
 
 #include "SpMP/CSR.hpp"
 #include "SpMP/LevelSchedule.hpp"
-#include "SpMP/synk/barrier.hpp"
+
 using namespace SpMP;
+
+namespace SpMP
+{
 
 void forwardSolveRef(CSR& A, double y[], const double b[]);
 
@@ -27,5 +30,7 @@ void forwardSolveWithReorderedMatrix(
 void backwardSolveWithReorderedMatrix(
   CSR& A, double y[], const double b[],
   const LevelSchedule& schedule);
+
+} // namespace SpMP
 
 #endif
