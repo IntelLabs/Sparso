@@ -8,7 +8,7 @@ extern "C" {
 typedef struct CSR_Handle CSR_Handle;
 
 // const/destruct
-CSR_Handle *CSR_Create(int numRows, int numCols, int *rowptr, int *colidx, double *values, int base);
+CSR_Handle *CSR_Create(int numRows, int numCols, int *rowptr, int *colidx, double *values);
 void CSR_Destroy(CSR_Handle *A);
 
 // accessors
@@ -53,14 +53,6 @@ void CSR_MultiplyWithDenseMatrix(
   double beta, const double *Y, int yRowStride, int yColumnStride,
   double gamma);
 
-// C = A*diag(d)*B
-CSR_Handle *CSR_ADBInspect(
-  const CSR_Handle *A, const CSR_Handle *B);
-void CSR_ADB(
-  CSR_Handle *C,
-  const CSR_Handle *A, const CSR_Handle *B,
-  const double *d);
-
 void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetRCMPermutationWithoutPseudoDiameterSourceSelection(const CSR_Handle *A, int *perm, int *inversePerm);
 void CSR_GetBFSPermutation(const CSR_Handle *A, int *perm, int *inversePerm);
@@ -75,7 +67,7 @@ void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, co
 int CSR_GetBandwidth(CSR_Handle *A);
 
 void CSR_ReorderMatrix(int numRows, int numCols, int *rowptr, int *colidx, double *values, int *i1, int *j1, double *v1, 
-                 int *perm, int *inversePerm, bool getPermutation, bool oneBasedInput, bool oneBasedOutput);
+                 int *perm, int *inversePerm, bool getPermutation, bool oneBasedOutput);
                  
 // vector routines
 void reorderVector(double *v, double *tmp, const int *perm, int len);
