@@ -77,15 +77,20 @@ class CholmodFactorInverseDivideKnob : public FunctionKnob { };
 
 /**************************** Usage of knobs *****************************/
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
-MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval)
+MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval,
+    bool constant_valued = false, bool constant_structured = false, bool is_symmetric = false, 
+    bool is_structure_symmetric = false, bool is_structure_only = false)
 {
+    assert(!constant_valued || constant_structured);
+    assert(!is_symmetric || is_structure_symmetric);
+    
     MatrixKnob* m = new MatrixKnob(numrows, numcols, colptr, rowval, nzval);
 
-    m->constant_valued = false;
-    m->constant_structured = false;
-    m->is_symmetric = false;
-    m->is_structure_symmetric = false;
-    m->is_structure_only = false;
+    m->constant_valued = constant_valued;
+    m->constant_structured = constant_structured;
+    m->is_symmetric = is_symmetric;
+    m->is_structure_symmetric = is_structure_symmetric;
+    m->is_structure_only = is_structure_only;
 
     for (int i = 0; i < DERIVATIVE_TYPE_COUNT; i++) {
         m->derivatives[i] = NULL;

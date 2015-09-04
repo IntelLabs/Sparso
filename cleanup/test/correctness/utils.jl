@@ -1,17 +1,6 @@
 function generate_symmetric_sparse_matrix(m)
-    A = SparseMatrixCSC{Cdouble, Cint}(sprand(m, m, 0.1))
-    
-    # Make it symmetric
-    for i = 1:m 
-        for j = 1:m 
-            if A[i, j] != 0.0
-                A[j, i] = A[i, j]
-            else
-                A[i, j] = A[j, i] 
-            end
-        end 
-    end
-    
+    A = SparseMatrixCSC{Cdouble, Clong}(sprand(m, m, 0.1))
+    A = A*A'
     return A
 end
 

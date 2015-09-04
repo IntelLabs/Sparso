@@ -16,7 +16,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
     U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
 
     spmv_time -= time()
-    r = b - A * x
+    #r = b - A * x
+    r = b - SparseAccelerator.SpMV(A,x)
     spmv_time += time()
 
     blas1_time -= time()
@@ -33,7 +34,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
 
     blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
-    rz = dot(r, z)
+    #rz = dot(r, z)
+    rz = SparseAccelerator.dot(r,z)
     blas1_time += time()
 
     k = 1
@@ -41,13 +43,17 @@ function pcg_symgs(x, A, b, tol, maxiter)
         old_rz = rz
 
         spmv_time -= time()
-        Ap = A*p 
+        #Ap = A*p
+        Ap = SparseAccelerator.SpMV(A,p)
         spmv_time += time()
 
         blas1_time -= time()
-        alpha = old_rz / dot(p, Ap)
-        x += alpha * p
-        r -= alpha * Ap
+        #alpha = old_rz / dot(p, Ap)
+        alpha = old_rz / SparseAccelerator.dot(p, Ap)
+        #x += alpha * p
+        SparseAccelerator.WAXPBY!(x,1,x,alpha,p)
+        #r -= alpha * Ap
+        SparseAccelerator.WAXPBY!(r,1,r,-alpha,Ap)
         rel_err = norm(r)/normr0
         blas1_time += time()
 
@@ -65,14 +71,15 @@ function pcg_symgs(x, A, b, tol, maxiter)
         trsv_time += time()
 
         blas1_time -= time()
-        rz = dot(r, z)
+        #rz = dot(r, z)
+        rz = SparseAccelerator.dot(r,z)
         beta = rz/old_rz
-        p = z + beta * p
+        #p = z + beta * p
+        SparseAccelerator.WAXPBY!(p,1,z,beta,p)
         blas1_time += time()
 
         k += 1
     end
-
     total_time = time() - total_time
     println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
 
@@ -93,7 +100,8 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
 
     spmv_time -= time()
-    r = b - A * x
+    #r = b - A * x
+    r = b - SparseAccelerator.SpMV(A,x)
     spmv_time += time()
 
     blas1_time -= time()
@@ -110,7 +118,8 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
 
     blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
-    rz = dot(r, z)
+    #rz = dot(r, z)
+    rz = SparseAccelerator.dot(r,z)
     blas1_time += time()
 
     k = 1
@@ -131,17 +140,47 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
     (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
 
+    # Set up reordering:
+    # Let SparseAccelerator.fwdTriSolve! decides what permutation/inverse
+    # permutation vector should be, and reorders its inputs andoutputs accordingly.
+    # Other functions just respect the decision, makes no decision, nor does any
+    # reordering.
+    (SparseAccelerator.set_reordering_decision_maker)(__fknob_8201)
+
+    perm                         = C_NULL
+    inv_perm                     = C_NULL
+    reordering_on_back_edge_done = false
+    initial_reordering_done      = false
     while k <= maxiter
+        if initial_reordering_done && !reordering_on_back_edge_done
+            # This is the first time the execution reaches here (along the 
+            # backedge of the loop) after the initial reordering was done.
+            # Reorder all the arrays that are affected by the other
+            # already-reordered arrays.
+            assert(perm != C_NULL && inv_perm != C_NULL)
+
+            A = copy(A)
+            SparseAccelerator.reorder_matrix(A, new_A, perm, inv_perm, false, true, true)
+            A = new_A
+
+            reordering_on_back_edge_done = true
+        end
+    
+    
         old_rz = rz
 
         spmv_time -= time()
-        Ap = A*p
+        #Ap = A*p
+        Ap = SparseAccelerator.SpMV(A,p)
         spmv_time += time()
 
         blas1_time -= time()
-        alpha = old_rz / dot(p, Ap)
-        x += alpha * p
-        r -= alpha * Ap
+        #alpha = old_rz / dot(p, Ap)
+        alpha = old_rz / SparseAccelerator.dot(p, Ap)
+        #x += alpha * p
+        SparseAccelerator.WAXPBY!(x,1,x,alpha,p)
+        #r -= alpha * Ap
+        SparseAccelerator.WAXPBY!(r,1,r,-alpha,Ap)
         rel_err = norm(r)/normr0
         blas1_time += time()
 
@@ -154,18 +193,59 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         blas1_time += time()
 
         trsv_time -= time()
+        #Base.SparseMatrix.fwdTriSolve!(L, z)
         SparseAccelerator.fwdTriSolve!(L, z, __fknob_8201)
+
+        if !initial_reordering_done
+            perm, inv_perm = SparseAccelerator.get_reordering_vectors(__fknob_8201)
+            if perm != C_NULL
+                assert(inv_perm != C_NULL)
+
+                # This is the first time fwdTriSolve! has decided to do reordering.
+                # Its own inputs and outputs (L and z) have already been reordered.
+                # We need to reorder other arrays that affected by L and z in the
+                # subsequent execution.
+                new_U = copy(U)
+                SparseAccelerator.reorder_matrix(U, new_U, perm, inv_perm, false, true, true)
+                U = new_U
+                
+                new_r = copy(r)
+                SparseAccelerator.reorder_vector(r, new_r, perm)
+                r = new_r
+                
+                new_p = copy(p)
+                SparseAccelerator.reorder_vector(p, new_p, perm)
+                p = new_p
+
+                initial_reordering_done = true
+                # For any static program point from here to the end of the loop,
+                # any array that needs to be reordered has been reordered.
+            end
+        end
+
+        #Base.SparseMatrix.bwdTriSolve!(U, z)
         SparseAccelerator.bwdTriSolve!(U, z, __fknob_8221)
         trsv_time += time()
 
         blas1_time -= time()
-        rz = dot(r, z)
+        #rz = dot(r, z)
+        rz = SparseAccelerator.dot(r,z)
         beta = rz/old_rz
-        p = z + beta * p
+        #p = z + beta * p
+        SparseAccelerator.WAXPBY!(p,1,z,beta,p)
         blas1_time += time()
 
         k += 1
     end
+
+    if reordering_on_back_edge_done
+        # Reverse reorder live arrays that have been reordered.
+        # Only x will live out here, and it is reordered only if reordering_on_back_edge_done
+        new_x = copy(x)
+        SparseAccelerator.reverse_reorder_vector(x, new_x, perm)
+        x = new_x
+    end
+    
     (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",__fknob_8221)
     (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",__fknob_8201)
     (SparseAccelerator.delete_matrix_knob)(__mknobL)

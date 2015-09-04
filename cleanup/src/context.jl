@@ -348,8 +348,18 @@ function create_new_matrix_knob(
     M         :: Union{Sym, Expr}
 )
     mknob = gensym(string("mknob", string(M)))
+    
+    #TODO: set the right values here
+    constant_valued        = false
+    constant_structured    = false
+    is_symmetric           = false
+    is_structure_symmetric = false
+    is_structure_only      = false
+
     new_stmt = Expr(:(=), mknob,
-                Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob)))
+                Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
+                     M, constant_valued, constant_structured, is_symmetric,
+                     is_structure_symmetric, is_structure_only))
     push!(new_stmts, Statement(0, new_stmt))
     
     mknob
