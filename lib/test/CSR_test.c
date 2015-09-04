@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
     printf("m = %d, n = %d, nnz = %d, %csymmetric\n", m, n, nnz, is_symmetric ? ' ' : 'a');
     double bytes = (double)nnz*4;
 
-    CSR_Handle *A = CSR_Create(m, n, ai, aj, a, one_based_CSR ? 1 : 0);
+    CSR_Handle *A = CSR_Create(m, n, ai, aj, a);
     printf("CSR matrix content:\n");
     unsigned int distance = nnz / 100; // print out about 100 elements for manual verification
     //CSR_PrintSomeValues(m, n, ai, aj, a, distance, one_based_CSR);
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
     double *a2 = (double *)malloc(sizeof(double)*nnz);
     int *aj2 = (int *)malloc(sizeof(int)*nnz);
     int *ai2 = (int *)malloc(sizeof(int)*(m + 1));
-    CSR_Handle *A2 = CSR_Create(m, n, ai2, aj2, a2, one_based_CSR ? 1 : 0);
+    CSR_Handle *A2 = CSR_Create(m, n, ai2, aj2, a2);
 
     for (int permuteType = 0; permuteType < 3; ++permuteType) {
       if (2 == permuteType) {

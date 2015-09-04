@@ -3,7 +3,7 @@
 #include <vector>
 #include <assert.h>
 #include "CSR_Interface.h"
-#include "triSolve.hpp"
+#include "TriSolve.hpp"
 #include "SpMP/mm_io.h"
 #include "SpMP/Utils.hpp"
 #include "SpMP/LevelSchedule.hpp"
@@ -30,22 +30,15 @@ using namespace SpMP;
 // Function-specific info like a level schedule should be put into a function knob.
 struct MatrixKnob {
     bool         constant_valued;     // The matrix is a constant in value(and thus of course constant in structure).
-    int          matrix_version;      // The latest version of the matrix. It may be incremented dynamically if the matrix is not constant-valued.
     bool         constant_structured; // A matrix might be changed, and thus its version updated, but its structure might stay the same
     bool         is_symmetric;
     bool         is_structure_symmetric; // is_symmetric implies is_structure_symmetric
     bool         is_structure_only;   // true if structure of matrix is only used
 
     MatrixKnob  *derivatives[DERIVATIVE_TYPE_COUNT];
+    bool         is_structure_derivatives[DERIVATIVE_TYPE_COUNT];
 
-    // These are copied from Julia CSC matrix
-    const int numrows;
-    const int numcols;
-    const int *colptr;
-    const int *rowval;
-    const double *nzval;
-
-    MatrixKnob(int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval) :
+    MatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval) :
         numrows(numrows), numcols(numcols), colptr(colptr), rowval(rowval), nzval(nzval)
     {
     }
@@ -57,6 +50,13 @@ struct MatrixKnob {
     // The following fields shouldn't be passed to Julia because it has no idea
     // of their format.
     CSR        * A; // CSC used in Julia is often not be the best performing format. We want to decouple from it by having a shadow copy of the Julia CSC matrix in more optimized representation. For now, we fix it as CSR in SpMP. Later, we need to make it something like union so that we can change the matrix representation depending on the context
+
+    // These are copied from Julia CSC matrix
+    int numrows;
+    int numcols;
+    int *colptr;
+    int *rowval;
+    double *nzval;
 };
 
 // This is the base class of all function knobs
@@ -77,12 +77,11 @@ class CholmodFactorInverseDivideKnob : public FunctionKnob { };
 
 /**************************** Usage of knobs *****************************/
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
-MatrixKnob* NewMatrixKnob(int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval)
+MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval)
 {
     MatrixKnob* m = new MatrixKnob(numrows, numcols, colptr, rowval, nzval);
 
     m->constant_valued = false;
-    m->matrix_version = MIN_VALID_VERSION;
     m->constant_structured = false;
     m->is_symmetric = false;
     m->is_structure_symmetric = false;
@@ -90,6 +89,7 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, const int *colptr, const int
 
     for (int i = 0; i < DERIVATIVE_TYPE_COUNT; i++) {
         m->derivatives[i] = NULL;
+        m->is_structure_derivatives[i] = false;
     }
 
     m->schedule = NULL;
@@ -114,12 +114,6 @@ static bool CheckMatrixKnobConsistency(MatrixKnob *m)
     }
 
     return true;
-}
-
-void IncrementMatrixVersion(MatrixKnob* mknob)
-{
-    assert(!mknob->constant_valued);
-    mknob->matrix_version++;
 }
 
 void SetConstantValued(MatrixKnob* mknob)
@@ -160,54 +154,30 @@ static void DeleteOptimizedRepresentation(MatrixKnob *m)
     }
 }
 
-static CSR *CreateTransposedCSRCopyWith0BasedIndexing(
-    int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval)
-{
-    // assume input is 1-based indexing
-    int nnz = colptr[numcols] - 1;
-    int *colptr_copy = MALLOC(int, numcols + 1);
-    int *rowval_copy = MALLOC(int, nnz);
-    double *nzval_copy = NULL;
-    if (nzval) {
-        nzval_copy = MALLOC(double, nnz);
-    }
-    
-    // Copy Julia CSC to SpMP CSR, while converting into 0
-#pragma omp parallel for
-    for (int i = 0; i <= numcols; i++)
-        colptr_copy[i] = colptr[i] - 1;
-
-    if (!nzval) {
-#pragma omp parallel for
-        for (int i = 0; i < nnz; i++) {
-            rowval_copy[i] = rowval[i] - 1;
-        }
-    }
-    else {
-#pragma omp parallel for
-        for (int i = 0; i < nnz; i++) {
-            rowval_copy[i] = rowval[i] - 1;
-            nzval_copy[i] = nzval[i];
-        }
-    }
-
-    return new CSR(numcols, numrows, colptr_copy, rowval_copy, nzval_copy);
-}
-
+/**
+ * nzval can be NULL, which means we're creating an optimized representation only for structure
+ * of the matrix
+ */
 static void CreateOptimizedRepresentation(
-    MatrixKnob *m, int numrows, int numcols, const int *colptr, const int *rowval, const double *nzval)
+    MatrixKnob *m, int numrows, int numcols, int *colptr, int *rowval, double *nzval)
 {
-    // if something is not constant, it's a waste of time to create an optimized representation
-    assert(m->is_structure_only && m->constant_structured || m->constant_valued);
-
     if (m->A) return;
 
+    // if something is not constant, it's a waste of time to create an optimized representation
+    if ((!m->is_structure_only || !m->constant_structured) && !m->constant_valued) {
+        fprintf(stderr, "Warning: creating an optimized representation when not needed\n");
+        return;
+    }
+    if (m->is_structure_only && nzval != NULL) {
+        fprintf(stderr, "Warning: pass nzval as NULL when we only care about structure\n");
+    }
+
     // Simply copying CSC to CSR will create a transposed version of original matrix
-    CSR *AT = CreateTransposedCSRCopyWith0BasedIndexing(numrows, numcols, colptr, rowval, nzval);
+    CSR *AT = new CSR(numcols, numrows, colptr, rowval, nzval);
 
     // When compiler tells you matrix must be symmetric, we skip checking symmetry
     bool needTranspose = false;
-    if (!m->derivatives[DERIVATIVE_TYPE_TRANSPOSE]) {
+    if (!m->derivatives[DERIVATIVE_TYPE_TRANSPOSE] || !m->is_structure_only && m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE]) {
         if (m->is_structure_only && !m->is_structure_symmetric) {
             needTranspose = !AT->isSymmetric(false);
         }
@@ -218,8 +188,24 @@ static void CreateOptimizedRepresentation(
     if (needTranspose) {
         m->A = AT->transpose();
 
-        MatrixKnob *knobTranspose = NewMatrixKnob(AT->m, AT->n, NULL, NULL, AT->values);
+#ifndef NDEBUG
+        AT->make0BasedIndexing();
+        CSR *tempA = AT->transpose();
+        tempA->make1BasedIndexing();
+        AT->make1BasedIndexing();
+
+        //m->A->print();
+        //tempA->print();
+
+        assert(m->A->equals(*tempA, true)); 
+        delete tempA;
+#endif
+
+        MatrixKnob *knobTranspose = NewMatrixKnob(AT->m, AT->n, AT->rowptr, AT->colidx, AT->values);
         m->derivatives[DERIVATIVE_TYPE_TRANSPOSE] = knobTranspose;
+        m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m->is_structure_only;
+        knobTranspose->derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m;
+        knobTranspose->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m->is_structure_only;
         knobTranspose->A = AT;
         knobTranspose->constant_valued = m->constant_valued;
         knobTranspose->constant_structured = m->constant_structured;
@@ -243,7 +229,7 @@ static void CreateOptimizedRepresentation(
 MatrixKnob* GetDerivative(MatrixKnob* mknob, DerivativeType type)
 {
     assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
-    return mknob->derivatives[type];
+    return mknob->is_structure_derivatives[type] ? NULL : mknob->derivatives[type];
 }
 
 void SetDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *derivative)
@@ -254,8 +240,58 @@ void SetDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *derivativ
         assert(!mknob->is_symmetric);
         assert(!mknob->is_structure_only || !mknob->is_structure_symmetric);
     }
-    mknob->derivatives[type] = derivative;
-    if (derivative->constant_valued) {
+    if (mknob->derivatives[type] && !mknob->is_structure_derivatives[type]) {
+        fprintf(stderr, "Warning: mknob->derivative[%d] is already set.\n", type);
+        return;
+    }
+    else {
+        mknob->derivatives[type] = derivative;
+        mknob->is_structure_derivatives[type] = false;
+    }
+
+    if (DERIVATIVE_TYPE_TRANSPOSE == type &&
+            (!derivative->derivatives[type] || derivative->is_structure_derivatives[type])) {
+        derivative->derivatives[type] = mknob;
+        derivative->is_structure_derivatives[type] = false;
+    }
+    if ((DERIVATIVE_TYPE_LOWER_TRIANGULAR == type || DERIVATIVE_TYPE_UPPER_TRIANGULAR == type) &&
+            (!derivative->derivatives[DERIVATIVE_TYPE_SYMMETRIC] || derivative->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC])) {
+        derivative->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = mknob;
+        derivative->is_structure_derivatives[type] = false;
+    }
+}
+
+MatrixKnob *GetStructureDerivative(MatrixKnob *mknob, DerivativeType type)
+{
+    assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
+    return mknob->derivatives[type];    
+}
+
+void SetStructureDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *derivative)
+{
+    assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
+    if (DERIVATIVE_TYPE_TRANSPOSE == type || DERIVATIVE_TYPE_SYMMETRIC == type) {
+        // no need to set transpose or symmetric version of A if A is symmetric
+        assert(!mknob->is_structure_symmetric);
+    }
+    if (mknob->derivatives[type]) {
+        // we can overwrite structure derivative with value derivative,
+        // but not vicex versa
+        fprintf(stderr, "Warning: mknob->derivative[%d] is already set.\n", type);
+        return;
+    }
+    else {
+        mknob->derivatives[type] = derivative;
+        mknob->is_structure_derivatives[type] = true;
+    }
+
+    if (DERIVATIVE_TYPE_TRANSPOSE == type && !derivative->derivatives[type]) {
+        derivative->derivatives[type] = mknob;
+        derivative->is_structure_derivatives[type] = true;
+    }
+    if ((DERIVATIVE_TYPE_LOWER_TRIANGULAR == type || DERIVATIVE_TYPE_UPPER_TRIANGULAR == type) && !derivative->derivatives[DERIVATIVE_TYPE_SYMMETRIC]) {
+        derivative->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = mknob;
+        derivative->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
     }
 }
 
@@ -311,28 +347,6 @@ void DeleteBackwardTriangularSolveKnob(FunctionKnob* fknob)
     //delete fknob; FIXME - segfaults
 }
 
-//
-// Forward triangular solve Ly = b, with A as the structure proxy of L.
-// 
-// ISSUES: 
-// 1. So far, A is treated not only as a structure proxy, but also as
-// as value proxy. This is not what we expected. However, if I want to use
-// A just as a structure proxy, and use L itself for the value, the call to 
-// forwardSolve(*L, y, b, *schedule, invPerm) throws segmentation fault. The
-// reason is: L is not in the expected form to SpMP. It seems that to SpMP,
-// a lower triangular matrix is represented with (1) non-diagonals, and (2) 
-// idiag. However, in the incoming paramters L_colptr, L_rowval and L_nzval, 
-// they include diagonals as well.
-// 2. CSC vs. CSR (i.e. A vs. A'). Another hidden assumption of this function
-// is it is forward solve for CSR array A. However, A is in CSC originally. So
-// calling this function is actually forward solve for CSR array A'. 
-// Now that A is not symmetric in value, but just in structure. Before calling
-// this function, we have to compose A as (L + spdiagm(1./diag(A) * triu(A))'.
-// Then we can call this function, and use A reliably as a value proxy of L.
-// That is why I added the bandage in context-test2.jl pcg_symgs_with_context_opt().
-// Please think how to get rid of this overhead. I think we have to use A only
-// as structure proxy of L and U, NOT as value proxy. But then we have to solve 
-// issue 1 above.
 static void TriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, const double *b, FunctionKnob* fknob,
@@ -352,27 +366,31 @@ static void TriangularSolve(
         assert(m != NULL);
 
         if ((m->schedule || m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] && m->derivatives[DERIVATIVE_TYPE_SYMMETRIC]->schedule) && m->constant_structured) {
+            // matrix has constant structure so reuse already available schedule
             if (m->schedule) schedule = m->schedule;
             else {
                 schedule = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC]->schedule;
                 m->schedule = schedule;
             }
         } else if (m->constant_structured) {
+            // if schedule is not available construct it
             if (m->constant_valued) {
+                // if it's constant valued, also save a shadow optimized representation
                 CreateOptimizedRepresentation(m, L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
                 L = m->A;
             }
 
             MatrixKnob *symKnob = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
             if (symKnob && (symKnob->A || symKnob->colptr)) {
-                if (!symKnob->A) {
-                    CreateOptimizedRepresentation(symKnob, L_numrows, L_numcols, symKnob->colptr, symKnob->rowval, symKnob->nzval);
-                }
+                // if structurally symmetric version of this matrix is available use it for
+                // constructing schedule
+                CreateOptimizedRepresentation(symKnob, L_numrows, L_numcols, symKnob->colptr, symKnob->rowval, NULL);
                 schedule = new LevelSchedule;
                 schedule->constructTaskGraph(*symKnob->A);
                 m->derivatives[DERIVATIVE_TYPE_SYMMETRIC]->schedule = schedule;
                 m->schedule = schedule;
             } else if (m->A) {
+                // if structurally symmetric version is not available, we have to construct it
                 schedule = new LevelSchedule;
 
                 int *symRowPtr = NULL, *symColIdx = NULL, *symDiagPtr = NULL, *symExtPtr = NULL;
@@ -392,18 +410,18 @@ static void TriangularSolve(
                        symRowPtr, symDiagPtr, symExtPtr, symColIdx,
                        PrefixSumCostFunction(symRowPtr)); 
 
-                    MatrixKnob *knobTranspose = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
-                    if (!knobTranspose) {
-                        knobTranspose = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL);
-                        m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = knobTranspose;
-                        knobTranspose->constant_valued = m->constant_valued;
-                        knobTranspose->constant_structured = m->constant_structured;
-                        knobTranspose->is_symmetric = m->is_symmetric;
-                        knobTranspose->is_structure_symmetric = m->is_structure_symmetric;
-                        knobTranspose->is_structure_only = true;
+                    if (!symKnob) {
+                        symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL);
+                        m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = symKnob;
+                        m->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
+                        symKnob->constant_valued = m->constant_valued;
+                        symKnob->constant_structured = m->constant_structured;
+                        symKnob->is_symmetric = m->is_symmetric;
+                        symKnob->is_structure_symmetric = m->is_structure_symmetric;
+                        symKnob->is_structure_only = true;
                     }
-                    knobTranspose->A = new CSR(m->A->m, m->A->n, symRowPtr, symColIdx, NULL);
-                    knobTranspose->schedule = schedule;
+                    symKnob->A = new CSR(m->A->m, m->A->n, symRowPtr, symColIdx, NULL);
+                    symKnob->schedule = schedule;
 
                     FREE(symDiagPtr);
                     FREE(symExtPtr);
@@ -415,8 +433,7 @@ static void TriangularSolve(
     } // fknob != NULL
 
     if (!schedule && !L) {
-        CSR *LT = CreateTransposedCSRCopyWith0BasedIndexing(
-            L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
+        CSR *LT = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
         needToDeleteL = true;
 
         schedule = new LevelSchedule;
@@ -448,18 +465,19 @@ static void TriangularSolve(
             delete LT;
 
             if (m && m->constant_structured) {
-                MatrixKnob *knobTranspose = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
-                if (!knobTranspose) {
-                    knobTranspose = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL);
-                    m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = knobTranspose;
-                    knobTranspose->constant_valued = m->constant_valued;
-                    knobTranspose->constant_structured = m->constant_structured;
-                    knobTranspose->is_symmetric = m->is_symmetric;
-                    knobTranspose->is_structure_symmetric = m->is_structure_symmetric;
-                    knobTranspose->is_structure_only = true;
+                MatrixKnob *symKnob = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
+                if (!symKnob) {
+                    symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL);
+                    m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = symKnob;
+                    m->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
+                    symKnob->constant_valued = m->constant_valued;
+                    symKnob->constant_structured = m->constant_structured;
+                    symKnob->is_symmetric = m->is_symmetric;
+                    symKnob->is_structure_symmetric = m->is_structure_symmetric;
+                    symKnob->is_structure_only = true;
                 }
-                knobTranspose->A = new CSR(m->A->m, m->A->n, symRowPtr, symColIdx, NULL);
-                knobTranspose->schedule = schedule;
+                symKnob->A = new CSR(m->A->m, m->A->n, symRowPtr, symColIdx, NULL);
+                symKnob->schedule = schedule;
                 m->schedule = schedule;
                 needToDeleteSchedule = false;
             } else {
@@ -475,11 +493,10 @@ static void TriangularSolve(
             CreateOptimizedRepresentation(m, L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
             L = m->A;
         } else if (m->is_symmetric) {
-            L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval, 1);
+            L = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
             needToDeleteL = true;
         } else {
-            CSR *LT = CreateTransposedCSRCopyWith0BasedIndexing(
-                L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
+            CSR *LT = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
             L = LT->transpose();
             delete LT;
             needToDeleteL = true;
