@@ -86,6 +86,16 @@ const context_test2 = Test(
     ]
 )
 
+const context_test2_without_reordering = Test(
+    "context-test2-without-reordering",
+    "context-test2-without-reordering.jl small-diag.mtx",
+    [
+        TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434107334e-5(.|\n)*rel_err=6.382732220893931e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434515133e-5(.|\n)*rel_err=6.629156171119774e-11",
+                     "Test pcg_symgs_with_context_opt"
+        )
+    ]
+)
+
 const context_test3 = Test(
     "context-test3",
     "context-test3.jl ipm/mps/osa-14",
@@ -292,6 +302,7 @@ const tests = [
     sanity_test3,
     context_test1,
     context_test2,
+    context_test2_without_reordering,
     context_test3,
     context_test4,
     liveness_test1,

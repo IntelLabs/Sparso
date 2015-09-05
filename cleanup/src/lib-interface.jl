@@ -154,9 +154,6 @@ function delete_function_knob(
     )
     eval(expr)
 end
-
-
-
 delete_function_knob(fknob :: Ptr{Void}) = delete_function_knob("DeleteFunctionKnob", fknob)
 
 function replace_lower_with_UT(
