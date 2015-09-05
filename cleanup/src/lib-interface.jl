@@ -18,7 +18,7 @@ is_structure_only :     Only the structure of matrix should be used.
 
  
 function new_matrix_knob(
-    A                      :: SparseMatrixCSC;
+    A                      :: SparseMatrixCSC,
     constant_valued        = false,
     constant_structured    = false,
     is_symmetric           = false,
