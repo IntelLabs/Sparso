@@ -62,8 +62,16 @@ const context_test1 = Test(
     "context-test1",
     "context-test1.jl small-diag.mtx",
     [
-        TestPattern(r"Original:(.|\n)*sum of x=-1.577312043410735e-5(.|\n)*rel_err=6.381531131954942e-13(.|\n)*New AST:(.|\n)*",
-                     "Test pcg_symgs"
+        TestPattern(r"sum of x=-1.5773120434107328e-5",
+                     "Test sum"
+        );
+
+        TestPattern(r"rel_err=6.384002479368132e-13",
+                     "Test rel_err"
+        );
+
+        TestPattern(r"New AST:",
+                     "Test New AST"
         )
     ]
 )
@@ -219,8 +227,12 @@ const call_replacement_test9 = Test(
     "call-replacement-test9",
     "call-replacement-test9.jl small-diag.mtx",
     [
-        TestPattern(r"TODO",
-                     "Test call replacement of TODO."
+        TestPattern(r"sum of x=-1.5773120434107304e-5",
+                     "Test orig sum"
+        );
+
+        TestPattern(r"accel sum of x=-1.577312043410732e-5",
+                     "Test accelerated sum"
         )
     ]
 )
@@ -229,8 +241,12 @@ const call_replacement_test10 = Test(
     "call-replacement-test10",
     "call-replacement-test10.jl small-diag.mtx",
     [
-        TestPattern(r"TODO",
-                     "Test call replacement of TODO."
+        TestPattern(r"sum of x=-1.5773120434107317e-5",
+                     "Test orig sum"
+        );
+
+        TestPattern(r"accel sum of x=-1.5773120434107307e-5",
+                     "Test accelerated sum"
         )
     ]
 )
@@ -239,8 +255,12 @@ const call_replacement_test11 = Test(
     "call-replacement-test11",
     "call-replacement-test11.jl small-diag.mtx",
     [
-        TestPattern(r"TODO",
-                     "Test call replacement of TODO."
+        TestPattern(r"sum of x=-1.5773120434107328e-5",
+                     "Test orig sum"
+        );
+
+        TestPattern(r"accel sum of x=-1.577312043410734e-5",
+                     "Test accelerated sum"
         )
     ]
 )
@@ -249,8 +269,8 @@ const call_replacement_test12 = Test(
     "call-replacement-test12",
     "call-replacement-test12.jl small-diag.mtx",
     [
-        TestPattern(r"TODO",
-                     "Test call replacement of TODO."
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,z::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+                     "Test call replacement of WAXPBY! for p = r + beta * p."
         )
     ]
 )
