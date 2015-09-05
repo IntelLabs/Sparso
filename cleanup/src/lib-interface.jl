@@ -151,7 +151,7 @@ Context-sensitive forward triangular solver, equivalent to Base.SparseMatrix.
 fwdTriSolve!(L, b).
 """
 function fwdTriSolve!(
-    L     :: SparseMatrixCSC,
+    L     :: SparseMatrixCSC{Float64, Int32}, 
     b     :: Vector,
     fknob :: Ptr{Void}
  )
@@ -170,7 +170,7 @@ end
 Context-sensitive backward triangular solver. 
 """
 function bwdTriSolve!(
-    U     :: SparseMatrixCSC, 
+    U     :: SparseMatrixCSC{Float64, Int32}, 
     b     :: Vector,
     fknob :: Ptr{Void}
  )

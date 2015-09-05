@@ -1,5 +1,5 @@
 function generate_symmetric_sparse_matrix(m)
-    A = SparseMatrixCSC{Cdouble, Clong}(sprand(m, m, 0.1))
+    A = SparseMatrixCSC{Cdouble, Cint}(sprand(m, m, 0.1))
     A = A*A'
     return A
 end
