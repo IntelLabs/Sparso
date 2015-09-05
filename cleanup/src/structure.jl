@@ -40,10 +40,11 @@ end
 
 @doc """ Post-processing function. Propagate lower part of a matrix. """
 function propagate_lower_structure(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator     :: String,
+    fknob_deletor     :: String,
+    matrices_to_track :: Tuple
 )
     proxy = ast.args[2]
     set_structure_proxy(ast, StructureProxy(true, false, false, proxy))
@@ -52,10 +53,11 @@ end
 
 @doc """ Post-processing function. Propagate upper part of a matrix. """
 function propagate_upper_structure(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator     :: String,
+    fknob_deletor     :: String,
+    matrices_to_track :: Tuple
 )
     proxy = ast.args[2]
     set_structure_proxy(ast, StructureProxy(false, true, false, proxy))
@@ -64,16 +66,17 @@ end
 
 @doc """ Post-processing function. Memoize a diagonal matrix. """
 function memoize_diagonal_structure(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator     :: String,
+    fknob_deletor     :: String,
+    matrices_to_track :: Tuple
 )
     set_structure_proxy(ast, StructureProxy(false, false, true, nothing))
     return true
 end
 
-@doc """ Check if arg2 is a sparse diagonal matrix """
+@doc """ Pre-processing function. Check if arg2 is a sparse diagonal matrix """
 function CS_spdiagm_times_any_check(
     ast           :: Expr,
     call_sites    :: CallSites,
@@ -90,10 +93,11 @@ end
 
 @doc """ Post-processing function. Propagate the structure of the last arg. """
 function propagate_last_structure(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator     :: String,
+    fknob_deletor     :: String,
+    matrices_to_track :: Tuple
 )
     A = last(ast.args)
     structure = get_structure_proxy(A) 
@@ -107,7 +111,10 @@ function propagate_last_structure(
     return true
 end
 
-@doc """ A function that will be called when no pattern could handle an AST. """
+@doc """
+Pre-processing function: A function that will be called when no pattern
+could handle an AST.
+"""
 function last_resort(
     ast           :: Expr,
     call_sites    :: CallSites,
@@ -126,7 +133,8 @@ const CS_tril_pattern = ExprPattern(
     (:NO_CHANGE, ),
     propagate_lower_structure,
     "",
-    ""
+    "",
+    ()
 )
 
 const CS_triu_pattern = ExprPattern(
@@ -137,7 +145,8 @@ const CS_triu_pattern = ExprPattern(
     (:NO_CHANGE, ),
     propagate_upper_structure,
     "",
-    ""
+    "",
+    ()
 )
 
 const CS_spdiagm_pattern = ExprPattern(
@@ -148,7 +157,8 @@ const CS_spdiagm_pattern = ExprPattern(
     (:NO_CHANGE, ),
     memoize_diagonal_structure,
     "",
-    ""
+    "",
+    ()
 )
 
 const CS_spdiagm_times_any_pattern = ExprPattern(
@@ -159,7 +169,8 @@ const CS_spdiagm_times_any_pattern = ExprPattern(
     (:NO_CHANGE, ),
     propagate_last_structure,
     "",
-    ""
+    "",
+    ()
 )
 
 const CS_assign_pattern = ExprPattern(
@@ -170,7 +181,8 @@ const CS_assign_pattern = ExprPattern(
     (:NO_CHANGE, ),
     propagate_last_structure,
     "",
-    ""
+    "",
+    ()
 )
 
 # This is the only pattern that will always be matched, justed based on its name.
@@ -184,7 +196,8 @@ const CS_last_resort_pattern = ExprPattern(
     (:NO_CHANGE, ),           # Useless
     do_nothing,               # Useless
     "",                       # Useless
-    ""                        # Useless
+    "",                       # Useless
+    ()
 )
 
 @doc """

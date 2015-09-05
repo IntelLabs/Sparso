@@ -104,6 +104,8 @@ end
 function new_function_knob(
     fknob_creator :: String
 )
+    assert(fknob_creator != "")
+
     # Simulate ccall((fknob_creator, LIB_PATH), Ptr{Void}, ()). We cannot directly
     # use this ccall here because (fknob_creator, LIB_PATH) is treated as a tuple,
     # instead of a pointer or expression.
@@ -115,12 +117,15 @@ function new_function_knob(
     )
     eval(expr)
 end
+new_function_knob() = new_function_knob("NewFunctionKnob")
 
 @doc """ Delete a function knob. """
 function delete_function_knob(
     fknob_deletor :: String, 
     fknob         :: Ptr{Void}
 )
+    assert(fknob_deletor != "")
+
     # Simulate ccall((fknob_deletor, LIB_PATH), Ptr{Void}, ()). We cannot directly
     # use this ccall here because (fknob_deletor, LIB_PATH) is treated as a tuple,
     # instead of a pointer or expression.
@@ -132,6 +137,7 @@ function delete_function_knob(
     )
     eval(expr)
 end
+delete_function_knob(fknob :: Ptr{Void}) = delete_function_knob("DeleteFunctionKnob", fknob)
 
 function replace_lower_with_UT(
     A     :: SparseMatrixCSC,
@@ -162,8 +168,6 @@ function fwdTriSolve!(
            ),
             L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
             pointer(b), pointer(b), fknob)
-#println("\t\tFwdTriSolve! done: sum y = ", sum(y), " y=", y)
-#println("\t\tFwdTriSolve! done: sum b = ", sum(b), " b=", b)
 end
 
 @doc """ 
@@ -178,9 +182,7 @@ function bwdTriSolve!(
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
                U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval),
-               pointer(b), pointer(b), fknob) #fknob)
-#println("\t\tBwdTriSolve! done: sum y = ", sum(y))#, " y=", y)
-#println("\t\tBwdTriSolve! done: sum b = ", sum(b), " b=", b)
+               pointer(b), pointer(b), fknob)
 end
 
 @doc """ 
@@ -483,57 +485,92 @@ function WAXPB(
 end
  
 @doc """
-A * D * B, where D is a diagonal matrix, and A, D, and B all have constant structures.
-A and B are given in transposed form, as they are in CSC in Julia but libcsr
-takes only CSR.
+Compute C = A * D * B, where A and B have constant structures, D is a diagonal
+matrix, and C must be a single-def matrix (and thus it must always keep the 
+structure of A * D * B). 
 
-ADB(A', D, B', fknob_ADB) functionality:
-   if fknob_ADB == NULL
-       return A * D * B
-   get the input mknob_A and mknob_B from fknob_ADB
-   if !mknob_A->constant_structured || !mknob_B->constant_structured (This check is actually already done by pattern matching)
-       return A * D * B
-   get the output mknob from fknob_ADB
-   if output mknob->structure_proxy == NULL
-       ADAT = adb_inspect(A', A), 
-       output mknob->structure_proxy = ADAT
-       output mknob->matrix = ADAT
-   d = diag(D)
-   adb_execute!(output mknob->matrix, A', A, d)
+The A and B are inputed as AT and BT (transposed A and B) in Julia CSC format,
+which become A and B in CSR.
+
+The requirement on C can always be respected by preparing the AST. For
+example, a statement X = A * D * B can be prepared into
+    GenSym(0) = A * D * B  # Here C is GenSym(0)
+    X = GenSym(0)
+Then there are two problems: (1) for the first statement: how a function generates
+and reuses context info? (2) For the second statement: how to propagate context
+info? Here we focus on the first problem.
+
+ADB(C, A', D, B', fknob_ADB) functionality:
+    if fknob_ADB == NULL
+        return C = A * D * B
+    
+    get the output mknob_C, and input mknob_A, D, B from fknob_ADB
+    assert(mknob_C != NULL)
+    assert(mknob_A != NULL)
+    assert(mknob_D != NULL)
+    assert(mknob_B != NULL)
+    
+    # Check inputs
+    assert(mknob_A->constant_structured)
+    assert(mknob_D->diagonal)
+    assert(mknob_B->constant_structured)
+    
+    # Compute output
+    assert(mknob_C->is_single_def)
+    if mknob_C->matrix == NULL
+        mknob_C->matrix = adb_inspect(A', B')
+    mknob_C->matrix = CSR_ADB(mknob_C->matrix,  A', B', diag(D))
+
+    # Return the result.
+    return mknob_C->matrix in CSC format
 """
 function ADB(
+    C     :: SparseMatrixCSC,
     AT    :: SparseMatrixCSC,
     D     :: SparseMatrixCSC,
     BT    :: SparseMatrixCSC,
     fknob :: Ptr{Void}
 )
     if fknob == NULL
-        return A * D * B
+        # This case should never be reached. We leave it here only to show how
+        # a library function can have the same interface with and without 
+        # context info.
+        assert(false)
+        return C = AT' * D * BT'
     end
+
+    mknob_C = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+    mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 1)
+    mknob_D = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 2)
+    mknob_B = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 3)
+    assert(mknob_C != C_NULL)
+    assert(mknob_A != C_NULL)
+    assert(mknob_D != C_NULL)
+    assert(mknob_B != C_NULL)
     
-    # Skip the checking of the input mknobs as it has been done by pattern matching
-    
-    mknob_out = ccall((:GetMknob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    structure_proxy = ccall((:GetStructureProxy, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_out)
-    csrA = SparseAccelerator.create_CSR(AT)
-    csrB = SparseAccelerator.create_CSR(BT)
-    if structure_proxy == C_NULL
+    # Check inputs and output
+    assert(ccall((:ConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_A))
+    #TODO: assert(mknob_D->diagonal)
+    assert(ccall((:ConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
+    #TODO: assert C is single def
+
+    csrA   = SparseAccelerator.create_CSR(AT)
+    csrB   = SparseAccelerator.create_CSR(BT)
+    csrADB = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_C)
+    if csrADB == C_NULL
         csrADB = ccall((:ADBInspect, LIB_PATH), Ptr{Void},
                         (Ptr{Void}, Ptr{Void}, Ptr{Void}),
                          csrA, csrB)
-        ccall((:SetStructureProxy, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_out, csrADB)
-        ccall((:SetMatrix, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_out, csrADB)
-    else
-        csrADB = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_out)
+        ccall((:SetMatrix, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_C, csrADB)
     end
-    
+
     d = diag(D)
     ccall((:CSR_ADB, LIB_PATH), Void,
           (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Cdouble}),
            csrADB, csrA, csrB, d)
 
     # Represent the result in CSC format
-    m = size(A, 1)
+    m = size(AT, 2)
     rowptr = pointer_to_array(
         ccall((:CSR_GetRowPtr, LIB_PATH), Ptr{Cint}, (Ptr{Void},), csrADB), (m + 1,))
     nnz = rowptr[m + 1] - 1
@@ -606,58 +643,71 @@ function dss_solve!(handle, rhs::Vector, sol::Vector)
 end
 
 @doc """ 
-Compute the sparse Cholesky factorization of a sparse matrix A. 
+Compute A = the sparse Cholesky factorization of a sparse matrix B, where B is
+constant in structure, and A must be a single-def.
 
 Functionality:
     if fknob == NULL
-        return cholfact_int32(A)
-    get the input mknob from fknob
-    if input mknob->structure_proxy == NULL || input mknob->matrix == NULL
-        return cholfact_int32(B)
-    get the output mknob from fknob
-    if output mknob->dss_handle == NULL
-        dss_handle = dss_analyze(input mknob->structure_proxy)
-        output mknob->dss_handle = dss_handle
-    dss_factor(output mknob->dss_handle, input mknob->matrix)
+        return A = cholfact_int32(B)
+    
+    get the output/input mknob_A and B from fknob
+    
+    # Check input
+    assert(mknob_B->constant_structured)
+    if mknob_B->matrix == NULL
+        return A = cholfact_int32(B)
+        
+    if mknob_A->dss_handle == NULL
+        mknob_A->dss_handle = dss_analyze(mknob_B->matrix)
+    dss_factor(mknob_A->dss_handle, mknob_B->matrix)
 """
 function cholfact_int32(
     A     :: SparseMatrixCSC,
+    B     :: SparseMatrixCSC,
     fknob :: Ptr{Void}
 )
     if fknob == NULL
-        return cholfact_int32(A)
+        # This case should never happen
+        assert(false)
+        return A = cholfact_int32(B)
     end
 
-    mknob_in        = ccall((:GetMknob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 1)
-    structure_proxy = ccall((:GetStructureProxy, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_in)
-    matrix          = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_in)
-    if structure_proxy == C_NULL || matrix == C_NULL
-        return cholfact_int32(A)
+    mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+    mknob_B = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 1)
+    assert(mknob_A != C_NULL)
+    assert(mknob_B != C_NULL)
+    
+    # Check inputs and output
+    assert(ccall((:ConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
+    # TODO: assert A is single def
+
+    csrB = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_B)
+    if csrB == C_NULL
+        return A = cholfact_int32(B)
     end
 
-    mknob_out  = ccall((:GetMknob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_out)
+    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_A)
     if dss_handle == NULL
-        dss_handle = dss_analyze(structure_proxy)
-        ccall((:SetDssHandle, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_out, dss_handle)
+        dss_handle = dss_analyze(csrB)
+        ccall((:SetDssHandle, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_A, dss_handle)
     end
-    dss_factor(dss_handles, matrix)
+    dss_factor(dss_handles, csrB)
 
     # ISSUE: how to return the original result?
 end
 
 @doc """ 
-y = R \ t
+Compute y = R \ t, where R is constant in structure.
 
 Functionality:
     if fknob == NULL
-       return R \ t
+       return y = R \ t
    get the input mknob_R from fknob
    if mknob_R->dss_handle == NULL
-       return R \ t2
+       return y = R \ t2
    else
        opt = MKL_DSS_DEFAULTS
-       dss_solve!(mknob_R->dss_handle, t2, dy)
+       dss_solve!(mknob_R->dss_handle, t, y)
 """
 function cholmod_factor_inverse_divide(
     y     :: Any,
@@ -666,15 +716,15 @@ function cholmod_factor_inverse_divide(
     fknob :: Ptr{Void}
 )
     if fknob == NULL
-        y = R \ t
-        return
+        # This case should never happen
+        assert(false)
+        return y = R \ t
     end
 
-    mknob_in   = ccall((:GetMknob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_in)
+    mknob_R    = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_R)
     if dss_handle == NULL
-        y = R \ t
-        return
+        return y = R \ t
     end
 
     opt = MKL_DSS_DEFAULTS

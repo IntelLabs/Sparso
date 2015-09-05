@@ -21,6 +21,7 @@ void  SetConstantStructured(MatrixKnob* mknob);
 void  SetValueSymmetric(MatrixKnob* mknob);
 void  SetStructureSymmetric(MatrixKnob *mknob);
 void  SetStructureOnly(MatrixKnob *mknob);
+void  SetMatrix(MatrixKnob* mknob, void* A);
 void* GetDssHandle(MatrixKnob* mknob);
 void* GetMatrix(MatrixKnob* mknob);
 void  DeleteMatrixKnob(MatrixKnob* mknob);
@@ -80,14 +81,8 @@ void BackwardTriangularSolve(
     int U_numrows, int U_numcols, int* U_colptr, int* U_rowval, double* U_nzval,
     double *y, const double *b, FunctionKnob* fknob);
     
-FunctionKnob* NewADBKnob();
-void  DeleteADBKnob(FunctionKnob* fknob);
-
-FunctionKnob* NewCholfactKnob();
-void  DeleteCholfactKnob(FunctionKnob* fknob);
-
-FunctionKnob* NewCholmodFactorInverseDivideKnob();
-void  DeleteCholmodFactorInverseDivideKnob(FunctionKnob* fknob);
+FunctionKnob* NewFunctionKnob();
+void DeleteFunctionKnob(FunctionKnob* fknob);
 
 /******************************************************************************/
 

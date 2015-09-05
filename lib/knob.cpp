@@ -61,19 +61,11 @@ struct MatrixKnob {
 
 // This is the base class of all function knobs
 struct FunctionKnob {
-    std::vector<MatrixKnob *> mknobs; // knobs for the matrix arguments of the function
+    // knobs for the result and matrix arguments of the function, and maybe others
+    // like consumers of the function. Each function knob may define this 
+    // vector in its own way.
+    std::vector<MatrixKnob *> mknobs;
 };
-
-// Function Knobs: each library function can choose to have a function knob in 
-// order to take advantage of the context info in it.
-// Otherwise, without a knob, the function just behaviors as usual.
-// The function knobs here do not have private data to save, and thus they are
-// simply inheriting from the base class. 
-class ForwardTriangularSolveKnob : public FunctionKnob { };
-class BackwardTriangularSolveKnob : public FunctionKnob { };
-class ADBKnob : public FunctionKnob { };
-class CholfactKnob : public FunctionKnob { };
-class CholmodFactorInverseDivideKnob : public FunctionKnob { };
 
 /**************************** Usage of knobs *****************************/
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
@@ -146,6 +138,11 @@ void SetStructureSymmetric(MatrixKnob *mknob)
 void SetStructureOnly(MatrixKnob *mknob)
 {
     mknob->is_structure_only = true;
+}
+
+void SetMatrix(MatrixKnob* mknob, void* A)
+{
+    mknob->A = (CSR*) A;
 }
 
 static void DeleteOptimizedRepresentation(MatrixKnob *m)
@@ -332,24 +329,14 @@ MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i)
     return fknob->mknobs[i];
 }
 
-FunctionKnob* NewForwardTriangularSolveKnob()
+FunctionKnob* NewFunctionKnob()
 {
-    return new ForwardTriangularSolveKnob;
+    return new FunctionKnob;
 }
 
-void DeleteForwardTriangularSolveKnob(FunctionKnob* fknob)
+void DeleteFunctionKnob(FunctionKnob* fknob)
 {
-    //delete fknob; FIXME - segfaults
-}
-
-FunctionKnob* NewBackwardTriangularSolveKnob()
-{
-    return new BackwardTriangularSolveKnob;
-}
-
-void DeleteBackwardTriangularSolveKnob(FunctionKnob* fknob)
-{
-    //delete fknob; FIXME - segfaults
+    delete fknob;
 }
 
 static void TriangularSolve(
@@ -538,36 +525,6 @@ void BackwardTriangularSolve(
     TriangularSolve(
         numrows, numcols, colptr, rowval, nzval, y, b, fknob,
         &backwardSolve);
-}
-
-FunctionKnob* NewADBKnob()
-{
-    return new ADBKnob;
-}
-
-void DeleteADBKnob(FunctionKnob* fknob)
-{
-    delete fknob;
-}
-
-FunctionKnob* NewCholfactKnob()
-{
-    return new CholfactKnob;
-}
-
-void DeleteCholfactKnob(FunctionKnob* fknob)
-{
-    delete fknob;
-}
-
-FunctionKnob* NewCholmodFactorInverseDivideKnob()
-{
-    return new CholmodFactorInverseDivideKnob;
-}
-
-void DeleteCholmodFactorInverseDivideKnob(void* fknob)
-{
-    delete fknob;
 }
 
 /* vim: set tabstop=8 softtabstop=4 sw=4 expandtab: */

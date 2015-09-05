@@ -82,8 +82,35 @@ const context_test3 = Test(
     "context-test3",
     "context-test3.jl ipm/mps/osa-14",
     [
-        TestPattern(r"TODO",
-                     "Running the original and accelerated ipm-ref"
+        TestPattern(r"New AST:(.|\n)*__AT__ = \(Main.ctranspose\)\(A",
+                     "Test if accelerated ipm-ref generates AT"
+        ),
+        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(R",
+                     "Test if accelerated ipm-ref generates matrix knob for R"
+        ),
+        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(B",
+                     "Test if accelerated ipm-ref generates matrix knob for B"
+        ),
+        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(__AT__",
+                     "Test if accelerated ipm-ref generates matrix knob for __AT__"
+        ),
+        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(D",
+                     "Test if accelerated ipm-ref generates matrix knob for D"
+        ),
+        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(A",
+                     "Test if accelerated ipm-ref generates matrix knob for A"
+        ),
+        TestPattern(r"New AST:(.|\n)*new_function_knob(.|\n)*new_function_knob(.|\n)*new_function_knob",
+                     "Test if accelerated ipm-ref generates function knobs"
+        ),
+        TestPattern(r"New AST:(.|\n)*\(SparseAccelerator,:ADB\)\)\(B,__AT__,D.*,A.*,##fknob#",
+                     "Test if accelerated ipm-ref generates ADB"
+        ),
+        TestPattern(r"New AST:(.|\n)*\(SparseAccelerator,:cholfact_int32\)\)\(R,B.*,##fknob#",
+                     "Test if accelerated ipm-ref generates cholfact_int32"
+        ),
+        TestPattern(r"New AST:(.|\n)*\(SparseAccelerator,:cholmod_factor_inverse_divide\)\)\(dy,R.*,t2,##fknob#",
+                     "Test if accelerated ipm-ref generates cholmod_factor_inverse_divide"
         )
     ]
 )
@@ -240,7 +267,7 @@ const name_resolution_test1 = Test(
 )
 
 const tests = [
-    name_resolution_test1,
+    context_test3,
     sanity_test1,
     sanity_test2,
     sanity_test3,
@@ -276,41 +303,47 @@ old_stdout = STDOUT
 for test in tests
     print("Testing ", test.name)
     log  = string(test.name, ".log")
+    
+    # Run the command. Redirect output to the log file
     file = open(log, "w+")
     redirect_stderr(file)
     redirect_stdout(file)
     output = ""
     try
         split_res = split(test.command)
-        output = readall(`$julia_command $split_res`)
+        run(`$julia_command $split_res`)
     catch ex
-       println("exception = ", ex)
+        println("exception = ", ex)
+    finally
+        flush(file)
     end
+    close(file)
+    redirect_stderr(old_stderr)
+    redirect_stdout(old_stdout)
+
+    # Read the output to a string
+    output = open(readall, log)
+    
+    # Match with patterns
     successful = true
     for pattern in test.patterns
         m = match(pattern.pattern, output)
         if m == nothing
             comment = pattern.comment
-            write(file, "\n****** Result:\n", output)
+            file = open(log, "a")
             write(file, "\n****** Failed in pattern:\n\tPattern: ",
                   string(pattern.pattern), "\n\tComment: ", comment)
             close(file)
-            redirect_stderr(old_stderr)
-            redirect_stdout(old_stdout)
-            println(": FAIL. See ", log)
             successful = false
-            break
         end
     end
     if successful
         succ = succ + 1
-        close(file)
-        redirect_stderr(old_stderr)
-        redirect_stdout(old_stdout)
         rm(log)
         println(": Pass")
     else
         fail = fail + 1
+        println(": FAIL. See ", log)
     end
 end
 

@@ -65,8 +65,13 @@ the Expr's args[1].args[2], :naarg12 means the negative :aarg12, etc.
 Pre_ and post_processing are optional call backs before and after replace. Usually
 they do nothing.
 
-Fknob_creator and _deletor describe how to create and delete the context info
-(fknob). Usually they are empty, which means to create/delete nothing.
+Now that the new AST (usually for a library function call) is generated, we need
+to prepare he function-specific context info (fknob). Fknob_creator and _deletor
+describe how to create and delete it. Usually they are empty, which means no
+fknob. But if there is one, since the function may have matrix inputs/output,
+the matrix-specific context info (mknobs) may need to be remembered in the fknob.
+These matrices are specified by matrices_to_track. Symbolic arguments may be 
+used here, in terms of the arguments in the new AST.
 """
 immutable ExprPattern <: Pattern
     name              :: String # Name of the pattern
@@ -77,6 +82,7 @@ immutable ExprPattern <: Pattern
     post_processing   :: Function
     fknob_creator     :: String
     fknob_deletor     :: String
+    matrices_to_track :: Tuple
 end
 
 @doc """
@@ -112,7 +118,8 @@ const SpMV_3_parameters_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_4_parameters_pattern = ExprPattern(
@@ -124,7 +131,8 @@ const SpMV_4_parameters_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_6_parameters_pattern = ExprPattern(
@@ -136,7 +144,8 @@ const SpMV_6_parameters_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const number_times_matrix_vector_pattern = ExprPattern(
@@ -147,7 +156,8 @@ const number_times_matrix_vector_pattern = ExprPattern(
     (:NO_CHANGE,),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const number_times_vector_pattern = ExprPattern(
@@ -158,7 +168,8 @@ const number_times_vector_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const WAXPBY_4_parameters_pattern = ExprPattern(
@@ -170,7 +181,8 @@ const WAXPBY_4_parameters_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 # Patterns that do transformation
@@ -184,7 +196,8 @@ const dot_pattern1 = ExprPattern(
      :arg2, :arg3),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_pattern1 = ExprPattern(
@@ -196,7 +209,8 @@ const SpMV_pattern1 = ExprPattern(
      :arg2, :arg3),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_pattern2 = ExprPattern(
@@ -208,7 +222,8 @@ const SpMV_pattern2 = ExprPattern(
      :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_pattern3 = ExprPattern(
@@ -220,7 +235,8 @@ const SpMV_pattern3 = ExprPattern(
      :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_pattern4 = ExprPattern(
@@ -232,7 +248,8 @@ const SpMV_pattern4 = ExprPattern(
      :arg2, :arg3, :arg4),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV_pattern5 = ExprPattern(
@@ -244,7 +261,8 @@ const SpMV_pattern5 = ExprPattern(
      :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV!_pattern1 = ExprPattern(
@@ -256,7 +274,8 @@ const SpMV!_pattern1 = ExprPattern(
      :arg2, :arg3, :arg4),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV!_pattern2 = ExprPattern(
@@ -268,7 +287,8 @@ const SpMV!_pattern2 = ExprPattern(
      :arg1, :aarg22, :aarg23, :aarg24, :aarg25, :aarg26, :aarg27),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const SpMV!_pattern3 = ExprPattern(
@@ -280,7 +300,8 @@ const SpMV!_pattern3 = ExprPattern(
      :arg1, :aarg22, :aarg23, :aarg24, 0, :arg1, :aarg27),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const WAXPBY_pattern1 = ExprPattern(
@@ -292,7 +313,8 @@ const WAXPBY_pattern1 = ExprPattern(
      1, :arg2, :aarg32, :aarg33),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const WAXPBY_pattern2 = ExprPattern(
@@ -304,7 +326,8 @@ const WAXPBY_pattern2 = ExprPattern(
      1, :arg2, :naarg32, :aarg33),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const WAXPBY!_pattern1 = ExprPattern(
@@ -316,7 +339,8 @@ const WAXPBY!_pattern1 = ExprPattern(
      :arg1, :aarg22, :aarg23, :aarg24, :aarg25),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const element_wise_multiply_pattern1 = ExprPattern(
@@ -328,7 +352,8 @@ const element_wise_multiply_pattern1 = ExprPattern(
      :arg2, :arg3),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 expr_patterns = [
@@ -513,7 +538,8 @@ function match_replace(
         end
         
         if pattern.pre_processing != do_nothing
-            if !pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+            if !pattern.pre_processing(ast, call_sites, pattern.fknob_creator,
+                                       pattern.fknob_deletor)
                 return false
             end
         end
@@ -524,7 +550,8 @@ function match_replace(
         replace(pattern, ast, symbol_info)
         
         if pattern.post_processing != do_nothing
-            if !pattern.post_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+            if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
+                                        pattern.fknob_deletor, pattern.matrices_to_track)
                 # AST has already been changed by replace(). However, post 
                 # processing fails. That AST might be wrong. So abort 
                 dprintln(1, 0, "to")

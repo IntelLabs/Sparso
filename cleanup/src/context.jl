@@ -35,56 +35,21 @@ Post-processing function of a pattern: Gather context sensitive info of the call
 site at the given AST.
 """
 function gather_context_sensitive_info(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator     :: String,
+    fknob_deletor     :: String,
+    matrices_to_track :: Tuple
 )
     symbol_info = call_sites.symbol_info
     site        = CallSite(ast, Vector(), Vector(), fknob_creator, fknob_deletor)
-    if type_of_ast_node(ast, symbol_info) <: AbstractSparseMatrix
-        result = symbol("result")
-        push!(site.matrices, result)
+    args        = ast.args
+    for arg in matrices_to_track
+        new_arg = replacement_arg(arg, args, nothing, symbol_info)
+        assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
+               typeof(new_arg) == GenSym)
+        push!(site.matrices, typeof(new_arg) == SymbolNode ? new_arg.name : new_arg)
     end
-    for arg in ast.args
-        if type_of_ast_node(arg, symbol_info) <: AbstractSparseMatrix
-            if typeof(arg) != Symbol && typeof(arg) != SymbolNode && typeof(arg) != GenSym
-                temp_symbol = symbol("arg")
-                push!(site.matrices, temp_symbol)
-            else 
-                push!(site.matrices, typeof(arg) == SymbolNode ? arg.name : arg)
-            end
-        end
-    end
-    push!(call_sites.sites, site)
-    return true
-end
-
-@doc """
-Post-processing function of CS_fwd/bwdTriSolve!_pattern.
-"""
-function CS_fwdBwdTriSolve!_post_process(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
-)
-    # So far, the pattern is in the form like SparseAccelerator.fwdTriSolve!(L, z) 
-    # or bwdTriSolve!(U, z). We need to replace them as 
-    # SparseAccelerator.fwdTriSolve!(A, z) and bwdTriSolve!(A, z). In this way,
-    # the library is faster to build the dependence graph.
-    L_or_U = ast.args[2]
-    structure = get_structure_proxy(L_or_U) 
-    A = structure.proxy
-    ast.args[2] = A
-
-    # Remember this call site so that we will add a fknob for it later: So that 
-    # the library willl remember that dependence graph (or its schedule) inside
-    # the fknob.
-    site        = CallSite(ast, Vector(), Vector(), fknob_creator, fknob_deletor)
-    symbol_info = call_sites.symbol_info
-    assert(type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix)
-    push!(site.matrices, typeof(A) == SymbolNode ? A.name : A)
     push!(call_sites.sites, site)
     return true
 end
@@ -118,49 +83,33 @@ function CS_ADAT_check(
 end
 
 @doc """ 
-Post-processing function of CS_cholsolve_assign_pattern
+Post-processing function of CS_ADAT_assign_pattern
 """
-function CS_cholsolve_assign_post_replacement(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+function CS_ADAT_assign_post_replacement(
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator     :: String,
+    fknob_deletor     :: String,
+    matrices_to_track :: Tuple
 )
-    # The current AST is cholmod_factor_inverse_divide(y, R, t, fknob)
-    # TODO: If y is not allocated space (not live) before the loop, do it here.
-    # fknob is not added for now, which will be added automatically later.
-    return gather_context_sensitive_info(ast, call_sites, fknob_creator, fknob_deletor)
-end
-
-@doc """ 
-Post-processing function of CS_ADAT_pattern
-"""
-function CS_ADAT_post_replacement(
-    ast           :: Expr,
-    call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
-)
-    # We need to replace A*D*A' into CSR_ADB(A', D, A, fknob). At this 
-    # moment, it is in the middle form of CSR_ADB(A, D, A'). That means:
+    # We need to replace C = A * D * A' into ADB(C, A', D, A, fknob). At this 
+    # moment, it is in the middle form of ADB(C, A, D, A). That means:
     # (1) Make a symbol AT. Insert AT = A' before the loop (This is to hoist A'
     #     out of loop)
-    # (2) Replace CSR_ADB(A, D, A') as CSR_ADB(AT, D, A).
+    # (2) Replace ADB(C, A, D, A) as CSR_ADB(C, AT, D, A).
     # fknob is not added for now, which will be added automatically later.
     action = InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
     push!(call_sites.actions, action)
 
-    A  = ast.args[2]
+    A  = ast.args[3]
     assert(typeof(A) == SymbolNode)
-    D = ast.args[3]
-    AT = copy(A)
-    AT.name = symbol(string("__", string(A.name), "T__"))
+    AT = Symbol(string("__", string(A.name), "T__"))
     stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
     
-    ast.args[2] = AT
+    ast.args[3] = AT
 
-    return gather_context_sensitive_info(ast, call_sites, fknob_creator, fknob_deletor)
+    return gather_context_sensitive_info(ast, call_sites, fknob_creator, fknob_deletor, matrices_to_track)
 end
 
 @doc """
@@ -249,7 +198,8 @@ const CS_ADAT_AT_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const CS_ADAT_pattern = ExprPattern(
@@ -257,11 +207,24 @@ const CS_ADAT_pattern = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
     (nothing, nothing, nothing, nothing, CS_ADAT_AT_pattern),
     CS_ADAT_check,
+    (:NO_CHANGE, ),
+    do_nothing,
+    "",
+    "",
+    ()
+)
+
+const CS_ADAT_assign_pattern = ExprPattern(
+    "CS_ADAT_assign_pattern",
+    (:(=), SparseMatrixCSC, SparseMatrixCSC),
+    (nothing, nothing, CS_ADAT_pattern),
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:ADB)),
-     :arg2, :arg3, :arg2),
-    CS_ADAT_post_replacement,
-    "NewADBKnob",
-    "DeleteADBKnob"
+      :arg1, :aarg22, :aarg23, :aarg22),
+    CS_ADAT_assign_post_replacement,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg2, :arg3, :arg4, :arg5)
 )
 
 const CS_cholfact_int32_pattern = ExprPattern(
@@ -269,11 +232,24 @@ const CS_cholfact_int32_pattern = ExprPattern(
     (:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC{Float64, Int32}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
+    (:NO_CHANGE, ),
+    do_nothing,
+    "",
+    "",
+    ()
+)
+
+const CS_cholfact_int32_assign_pattern = ExprPattern(
+    "CS_cholfact_int32_assign_pattern",
+    (:(=), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Base.SparseMatrix.CHOLMOD.Factor{Float64}),
+    (nothing, nothing, CS_cholfact_int32_pattern),
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_int32)),
-     :arg2),
+     :arg1, :aarg22),
     gather_context_sensitive_info,
-    "NewCholfactKnob",
-    "DeleteCholfactKnob"
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg2, :arg3)
 )
 
 const CS_cholsolve_pattern = ExprPattern(
@@ -284,7 +260,8 @@ const CS_cholsolve_pattern = ExprPattern(
     (:NO_CHANGE, ),
     do_nothing,
     "",
-    ""
+    "",
+    ()
 )
 
 const CS_cholsolve_assign_pattern = ExprPattern(
@@ -294,9 +271,10 @@ const CS_cholsolve_assign_pattern = ExprPattern(
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholmod_factor_inverse_divide)),
      :arg1, :aarg22, :aarg23),
-    CS_cholsolve_assign_post_replacement,
-    "NewCholmodFactorInverseDivideKnob",
-    "DeleteCholmodFactorInverseDivideKnob"
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg3,)
 )
 
 @doc """ 
@@ -310,9 +288,10 @@ const CS_fwdTriSolve!_pattern = ExprPattern(
     CS_fwdBwdTriSolve!_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:fwdTriSolve!)),
       :arg2, :arg3),
-    CS_fwdBwdTriSolve!_post_process,
-    "NewForwardTriangularSolveKnob",
-    "DeleteForwardTriangularSolveKnob"
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg2,)
 )
  
 @doc """
@@ -326,15 +305,16 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
     CS_fwdBwdTriSolve!_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:bwdTriSolve!)),
       :arg2, :arg3),
-    CS_fwdBwdTriSolve!_post_process,
-    "NewBackwardTriangularSolveKnob",
-    "DeleteBackwardTriangularSolveKnob"
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg2,)
 )
 
 @doc """" Patterns that will actually transform the code. """
 CS_transformation_patterns = [
-    CS_ADAT_pattern,
-    CS_cholfact_int32_pattern,
+    CS_ADAT_assign_pattern,
+    CS_cholfact_int32_assign_pattern,
     CS_cholsolve_assign_pattern,
     CS_fwdTriSolve!_pattern,
     CS_bwdTriSolve!_pattern
@@ -384,12 +364,24 @@ function create_new_function_knob(
     new_stmts :: Vector{Statement},
     call_site :: CallSite
 )
-    fknob    = gensym("fknob")
-    new_stmt = Expr(:(=), fknob, 
-                Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob),
-                      call_site.fknob_creator
-                    )
-               )
+    assert(call_site.fknob_creator != "")
+    
+    fknob = gensym("fknob")
+    if call_site.fknob_creator == "NewFunctionKnob"
+        # Create a function knob. It has no private info specific to that function.
+        # Call the parameterless version of new_function_knob for cleaner code.
+        new_stmt = Expr(:(=), fknob, 
+                        Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob))
+                   )
+    else
+        # So far, we do not create any special knob. So this case is never reached.
+        assert(false)
+        new_stmt = Expr(:(=), fknob, 
+                        Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob),
+                              call_site.fknob_creator
+                        )
+                   )
+    end
     push!(new_stmts, Statement(0, new_stmt))
     call_site.ast.args = [call_site.ast.args; fknob]
 
@@ -416,7 +408,19 @@ function create_delete_function_knob(
     fknob_deletor :: String,
     fknob         :: Symbol
 )
-    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob), fknob_deletor, fknob)
+    assert(call_site.fknob_deletor != "")
+
+    if call_site.fknob_deletor == "DeleteFunctionKnob"
+        # Delete a function knob, which has no private info specific to that function.
+        # Call the 1-parameter version of delete_function_knob for cleaner code.
+        new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob), 
+                         fknob)
+    else
+        # So far, we have not created any special knob. So this case is never reached.
+        assert(false)
+        new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob),
+                         fknob_deletor, fknob)
+    end
     push!(new_stmts, Statement(0, new_stmt))
 end
 
