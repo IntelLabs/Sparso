@@ -67,12 +67,6 @@ void  SetStructureDerivative(MatrixKnob* mknob, DerivativeType type, MatrixKnob 
 void  AddMatrixKnob(FunctionKnob* fknob, MatrixKnob* mknob);
 MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i);
 
-FunctionKnob* NewForwardTriangularSolveKnob();
-void  DeleteForwardTriangularSolveKnob(FunctionKnob* fknob);
-
-FunctionKnob* NewBackwardTriangularSolveKnob();
-void  DeleteBackwardTriangularSolveKnob(FunctionKnob* fknob);
-
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, const double *b, FunctionKnob* fknob);

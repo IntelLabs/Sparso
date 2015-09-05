@@ -267,7 +267,6 @@ const name_resolution_test1 = Test(
 )
 
 const tests = [
-    context_test3,
     sanity_test1,
     sanity_test2,
     sanity_test3,

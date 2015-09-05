@@ -126,17 +126,37 @@ function delete_function_knob(
 )
     assert(fknob_deletor != "")
 
-    # Simulate ccall((fknob_deletor, LIB_PATH), Ptr{Void}, ()). We cannot directly
+    # Simulate ccall((fknob_deletor, LIB_PATH), Void, (Ptr{Void},), fknob). We cannot directly
     # use this ccall here because (fknob_deletor, LIB_PATH) is treated as a tuple,
     # instead of a pointer or expression.
     expr = Expr(:call, 
         TopNode(:ccall), 
         Expr(:call, TopNode(:tuple), QuoteNode(fknob_deletor), LIB_PATH), 
-        Void, 
-        Expr(:call, TopNode(:svec))
+        GlobalRef(Main, :Void), 
+        Expr(:call, 
+                TopNode(:svec),
+                Expr(:call, 
+                      TopNode(:apply_type), 
+                      GlobalRef(Main, :Ptr),
+                      GlobalRef(Main, :Void)
+                )
+        ),
+        Expr(:call, 
+                TopNode(:unsafe_convert), 
+                Expr(:call, 
+                      TopNode(:apply_type), 
+                      GlobalRef(Main, :Ptr),
+                      GlobalRef(Main, :Void)
+                ),
+                fknob
+        ),
+        fknob
     )
     eval(expr)
 end
+
+
+
 delete_function_knob(fknob :: Ptr{Void}) = delete_function_knob("DeleteFunctionKnob", fknob)
 
 function replace_lower_with_UT(

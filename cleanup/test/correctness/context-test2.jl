@@ -135,9 +135,9 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     (SparseAccelerator.set_value_symmetric)(__mknobA)
     (SparseAccelerator.set_constant_valued)(__mknobL)
     (SparseAccelerator.set_constant_valued)(__mknobU)
-    __fknob_8201 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
+    __fknob_8201 = (SparseAccelerator.new_function_knob)()
     (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
-    __fknob_8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
+    __fknob_8221 = (SparseAccelerator.new_function_knob)()
     (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
 
     # Set up reordering:
@@ -246,8 +246,8 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         x = new_x
     end
     
-    (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",__fknob_8221)
-    (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",__fknob_8201)
+    (SparseAccelerator.delete_function_knob)(__fknob_8221)
+    (SparseAccelerator.delete_function_knob)(__fknob_8201)
     (SparseAccelerator.delete_matrix_knob)(__mknobL)
     
     total_time = time() - total_time

@@ -408,9 +408,9 @@ function create_delete_function_knob(
     fknob_deletor :: String,
     fknob         :: Symbol
 )
-    assert(call_site.fknob_deletor != "")
+    assert(fknob_deletor != "")
 
-    if call_site.fknob_deletor == "DeleteFunctionKnob"
+    if fknob_deletor == "DeleteFunctionKnob"
         # Delete a function knob, which has no private info specific to that function.
         # Call the 1-parameter version of delete_function_knob for cleaner code.
         new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob), 
