@@ -15,16 +15,23 @@ struct FunctionKnob;
  */
 MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval,
     bool constant_valued, bool constant_structured, bool is_symmetric, 
-    bool is_structure_symmetric, bool is_structure_only);
-void  SetConstantValued(MatrixKnob* mknob);
-void  SetConstantStructured(MatrixKnob* mknob);
-void  SetValueSymmetric(MatrixKnob* mknob);
-void  SetStructureSymmetric(MatrixKnob *mknob);
-void  SetStructureOnly(MatrixKnob *mknob);
-void  SetMatrix(MatrixKnob* mknob, void* A);
-void* GetDssHandle(MatrixKnob* mknob);
-void* GetMatrix(MatrixKnob* mknob);
+    bool is_structure_symmetric, bool is_structure_only, bool is_single_def);
 void  DeleteMatrixKnob(MatrixKnob* mknob);
+void SetConstantValued(MatrixKnob* mknob);
+bool IsConstantValued(MatrixKnob* mknob);
+void SetConstantStructured(MatrixKnob* mknob);
+bool IsConstantStructured(MatrixKnob* mknob);
+void SetValueSymmetric(MatrixKnob *mknob);
+bool IsValueSymmetric(MatrixKnob *mknob);
+void SetStructureSymmetric(MatrixKnob *mknob);
+bool IsStructureSymmetric(MatrixKnob *mknob);
+void SetStructureOnly(MatrixKnob *mknob);
+bool IsStructureOnly(MatrixKnob *mknob);
+void SetMatrix(MatrixKnob* mknob, void* A);
+void* GetMatrix(MatrixKnob* mknob);
+void SetDssHandle(MatrixKnob* mknob, void* dss_handle);
+void* GetDssHandle(MatrixKnob* mknob);
+void PropagateMatrixInfo(MatrixKnob* to_mknob, MatrixKnob* from_mknob);
 
 /**
  * Compiler lets the library know if simple derivatives of the given matrix is already

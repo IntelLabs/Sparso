@@ -5,124 +5,8 @@ using MatrixMarket
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 CompilerTools.LivenessAnalysis.set_debug_level(6)
 
-#include("./ipm-ref.jl")
+include("./ipm-ref.jl")
 include("utils.jl")
-
-function speye_int32(m::Integer)
-  rowval = [Int32(x) for x in [1:m;]]
-  colptr = [Int32(x) for x in [rowval; m + 1]]
-  nzval = ones(Float64, m)
-  return SparseMatrixCSC(m, m, colptr, rowval, nzval)
-end
-
-# Compared to the Jongsoo's original ipm_ref(), the following changes are made
-# to make it work around OptFramework issues:
-#(1) No default parameter
-#(2) No print
-#(3) cholfact_int32(B) instead of cholfact(SparseMatrixCSC{Float64, Int64}(B))
-
-function cholfact_int32(B :: SparseMatrixCSC{Float64, Int32})
-    return cholfact(SparseMatrixCSC{Float64, Int64}(B))
-end
-
-function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: objective
-  t0 = time()
-  (m,n) = size(A)
-
-# set initial point, based on largest element in (A,b,p)
-  bigM = maximum(A)
-  bigM = maximum([norm(b, Inf) norm(p, Inf) bigM])
-  x = 100*bigM*ones(n)
-  s = x
-  y = zeros(m)
-
-  bc = 1 + maximum([norm(b) norm(p)])
-
-  relResidual = NaN
-  iter=1
-
-  blas1_time = 0.
-  spgemm_time = 0.
-  fact_time = 0.
-  trslv_time = 0.
-  spmv_time = 0.
-
-  D = speye_int32(n)
-
-  for iter=1:200
-
-    # compute residuals
-    spmv_time -= time()
-    Rd = A'*y + s - p
-    Rp = A*x - b
-    spmv_time += time()
-
-    blas1_time -= time()
-    Rc = x.*s
-    mu = mean(Rc)
-    relResidual = norm([Rd; Rp; Rc])/bc
-    blas1_time += time()
-
-    if (relResidual <= 1e-7 && mu <= 1e-7) break; end
-
-    blas1_time -= time()
-    Rc = Rc - min(0.1, 100*mu)*mu
-
-    # set up the scaling matrix, and form the coefficient matrix for
-    # the linear system
-    d = min(5.e+15, x./s)
-    blas1_time += time()
-
-    spgemm_time -= time()
-    D.nzval = d
-    B = A*D*A'
-    spgemm_time += time()
-
-    # use the form of the Cholesky routine "cholinc" that's best
-    # suited to interior-point methods
-    fact_time -= time()
-    R = cholfact_int32(B)
-    fact_time += time()
-
-    # set up the right-hand side
-    blas1_time -= time()
-    t1 = x.*Rd - Rc;
-    blas1_time += time()
-
-    spmv_time -= time()
-    t2 = -(Rp + A*(t1./s));
-    spmv_time += time()
-
-    # solve it and recover the other step components
-    trslv_time -= time()
-    dy = R\t2
-    trslv_time += time()
-
-    spmv_time -= time()
-    temp = A'*dy
-    spmv_time += time()
-
-    blas1_time -= time()
-    dx = (x.*temp + t1)./s
-    ds = -(s.*dx + Rc)./x
-
-    tau = max(.9995, 1 - mu)
-    ap = -1/minimum([dx./x; -1])
-    ad = -1/minimum([ds./s; -1])
-    ap = tau*ap
-    ad = tau*ad
-    x = x + ap*dx
-    s = s + ad*ds
-    y = y + ad*dy
-    blas1_time += time()
-  end
-
-  blas1_time -= time()
-  f = p'*x
-  blas1_time += time()
-
-  x, time() - t0, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time, iter, relResidual, f[1][1]
-end
 
 # This code is what we expect to generate by context-sensitive optimizations.
 # It is used for debugging purpose only
@@ -149,9 +33,63 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
   spmv_time = 0.
 
   D = speye_int32(n)
+  
+  # There are two kinds of matrices we would like to trace: one is constant value,
+  # the other constant structure.
+  # For a constant-valued matrix, since it is not defined but referenced in the
+  # loop, it must already have a reprsentation in a fixed memory. Thus we can 
+  # safely pass its name into new_matrix_knob(), which will remember its 
+  # representation. 
+  # For a constant-structured matrix, however, it is defined in the loop, and in
+  # each definition, it might be assigned a representation in a different memory,
+  # even though every time the representation assigned has the same structure.
+  # Therefore, we cannot pass its name into new_matrix_knob() at this moment, and
+  # new_matrix_knob() should not remember its representation, which may not 
+  # even exist at this moment. Instead, every time is it defined in the loop, its
+  # representation should be recorded into its matrix knob.
 
-            __AT__ = (Main.ctranspose)(A)
-            __fknob_8483 = (SparseAccelerator.new_function_knob)("NewADBKnob")
+  # Hoist AT out of loop. This is currently done in pattern replacement.
+  # TODO: have a separate loop invariant hoisting phase.
+  __AT__ = (Main.ctranspose)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})
+
+  # Create mknobs for constant-valued matrices. They are of course constant-structured.
+  __mknob__AT___8599 = SparseAccelerator.new_matrix_knob(__AT__,true,true,false,false,false,false)
+  __mknobA_8601      = SparseAccelerator.new_matrix_knob(A,     true,true,false,false,false,false)
+
+  # Create mknobs for constant-structured matrices in the source code
+  # Note R and B are also single-defs: key to enable context info propagation.
+  # D is also single-def, but that is not important for this application.
+  __mknobR_8596 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+  __mknobB_8598 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+  __mknobD_8600 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+
+  # Create mknobs for a function call at each call site, representing the
+  # call's output, if the output is constant in structure or value. We do not
+  # neeed this for cholmod_factor_inverse_divide, since its output is a vector,
+  # while we track only matrices: it is OK, because our principle is: if there
+  # is context info, make sure it is always correct and we can use it; if there
+  # is not, we simply use nothing. Any way, a function call's result must remain
+  # the same, no matter it has a fknob with it or not.
+  # Any function call's result is a single-def (Defined only the function call).
+  __mknob_ADB            = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+  __mknob_cholfact_int32 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+
+  # Create fknobs for a function call at each call site, and add related mknobs
+  # For ADB
+  __fknob_8602 = SparseAccelerator.new_function_knob()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknob_ADB,__fknob_8602)
+  (SparseAccelerator.add_mknob_to_fknob)(__mknob__AT___8599,__fknob_8602)
+  (SparseAccelerator.add_mknob_to_fknob)(__mknobD_8600,__fknob_8602)
+  (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601,__fknob_8602)
+
+  # For cholfact_int32
+  __fknob_8622 = (SparseAccelerator.new_function_knob)()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknob_cholfact_int32,__fknob_8622)
+  (SparseAccelerator.add_mknob_to_fknob)(__mknobB_8598,__fknob_8622)
+
+  # For cholmod_factor_inverse_divide
+  __fknob_8623 = (SparseAccelerator.new_function_knob)()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknobR_8596,__fknob_8623)
 
   for iter=1:200
 
@@ -179,15 +117,17 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
 
     spgemm_time -= time()
     D.nzval = d
-#    B = A*D*A'
-            B = SparseAccelerator.ADB(__AT__,D,A,__fknob_8483) # line 69:
+    #B = A*D*A'
+    B = SparseAccelerator.ADB(__AT__,D,A,__fknob_8602)
+    SparseAccelerator.propagate_matrix_info(__mknobB_8598, __mknob_ADB)
     spgemm_time += time()
 
     # use the form of the Cholesky routine "cholinc" that's best
     # suited to interior-point methods
     fact_time -= time()
-#    R = cholfact_int32(B)
-            SparseAccelerator.cholfact(R,B) # line 75:
+    #R = cholfact_int32(B)
+    R = SparseAccelerator.cholfact_int32(B,__fknob_8622)
+    SparseAccelerator.propagate_matrix_info(__mknobR_8596, __mknob_cholfact_int32)
     fact_time += time()
 
     # set up the right-hand side
@@ -201,8 +141,8 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
 
     # solve it and recover the other step components
     trslv_time -= time()
-#    dy = R\t2
-            SparseAccelerator.cholmod_factor_inverse_divide(dy,R,t2) # line 89:
+    #dy = R\t2
+    dy = SparseAccelerator.cholmod_factor_inverse_divide(R,t2,__fknob_8623)
     trslv_time += time()
 
     spmv_time -= time()
@@ -223,7 +163,17 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
     y = y + ad*dy
     blas1_time += time()
   end
-            (SparseAccelerator.delete_function_knob)("DeleteADBKnob",__fknob_8483) # line 56:
+
+  (SparseAccelerator.delete_function_knob)(__fknob_8602)
+  (SparseAccelerator.delete_function_knob)(__fknob_8622)
+  (SparseAccelerator.delete_function_knob)(__fknob_8623)
+  (SparseAccelerator.delete_matrix_knob)(__mknobR_8596)
+  (SparseAccelerator.delete_matrix_knob)(__mknobB_8598)
+  (SparseAccelerator.delete_matrix_knob)(__mknob__AT___8599)
+  (SparseAccelerator.delete_matrix_knob)(__mknobA_8601)
+  (SparseAccelerator.delete_matrix_knob)(__mknobD_8600) # line 56:
+  (SparseAccelerator.delete_matrix_knob)(__mknob_ADB)
+  (SparseAccelerator.delete_matrix_knob)(__mknob_cholfact_int32) # line 56:
 
   blas1_time -= time()
   f = p'*x

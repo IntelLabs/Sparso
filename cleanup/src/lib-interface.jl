@@ -14,32 +14,58 @@ is_symmetric:           The matrix is symmetric in value.
                         It implies is_structure_symmetric below.
 is_structure_symmetric: The matrix is symmetric in structure.
 is_structure_only :     Only the structure of matrix should be used.
+is_single_def:          The matrix is statically defined only once.
 """
-
- 
 function new_matrix_knob(
     A                      :: SparseMatrixCSC,
     constant_valued        = false,
     constant_structured    = false,
     is_symmetric           = false,
     is_structure_symmetric = false,
-    is_structure_only      = false
+    is_structure_only      = false,
+    is_single_def          = false
  )
     assert(!constant_valued || constant_structured)
     assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
                    (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-                    Bool, Bool, Bool, Bool, Bool),
+                    Bool, Bool, Bool, Bool, Bool, Bool),
                    A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                    constant_valued, constant_structured, is_symmetric,
-                   is_structure_symmetric, is_structure_only)
+                   is_structure_symmetric, is_structure_only, is_single_def)
 end
 
-@doc """ Increment the version of a matrix. """
-function increment_matrix_version(
-    mknob :: Ptr{Void}
-)
-    ccall((:IncrementMatrixVersion, LIB_PATH), Void, (Ptr{Void},), mknob)
+@doc """
+Create a knob for a matrix with the given properties of it, while this matrix
+might not have been created yet.
+
+Properties: 
+constant_valued:        The matrix is a constant in value. It implies 
+                        constant_structured below.
+constant_structured:    The matrix has always the same structure, even if its
+                        value may be changed.
+is_symmetric:           The matrix is symmetric in value.
+                        It implies is_structure_symmetric below.
+is_structure_symmetric: The matrix is symmetric in structure.
+is_structure_only :     Only the structure of matrix should be used.
+is_single_def:          The matrix is statically defined only once.
+"""
+function new_matrix_knob(
+    constant_valued        = false,
+    constant_structured    = false,
+    is_symmetric           = false,
+    is_structure_symmetric = false,
+    is_structure_only      = false,
+    is_single_def          = false
+ )
+    assert(!constant_valued || constant_structured)
+    assert(!is_symmetric || is_structure_symmetric)
+    mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
+                   (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+                    Bool, Bool, Bool, Bool, Bool, Bool),
+                   0, 0, C_NULL, C_NULL, C_NULL,
+                   constant_valued, constant_structured, is_symmetric,
+                   is_structure_symmetric, is_structure_only, is_single_def)
 end
 
 @doc """ Set the matrix as constant_structured. """
@@ -89,6 +115,14 @@ function delete_matrix_knob(
     mknob :: Ptr{Void}
 )
     ccall((:DeleteMatrixKnob, LIB_PATH), Void, (Ptr{Void},), mknob)
+end
+
+@doc """ Propagate a matrix knob's information to another. """
+function propagate_matrix_info(
+    to_mknob   :: Ptr{Void},
+    from_mknob :: Ptr{Void}
+)
+    ccall((:PropagateMatrixInfo, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), to_mknob, from_mknob)
 end
 
 @doc """ Associate a matrix knob with a function knob. """
@@ -502,24 +536,49 @@ function WAXPB(
 end
  
 @doc """
-Compute C = A * D * B, where A and B have constant structures, D is a diagonal
-matrix, and C must be a single-def matrix (and thus it must always keep the 
-structure of A * D * B). 
+Compute A * D * B, where A and B have constant structures, D is a diagonal
+matrix.
 
 The A and B are inputed as AT and BT (transposed A and B) in Julia CSC format,
 which become A and B in CSR.
 
-The requirement on C can always be respected by preparing the AST. For
-example, a statement X = A * D * B can be prepared into
-    GenSym(0) = A * D * B  # Here C is GenSym(0)
-    X = GenSym(0)
-Then there are two problems: (1) for the first statement: how a function generates
-and reuses context info? (2) For the second statement: how to propagate context
-info? Here we focus on the first problem.
+An additional fknob is passed in, which contains a matrix knob representing the
+output of this function, and 3 other matrix knobs representing the input of this
+function (A, D, B).
 
-ADB(C, A', D, B', fknob_ADB) functionality:
+In addition to its original semantics, which is returning A * D *B, this
+function also reuses context info (from the input matrix knobs), and generates
+new context info (for the output matrix knob). 
+
+If the source statements are 
+    for  
+        X = A * D * B
+they have been transformed into the following form before executing this function:
+    C = Symbol("ouptut") # representing the ouptut of the call at this call site
+    mknob_C = new_matrix_knob(properties of C)
+    mknob_A = new_matrix_knob(properties of A)
+    mknob_D = new_matrix_knob(properties of D)
+    mknob_B = new_matrix_knob(properties of B)
+    mknob_X = new_matrix_knob(properties of X)
+    fknob_ADB = new_function_knob()
+    add mknob_C, _A, _D, _B to fknob_ADB
+    for 
+        X = ADB(AT, D, BT, fknob_ADB)
+        knob_X = mknob_C  #propagate mknob_C information to mknob_X.
+                          #This may or may not be one to one copy. For example,
+                          # if C is constant valued, but X is only constant
+                          # structured, then we may not pass C's memory
+                          # to X directly; instead, we might pass a copy of C's
+                          # memory.
+
+In general, in context-sensitive optimizations, there are two problems:
+(1) how a function generates and reuses context info?
+(2) how to propagate context info? 
+Here we focus on the first problem.
+
+ADB(A', D, B', fknob_ADB) functionality:
     if fknob_ADB == NULL
-        return C = A * D * B
+        return A * D * B
     
     get the output mknob_C, and input mknob_A, D, B from fknob_ADB
     assert(mknob_C != NULL)
@@ -533,7 +592,6 @@ ADB(C, A', D, B', fknob_ADB) functionality:
     assert(mknob_B->constant_structured)
     
     # Compute output
-    assert(mknob_C->is_single_def)
     if mknob_C->matrix == NULL
         mknob_C->matrix = adb_inspect(A', B')
     mknob_C->matrix = CSR_ADB(mknob_C->matrix,  A', B', diag(D))
@@ -542,18 +600,17 @@ ADB(C, A', D, B', fknob_ADB) functionality:
     return mknob_C->matrix in CSC format
 """
 function ADB(
-    C     :: SparseMatrixCSC,
     AT    :: SparseMatrixCSC,
     D     :: SparseMatrixCSC,
     BT    :: SparseMatrixCSC,
     fknob :: Ptr{Void}
 )
-    if fknob == NULL
+    if fknob == C_NULL
         # This case should never be reached. We leave it here only to show how
         # a library function can have the same interface with and without 
         # context info.
         assert(false)
-        return C = AT' * D * BT'
+        return AT' * D * BT'
     end
 
     mknob_C = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
@@ -564,19 +621,18 @@ function ADB(
     assert(mknob_A != C_NULL)
     assert(mknob_D != C_NULL)
     assert(mknob_B != C_NULL)
-    
+
     # Check inputs and output
-    assert(ccall((:ConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_A))
+    assert(ccall((:IsConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_A))
     #TODO: assert(mknob_D->diagonal)
-    assert(ccall((:ConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
-    #TODO: assert C is single def
+    assert(ccall((:IsConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
 
     csrA   = SparseAccelerator.create_CSR(AT)
     csrB   = SparseAccelerator.create_CSR(BT)
     csrADB = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_C)
     if csrADB == C_NULL
-        csrADB = ccall((:ADBInspect, LIB_PATH), Ptr{Void},
-                        (Ptr{Void}, Ptr{Void}, Ptr{Void}),
+        csrADB = ccall((:CSR_ADBInspect, LIB_PATH), Ptr{Void},
+                        (Ptr{Void}, Ptr{Void}),
                          csrA, csrB)
         ccall((:SetMatrix, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_C, csrADB)
     end
@@ -660,55 +716,53 @@ function dss_solve!(handle, rhs::Vector, sol::Vector)
 end
 
 @doc """ 
-Compute A = the sparse Cholesky factorization of a sparse matrix B, where B is
-constant in structure, and A must be a single-def.
+Compute the sparse Cholesky factorization of a sparse matrix A, where A is
+constant in structure.
 
 Functionality:
     if fknob == NULL
-        return A = cholfact_int32(B)
+        return cholfact_int32(A)
     
-    get the output/input mknob_A and B from fknob
+    get the output/input mknob_O and A from fknob
     
     # Check input
-    assert(mknob_B->constant_structured)
-    if mknob_B->matrix == NULL
-        return A = cholfact_int32(B)
+    assert(mknob_A->constant_structured)
+    if mknob_A->matrix == NULL
+        return cholfact_int32(A)
         
-    if mknob_A->dss_handle == NULL
-        mknob_A->dss_handle = dss_analyze(mknob_B->matrix)
-    dss_factor(mknob_A->dss_handle, mknob_B->matrix)
+    if mknob_O->dss_handle == NULL
+        mknob_O->dss_handle = dss_analyze(mknob_A->matrix)
+    dss_factor(mknob_O->dss_handle, mknob_A->matrix)
 """
 function cholfact_int32(
     A     :: SparseMatrixCSC,
-    B     :: SparseMatrixCSC,
     fknob :: Ptr{Void}
 )
     if fknob == NULL
         # This case should never happen
         assert(false)
-        return A = cholfact_int32(B)
+        return cholfact_int32(A)
     end
 
-    mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    mknob_B = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 1)
+    mknob_O = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+    mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 1)
+    assert(mknob_O != C_NULL)
     assert(mknob_A != C_NULL)
-    assert(mknob_B != C_NULL)
     
     # Check inputs and output
-    assert(ccall((:ConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
-    # TODO: assert A is single def
+    assert(ccall((:IsConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_A))
 
-    csrB = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_B)
-    if csrB == C_NULL
-        return A = cholfact_int32(B)
+    csrA = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_A)
+    if csrA == C_NULL
+        return cholfact_int32(A)
     end
 
-    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_A)
+    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_O)
     if dss_handle == NULL
-        dss_handle = dss_analyze(csrB)
-        ccall((:SetDssHandle, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_A, dss_handle)
+        dss_handle = dss_analyze(csrA)
+        ccall((:SetDssHandle, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_O, dss_handle)
     end
-    dss_factor(dss_handles, csrB)
+    dss_factor(dss_handles, csrA)
 
     # ISSUE: how to return the original result?
 end

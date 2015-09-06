@@ -45,10 +45,15 @@ function gather_context_sensitive_info(
     site        = CallSite(ast, Vector(), Vector(), fknob_creator, fknob_deletor)
     args        = ast.args
     for arg in matrices_to_track
-        new_arg = replacement_arg(arg, args, nothing, symbol_info)
-        assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
-               typeof(new_arg) == GenSym)
-        push!(site.matrices, typeof(new_arg) == SymbolNode ? new_arg.name : new_arg)
+        if arg == :result
+            result = gensym()
+-           push!(site.matrices, result)
+        else
+            new_arg = replacement_arg(arg, args, nothing, symbol_info)
+            assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
+                   typeof(new_arg) == GenSym)
+            push!(site.matrices, typeof(new_arg) == SymbolNode ? new_arg.name : new_arg)
+        end
     end
     push!(call_sites.sites, site)
     return true
@@ -83,31 +88,31 @@ function CS_ADAT_check(
 end
 
 @doc """ 
-Post-processing function of CS_ADAT_assign_pattern
+Post-processing function of CS_ADAT_pattern
 """
-function CS_ADAT_assign_post_replacement(
+function CS_ADAT_post_replacement(
     ast               :: Expr,
     call_sites        :: CallSites,
     fknob_creator     :: String,
     fknob_deletor     :: String,
     matrices_to_track :: Tuple
 )
-    # We need to replace C = A * D * A' into ADB(C, A', D, A, fknob). At this 
-    # moment, it is in the middle form of ADB(C, A, D, A). That means:
+    # We need to replace A * D * A' into ADB(A', D, A, fknob). At this 
+    # moment, it is in the middle form of ADB(A, D, A). That means:
     # (1) Make a symbol AT. Insert AT = A' before the loop (This is to hoist A'
     #     out of loop)
-    # (2) Replace ADB(C, A, D, A) as CSR_ADB(C, AT, D, A).
+    # (2) Replace ADB(A, D, A) as CSR_ADB(AT, D, A).
     # fknob is not added for now, which will be added automatically later.
     action = InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
     push!(call_sites.actions, action)
 
-    A  = ast.args[3]
+    A  = ast.args[2]
     assert(typeof(A) == SymbolNode)
     AT = Symbol(string("__", string(A.name), "T__"))
     stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
     
-    ast.args[3] = AT
+    ast.args[2] = AT
 
     return gather_context_sensitive_info(ast, call_sites, fknob_creator, fknob_deletor, matrices_to_track)
 end
@@ -207,24 +212,12 @@ const CS_ADAT_pattern = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
     (nothing, nothing, nothing, nothing, CS_ADAT_AT_pattern),
     CS_ADAT_check,
-    (:NO_CHANGE, ),
-    do_nothing,
-    "",
-    "",
-    ()
-)
-
-const CS_ADAT_assign_pattern = ExprPattern(
-    "CS_ADAT_assign_pattern",
-    (:(=), SparseMatrixCSC, SparseMatrixCSC),
-    (nothing, nothing, CS_ADAT_pattern),
-    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:ADB)),
-      :arg1, :aarg22, :aarg23, :aarg22),
-    CS_ADAT_assign_post_replacement,
+     :arg2, :arg3, :arg2),
+    CS_ADAT_post_replacement,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2, :arg3, :arg4, :arg5)
+    (:result, :arg2, :arg3, :arg4)
 )
 
 const CS_cholfact_int32_pattern = ExprPattern(
@@ -232,24 +225,12 @@ const CS_cholfact_int32_pattern = ExprPattern(
     (:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC{Float64, Int32}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:NO_CHANGE, ),
-    do_nothing,
-    "",
-    "",
-    ()
-)
-
-const CS_cholfact_int32_assign_pattern = ExprPattern(
-    "CS_cholfact_int32_assign_pattern",
-    (:(=), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Base.SparseMatrix.CHOLMOD.Factor{Float64}),
-    (nothing, nothing, CS_cholfact_int32_pattern),
-    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_int32)),
-     :arg1, :aarg22),
+     :arg2),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2, :arg3)
+    (:result, :arg2)
 )
 
 const CS_cholsolve_pattern = ExprPattern(
@@ -257,24 +238,12 @@ const CS_cholsolve_pattern = ExprPattern(
     (:call, GlobalRef(Main, :\), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Any),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:NO_CHANGE, ),
-    do_nothing,
-    "",
-    "",
-    ()
-)
-
-const CS_cholsolve_assign_pattern = ExprPattern(
-    "CS_cholsolve_assign_pattern",
-    (:(=), Any, Any),
-    (nothing, nothing, CS_cholsolve_pattern),
-    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholmod_factor_inverse_divide)),
-     :arg1, :aarg22, :aarg23),
+     :arg2, :arg3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,)
+    (:result, :arg2, :arg3,)
 )
 
 @doc """ 
@@ -313,9 +282,9 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
 
 @doc """" Patterns that will actually transform the code. """
 CS_transformation_patterns = [
-    CS_ADAT_assign_pattern,
-    CS_cholfact_int32_assign_pattern,
-    CS_cholsolve_assign_pattern,
+    CS_ADAT_pattern,
+    CS_cholfact_int32_pattern,
+    CS_cholsolve_pattern,
     CS_fwdTriSolve!_pattern,
     CS_bwdTriSolve!_pattern
 ]
@@ -335,11 +304,12 @@ function create_new_matrix_knob(
     is_symmetric           = false
     is_structure_symmetric = false
     is_structure_only      = false
+    is_single_def          = false
 
     new_stmt = Expr(:(=), mknob,
                 Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
                      M, constant_valued, constant_structured, is_symmetric,
-                     is_structure_symmetric, is_structure_only))
+                     is_structure_symmetric, is_structure_only, is_single_def))
     push!(new_stmts, Statement(0, new_stmt))
     
     mknob

@@ -23,9 +23,6 @@ using namespace SpMP;
 
 /**************************** Definition of knobs *****************************/
 
-#define INVALID_VERSION   -1
-#define MIN_VALID_VERSION 0
-
 // A matrix knob stores the information shared by all the functions refering to this matrix.
 // Function-specific info like a level schedule should be put into a function knob.
 struct MatrixKnob {
@@ -34,6 +31,7 @@ struct MatrixKnob {
     bool         is_symmetric;
     bool         is_structure_symmetric; // is_symmetric implies is_structure_symmetric
     bool         is_structure_only;   // true if structure of matrix is only used
+    bool         is_single_def; // The matrix is defined only once.
 
     MatrixKnob  *derivatives[DERIVATIVE_TYPE_COUNT];
     bool         is_structure_derivatives[DERIVATIVE_TYPE_COUNT];
@@ -71,8 +69,14 @@ struct FunctionKnob {
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
 MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval,
     bool constant_valued = false, bool constant_structured = false, bool is_symmetric = false, 
-    bool is_structure_symmetric = false, bool is_structure_only = false)
+    bool is_structure_symmetric = false, bool is_structure_only = false,
+    bool is_single_def = false)
 {
+    // The matrix knob is for a matrix that is constant either in value or
+    // structure. Otherwise, it is not useful for now, although in future, we
+    // might want to consider slowly changing matrices. 
+    assert(constant_valued || constant_structured);
+
     assert(!constant_valued || constant_structured);
     assert(!is_symmetric || is_structure_symmetric);
     
@@ -83,6 +87,7 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
     m->is_symmetric = is_symmetric;
     m->is_structure_symmetric = is_structure_symmetric;
     m->is_structure_only = is_structure_only;
+    m->is_single_def = is_single_def;
 
     for (int i = 0; i < DERIVATIVE_TYPE_COUNT; i++) {
         m->derivatives[i] = NULL;
@@ -95,11 +100,22 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
     return m;
 }
 
+void DeleteMatrixKnob(MatrixKnob* mknob)
+{
+    //DeleteOptimizedRepresentation(mknob);
+    if (mknob->schedule) {
+        delete mknob->schedule;
+        mknob->schedule = NULL;
+    }
+    delete mknob;
+}
+
 static bool CheckMatrixKnobConsistency(MatrixKnob *m)
 {
     if (m->constant_valued) {
         assert(m->constant_structured);
-        if (!m->constant_structured) {
+        assert(!m->is_single_def); // There cannot be any definition.
+        if (!m->constant_structured || m->is_single_def) {
             return false;
         }
     }
@@ -119,9 +135,19 @@ void SetConstantValued(MatrixKnob* mknob)
     mknob->constant_structured = true;
 }
 
+bool IsConstantValued(MatrixKnob* mknob)
+{
+    return mknob->constant_valued;
+}
+
 void SetConstantStructured(MatrixKnob* mknob)
 {
     mknob->constant_structured = true;
+}
+
+bool IsConstantStructured(MatrixKnob* mknob)
+{
+    return mknob->constant_structured;
 }
 
 void SetValueSymmetric(MatrixKnob *mknob)
@@ -130,9 +156,19 @@ void SetValueSymmetric(MatrixKnob *mknob)
     mknob->is_structure_symmetric = true;
 }
 
+bool IsValueSymmetric(MatrixKnob *mknob)
+{
+    return mknob->is_symmetric;
+}
+
 void SetStructureSymmetric(MatrixKnob *mknob)
 {
     mknob->is_structure_symmetric = true;
+}
+
+bool IsStructureSymmetric(MatrixKnob *mknob)
+{
+    return mknob->is_structure_symmetric;
 }
 
 void SetStructureOnly(MatrixKnob *mknob)
@@ -140,9 +176,29 @@ void SetStructureOnly(MatrixKnob *mknob)
     mknob->is_structure_only = true;
 }
 
+bool IsStructureOnly(MatrixKnob *mknob)
+{
+    return mknob->is_structure_only;
+}
+
 void SetMatrix(MatrixKnob* mknob, void* A)
 {
     mknob->A = (CSR*) A;
+}
+
+void* GetMatrix(MatrixKnob* mknob)
+{
+    return mknob->A;
+}
+
+void SetDssHandle(MatrixKnob* mknob, void* dss_handle)
+{
+    mknob->dss_handle = dss_handle;
+}
+
+void* GetDssHandle(MatrixKnob* mknob)
+{
+    return mknob->dss_handle;
 }
 
 static void DeleteOptimizedRepresentation(MatrixKnob *m)
@@ -228,12 +284,6 @@ static void CreateOptimizedRepresentation(
     }
 }
 
-MatrixKnob* GetDerivative(MatrixKnob* mknob, DerivativeType type)
-{
-    assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
-    return mknob->is_structure_derivatives[type] ? NULL : mknob->derivatives[type];
-}
-
 void SetDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *derivative)
 {
     assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
@@ -263,10 +313,10 @@ void SetDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *derivativ
     }
 }
 
-MatrixKnob *GetStructureDerivative(MatrixKnob *mknob, DerivativeType type)
+MatrixKnob* GetDerivative(MatrixKnob* mknob, DerivativeType type)
 {
     assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
-    return mknob->derivatives[type];    
+    return mknob->is_structure_derivatives[type] ? NULL : mknob->derivatives[type];
 }
 
 void SetStructureDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *derivative)
@@ -297,24 +347,45 @@ void SetStructureDerivative(MatrixKnob *mknob, DerivativeType type, MatrixKnob *
     }
 }
 
-void* GetMatrix(MatrixKnob* mknob)
+MatrixKnob *GetStructureDerivative(MatrixKnob *mknob, DerivativeType type)
 {
-    return mknob->A;
+    assert(type >= 0 && type < DERIVATIVE_TYPE_COUNT);
+    return mknob->derivatives[type];    
 }
 
-void* GetDssHandle(MatrixKnob* mknob)
+void PropagateMatrixInfo(MatrixKnob* to_mknob, MatrixKnob* from_mknob)
 {
-    return mknob->dss_handle;
-}
+    assert(to_mknob != NULL);
+    assert(from_mknob != NULL);
 
-void DeleteMatrixKnob(MatrixKnob* mknob)
-{
-    //DeleteOptimizedRepresentation(mknob);
-    if (mknob->schedule) {
-        delete mknob->schedule;
-        mknob->schedule = NULL;
+    // Call to this function is due an assignment matrixA = matrixB. Thus
+    // the destination matrix is not constant-valued. But both should be 
+    // at least constant-structured, otherwise, they are useless.
+    // The destination matrix can be a single-def, though, which means it 
+    // is statically defined only by this source matrix, not anywhere else. In 
+    // this situation, we can safely let the two matrices share all their
+    // information. 
+    assert(to_mknob->constant_structured && !to_mknob->constant_valued);
+    assert(from_mknob->constant_structured || from_mknob->constant_valued);
+
+    // Since the destination matrix is only constant-structured, we can only
+    // copy the information that are determined only by structures, unless the
+    // destination matrix is a single-def.
+
+    // QUESTION: Schedule and dss_handle should depend only on structure, not value, right?
+    to_mknob->schedule   = from_mknob->schedule;
+    to_mknob->dss_handle = from_mknob->dss_handle;
+
+    if (to_mknob->is_single_def) {
+        to_mknob->A       = from_mknob->A;
+        to_mknob->numrows = from_mknob->numrows;
+        to_mknob->numcols = from_mknob->numcols;
+        to_mknob->colptr  = from_mknob->colptr;
+        to_mknob->rowval  = from_mknob->rowval;
+        to_mknob->nzval   = from_mknob->nzval;
     }
-    delete mknob;
+    // How about derivatives?
+    // Jongsoo: please see what to do here to be complete.
 }
 
 void AddMatrixKnob(FunctionKnob* fknob, MatrixKnob* mknob)

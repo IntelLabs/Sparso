@@ -1,5 +1,6 @@
 #include "SpMP/CSR.hpp"
 #include "CSR_Interface.h"
+#include "SpGEMM.hpp"
 #include <assert.h>
 
 #define PERF_TUNE
@@ -55,6 +56,16 @@ int *CSR_GetColIdx(CSR_Handle *A)
 double *CSR_GetValues(CSR_Handle *A)
 {
   return ((CSR *)A)->values;
+}
+
+CSR_Handle *CSR_ADBInspect(const CSR_Handle *A, const CSR_Handle *B)
+{
+    return (CSR_Handle *)SpMP::inspectADB((CSR*)A, (CSR*)B);
+}
+
+void CSR_ADB(CSR_Handle *C, const CSR_Handle *A, const CSR_Handle *B, const double *d)
+{
+    adb((CSR *)C, (CSR *)A, (CSR *)B, (double *)d);
 }
 
 void CSR_GetRCMPermutation(const CSR_Handle *A, int *perm, int *inversePerm)

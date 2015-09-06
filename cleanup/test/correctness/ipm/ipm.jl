@@ -431,12 +431,12 @@ m = size(A, 1)
 n = size(A, 2)
 println("Problem size = [$m $n]")
 
-print_time = false
-@acc ipm_ref(A, b, p, print_time) # ignore timing of the first run
-ipm_ref(A, b, p)
+#print_time = false
+#@acc ipm_ref(A, b, p, print_time) # ignore timing of the first run
+#ipm_ref(A, b, p)
 
 ipm_unopt(A, b, p, false)
 ipm_unopt(A, b, p)
 
-ipm(A, b, p, false)
-ipm(A, b, p)
+#ipm(A, b, p, false)
+#ipm(A, b, p)
