@@ -45,3 +45,7 @@ end
 type PostPatternReplacementFailure <: Exception
     pattern
 end
+
+type MatrixPropertiesUnavail <: Exception
+    symexpr
+end

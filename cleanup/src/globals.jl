@@ -9,8 +9,9 @@ typealias Loop            CompilerTools.Loops.Loop
 typealias GenSymId        Int
 typealias BasicBlockIndex Int
 typealias StatementIndex  Int
-typealias Sym             Union(Symbol, GenSym) # A Symbol or a GenSym.
+typealias Sym             Union(Symbol, GenSym) # A Symbol or GenSym.
 typealias Sym2TypeMap     Dict{Sym, Type}
+typealias Symexpr         Union(Symbol, GenSym, Expr) # A Symbol, GenSym or Expr
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
@@ -258,40 +259,60 @@ function do_nothing()
 end
 
 @doc """
-A call sites of interesting functions (like SpMV, triangular solver, etc.). From
-the AST of the call, we may figure out the matrices in its arguments so that we 
-may create a matrix knob for it. Some matrices need track the versions of values,
-recorded in matrices_to_track_values. We may also create a function knob for the
-call site, and may delete the knob later.
+A call site of interesting functions (like SpMV, triangular solver, etc.).
 """
 type CallSite
-    ast                      :: Expr 
-    matrices                 :: Vector # Vector{Sym}
-    matrices_to_track_values :: Vector
-    fknob_creator            :: String # A library function to create a function knob for this call site
-    fknob_deletor            :: String # A library function to delete the function knob for this call site
+    ast :: Expr
 end
+
+@doc """"
+Properties of a matrix. 
+
+constant_valued       : The matrix is a constant in value(and thus of course 
+                        constant in structure).
+constant_structured   : The matrix has always the same structure, even though its
+                        value may change.
+is_symmetric          : The matrix is symmetric in value (and of course symmetric
+                        in structure
+is_structure_symmetric: The matrix is symmetric in structure. 
+is_structure_only     : Only the structure of matrix is to be used.
+is_single_def         : The matrix is statically defined only once.
+"""
+type MatrixProperties
+    constant_valued        :: Bool
+    constant_structured    :: Bool
+    is_symmetric           :: Bool
+    is_structure_symmetric :: Bool
+    is_structure_only      :: Bool
+    is_single_def          :: Bool
+end
+typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 
 @doc """
 Call sites of interesting functions (like SpMV, triangular solver, etc.). The
 function's result and argument types are figured out with the help of symbol_info.
-Some patterns may need constants information in order to match.
+Some patterns may need matrix properties in order to match.
 The patterns to match are specified by the specific analysis. In addition to the 
-direct change of the call site AST due to replacement, there might be additional
+direct change of the call site ASTs due to replacement, there might be additional
 actions resulted (like hoisting some computation out of a loop, etc.)
+The call site ASTs might also be added matrix knobs and function knobs (We 
+remember only matrix knobs here. Function knobs can be remembered in future, if
+needed.
 """
 type CallSites
-    sites       :: Set{CallSite}
-    region      :: Region
-    symbol_info :: Sym2TypeMap
-    constants   :: Set{Sym}
-    patterns    :: Vector{Pattern}
-    actions     :: Vector{Action}
+    sites             :: Set{CallSite}
+    region            :: Region
+    symbol_info       :: Sym2TypeMap
+    matrix_properties :: Symexpr2PropertiesMap
+    patterns          :: Vector{Pattern}
+    actions           :: Vector{Action}
+    matrix_knobs      :: Dict{Symexpr, Symbol}
 end
 
-@doc """ Insert new statements to a basic block """
-type InsertBeforeStatement <: Action
-    new_stmts   :: Vector{Statement} 
+@doc """ Insert new statements to a basic block before or after a statement. """
+type InsertBeforeOrAfterStatement <: Action
+    new_stmts   :: Vector{Statement}
+    before      :: Bool 
     bb          :: BasicBlock
     stmt_idx    :: StatementIndex
 end
@@ -368,20 +389,25 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dprintln(1, 0, "\nFunction body showing structures:")
         dsprintln(1, 1, symbol_info, func_ast)
 
-        new_ast = func_ast
-        
-        if replace_calls_enabled
-            replace_calls(symbol_info, cfg)
-        end
-        
         if reorder_enabled || context_sensitive_opt_enabled
             # Reordering and context-sensitive optimization: Do all analyses, and 
             # put their intended transformation code sequence into a list. Then 
-            # transform the code with the list.
+            # transform the code with the list on the CFG.
             actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-            new_ast = code_transformation(actions, func_ast, cfg)
+            code_transformation(actions, cfg)
         end
-        
+
+        # Do call replacement at the end, because it relies only on type info, 
+        # which has not been changed so far.
+        if replace_calls_enabled
+            replace_calls(symbol_info, cfg)
+        end
+
+        # Now create a new function based on the CFG
+        body_reconstructed   = CFGs.createFunctionBody(cfg)
+        func_ast.args[3].args = body_reconstructed
+        new_ast = func_ast
+
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)
     catch ex

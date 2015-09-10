@@ -124,17 +124,13 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
 
     k = 1
 
-    __mknobA = (SparseAccelerator.new_matrix_knob)(A)
-    __mknobL = (SparseAccelerator.new_matrix_knob)(L) # matrix knob for L
-    __mknobU = (SparseAccelerator.new_matrix_knob)(U) # matrix knob for L
+    __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
+    __mknobL = (SparseAccelerator.new_matrix_knob)(L, true, true, false, false, false, false) # matrix knob for L
+    __mknobU = (SparseAccelerator.new_matrix_knob)(U, true, true, false, false, false, false) # matrix knob for L
 
     (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
     (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
 
-    (SparseAccelerator.set_constant_valued)(__mknobA)
-    (SparseAccelerator.set_value_symmetric)(__mknobA)
-    (SparseAccelerator.set_constant_valued)(__mknobL)
-    (SparseAccelerator.set_constant_valued)(__mknobU)
     __fknob_8201 = (SparseAccelerator.new_function_knob)()
     (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
     __fknob_8221 = (SparseAccelerator.new_function_knob)()

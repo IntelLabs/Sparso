@@ -193,7 +193,7 @@ function discover_a_SpMV(ast, call_sites :: CallSites, top_level_number, is_top_
                 length(args) == 3 && 
                 type_of_ast_node(args[2], call_sites.symbol_info) <: SparseMatrixCSC &&
                 type_of_ast_node(args[3], call_sites.symbol_info) <: Vector
-                    site = CallSite(ast, Vector(), Vector(), nothing, nothing)
+                    site = CallSite(ast)
                     push!(call_sites.sites, site) 
             end
         end
@@ -212,7 +212,9 @@ function discover_SpMVs(
 )
     L      = region.loop
     blocks = cfg.basic_blocks
-    SpMVs  = CallSites(Set{CallSite}(), region, symbol_info, Set{Sym}(), Vector{Pattern}(), actions)
+    SpMVs  = CallSites(Set{CallSite}(), region, symbol_info, 
+                       Symexpr2PropertiesMap(), Vector{Pattern}(),
+                       actions, Dict{Symexpr, Symbol}())
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements

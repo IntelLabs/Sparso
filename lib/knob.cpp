@@ -259,17 +259,18 @@ static void CreateOptimizedRepresentation(
         delete tempA;
 #endif
 
-        MatrixKnob *knobTranspose = NewMatrixKnob(AT->m, AT->n, AT->rowptr, AT->colidx, AT->values);
+        MatrixKnob *knobTranspose = NewMatrixKnob(AT->m, AT->n, AT->rowptr, AT->colidx, AT->values,
+                                                  m->constant_valued,
+                                                  m->constant_structured,
+                                                  m->is_symmetric,
+                                                  m->is_structure_symmetric,
+                                                  m->is_structure_only,
+                                                  m->is_single_def);
         m->derivatives[DERIVATIVE_TYPE_TRANSPOSE] = knobTranspose;
         m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m->is_structure_only;
         knobTranspose->derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m;
         knobTranspose->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m->is_structure_only;
         knobTranspose->A = AT;
-        knobTranspose->constant_valued = m->constant_valued;
-        knobTranspose->constant_structured = m->constant_structured;
-        knobTranspose->is_symmetric = m->is_symmetric;
-        knobTranspose->is_structure_symmetric = m->is_structure_symmetric;
-        knobTranspose->is_structure_only = m->is_structure_only;
         assert(CheckMatrixKnobConsistency(knobTranspose));
     }
     else {
@@ -474,14 +475,16 @@ static void TriangularSolve(
                        PrefixSumCostFunction(symRowPtr)); 
 
                     if (!symKnob) {
-                        symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL);
+                        symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL,
+                                                m->constant_valued,
+                                                m->constant_structured,
+                                                m->is_symmetric,
+                                                m->is_structure_symmetric,
+                                                true /* is_structure_only */,
+                                                m->is_single_def
+                        );
                         m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = symKnob;
                         m->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
-                        symKnob->constant_valued = m->constant_valued;
-                        symKnob->constant_structured = m->constant_structured;
-                        symKnob->is_symmetric = m->is_symmetric;
-                        symKnob->is_structure_symmetric = m->is_structure_symmetric;
-                        symKnob->is_structure_only = true;
                     }
                     symKnob->A = new CSR(m->A->m, m->A->n, symRowPtr, symColIdx, NULL);
                     symKnob->schedule = schedule;
@@ -530,14 +533,16 @@ static void TriangularSolve(
             if (m && m->constant_structured) {
                 MatrixKnob *symKnob = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
                 if (!symKnob) {
-                    symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL);
+                    symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL,
+                                            m->constant_valued,
+                                            m->constant_structured,
+                                            m->is_symmetric,
+                                            m->is_structure_symmetric,
+                                            true /* is_structure_only */,
+                                            m->is_single_def
+                                            );
                     m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = symKnob;
                     m->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
-                    symKnob->constant_valued = m->constant_valued;
-                    symKnob->constant_structured = m->constant_structured;
-                    symKnob->is_symmetric = m->is_symmetric;
-                    symKnob->is_structure_symmetric = m->is_structure_symmetric;
-                    symKnob->is_structure_only = true;
                 }
                 symKnob->A = new CSR(m->A->m, m->A->n, symRowPtr, symColIdx, NULL);
                 symKnob->schedule = schedule;

@@ -1,32 +1,44 @@
 @doc """
-Group InsertBeforeStatement actions in decreasing order of
-(basic block index, statement index) of the actions.
+Group InsertBeforeOrAfterStatement actions in decreasing order of
+(basic block index, statement index) of the actions; for the same
+statement, "after" is before "before".
 """
 function group_action(
-    insert_before_statement_actions :: Vector{InsertBeforeStatement},
-    action                          :: InsertBeforeStatement
+    insert_before_or_after_statement_actions :: Vector{InsertBeforeOrAfterStatement},
+    action                                   :: InsertBeforeOrAfterStatement
 )
-    for i in 1 : length(insert_before_statement_actions)
-        action1 = insert_before_statement_actions[i]
+    for i in 1 : length(insert_before_or_after_statement_actions)
+        action1 = insert_before_or_after_statement_actions[i]
         if action.bb == action1.bb 
             if action.stmt_idx == action1.stmt_idx
-                append!(action1.new_stmts, action.new_stmts)
-            
-                # No need to try match with other elements: the vector is ensured
-                # to have only one elment for one specific statement.
-                return
+                if !action.before && action1.before
+                    # Let the actions for a later statement happen earlier since
+                    # they do not impact the positions of earlier statements.
+                    insert!(insert_before_or_after_statement_actions, i, action)
+                    
+                    # No need to try match with other elements: the vector is
+                    # ensured to have only one elment for one "before" and/or
+                    # one "after" for one specific statement.
+                    return
+                elseif action.before && !action1.before
+                    continue
+                else
+                    # The two actions are both before or both after the statement.
+                    append!(action1.new_stmts, action.new_stmts)
+                    return
+                end
             elseif action.stmt_idx > action1.stmt_idx
                 # Let the actions for a later statement happen earlier since
                 # they do not impact the positions of earlier statements.
-                insert!(insert_before_statement_actions, i, action)
+                insert!(insert_before_or_after_statement_actions, i, action)
                 return
             end
         elseif action.bb.label > action.bb.label
-            insert!(insert_before_statement_actions, i, action)
+            insert!(insert_before_or_after_statement_actions, i, action)
             return
         end
     end
-    push!(insert_before_statement_actions, action)
+    push!(insert_before_or_after_statement_actions, action)
 end
 
 @doc """
@@ -88,7 +100,6 @@ Perform all the actions. Return the transformed AST.
 """
 function code_transformation(
     actions  :: Vector{Action},
-    func_ast :: Expr, 
     cfg      :: CFG
 )
     # Implement each action. Some important details to care:
@@ -96,16 +107,16 @@ function code_transformation(
     # predecessor-successor relationship, which affects InsertOnEdge (Some edge
     # no longer exists after InsertBeforeLoopHead).
     # (2) Actions that work on the same loop for InsertBeforeLoopHead, or the same
-    # Statement for InsertBeforeStatement, or the same edge for InsertOnEdge, 
+    # Statement for InsertBeforeOrAfterStatement, or the same edge for InsertOnEdge, 
     # should be grouped and implemented together
     
     # Group the actions.
-    insert_before_statement_actions = Vector{InsertBeforeStatement}()
-    insert_before_loop_head_actions = Vector{InsertBeforeLoopHead}()
-    insert_on_edge_actions          = Vector{InsertOnEdge}()
+    insert_before_or_after_statement_actions = Vector{InsertBeforeOrAfterStatement}()
+    insert_before_loop_head_actions          = Vector{InsertBeforeLoopHead}()
+    insert_on_edge_actions                   = Vector{InsertOnEdge}()
     for action in actions
-        if typeof(action) == InsertBeforeStatement
-            group_action(insert_before_statement_actions, action)
+        if typeof(action) == InsertBeforeOrAfterStatement
+            group_action(insert_before_or_after_statement_actions, action)
         elseif typeof(action) == InsertBeforeLoopHead
             group_action(insert_before_loop_head_actions, action)
         else
@@ -126,14 +137,18 @@ function code_transformation(
         end
     end
 
-    # Implement InsertBeforeStatement actions
-    for action in insert_before_statement_actions
+    # Implement InsertBeforeOrAfterStatement actions
+    for action in insert_before_or_after_statement_actions
         if isempty(action.new_stmts)
             continue
         end
 
         for i = 1 : length(action.new_stmts)
-            insert!(action.bb.statements, action.stmt_idx + i - 1, action.new_stmts[i])
+            if action.before
+                insert!(action.bb.statements, action.stmt_idx + i - 1, action.new_stmts[i])
+            else
+                insert!(action.bb.statements, action.stmt_idx + i, action.new_stmts[i])
+            end
         end
     end
 
@@ -149,9 +164,4 @@ function code_transformation(
             push!(new_bb.statements, new_goto_stmt)
         end
     end
-
-    body_reconstructed   = CFGs.createFunctionBody(cfg)
-    func_ast.args[3].args = body_reconstructed
-
-    func_ast
 end

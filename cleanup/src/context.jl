@@ -15,6 +15,8 @@ function CS_fwdBwdTriSolve!_check(
     fknob_creator :: String,
     fknob_deletor :: String
 )
+    # TODO: replace the code to be based on call_sites.matrix_properties.
+
     L_or_U = ast.args[2]
     structure = get_structure_proxy(L_or_U) 
     if structure == nothing
@@ -41,21 +43,48 @@ function gather_context_sensitive_info(
     fknob_deletor     :: String,
     matrices_to_track :: Tuple
 )
-    symbol_info = call_sites.symbol_info
-    site        = CallSite(ast, Vector(), Vector(), fknob_creator, fknob_deletor)
-    args        = ast.args
+    # So far, we handle only a loop region
+    assert(typeof(call_sites.region) == LoopRegion)
+
+    # Create a function-specific knob at each call site of the context-specific
+    # functions. Create matrix-specific knobs for the matrices inputs.
+    region               = call_sites.region
+    L                    = region.loop
+    symbol_info          = call_sites.symbol_info
+    site                 = CallSite(ast)
+    args                 = ast.args
+    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
+    fknob                = create_new_function_knob(action_before_region.new_stmts,
+                                                    ast, fknob_creator)
+    push!(call_sites.actions, action_before_region)
+    push!(call_sites.sites, site)
     for arg in matrices_to_track
         if arg == :result
-            result = gensym()
--           push!(site.matrices, result)
+            M = ast
         else
             new_arg = replacement_arg(arg, args, nothing, symbol_info)
             assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
                    typeof(new_arg) == GenSym)
-            push!(site.matrices, typeof(new_arg) == SymbolNode ? new_arg.name : new_arg)
+            M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
         end
+        if !haskey(call_sites.matrix_knobs, M)
+            # Create statements that will create and intialize a knob for
+            # the matrix before the loop region
+            mknob = create_new_matrix_knob(action_before_region.new_stmts, M,
+                                           call_sites)
+            call_sites.matrix_knobs[M] = mknob
+        end
+        create_add_mknob_to_fknob(action_before_region.new_stmts,
+                                  call_sites.matrix_knobs[M], fknob)
     end
-    push!(call_sites.sites, site)
+
+    # Create statements that will delete the function knob at region exits
+    for exit in region.exits
+        action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
+        create_delete_function_knob(action.new_stmts, fknob_deletor, fknob)
+        push!(call_sites.actions, action)
+    end
+
     return true
 end
 
@@ -243,7 +272,7 @@ const CS_cholsolve_pattern = ExprPattern(
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:result, :arg2, :arg3,)
+    (:arg2,)
 )
 
 @doc """ 
@@ -293,37 +322,69 @@ CS_transformation_patterns = [
 Create statements that will create a matrix knob for matrix M.
 """
 function create_new_matrix_knob(
-    new_stmts :: Vector{Statement},
-    M         :: Union{Sym, Expr}
+    new_stmts  :: Vector{Statement},
+    M          :: Symexpr,
+    call_sites :: CallSites
 )
-    mknob = gensym(string("mknob", string(M)))
-    
-    #TODO: set the right values here
-    constant_valued        = false
-    constant_structured    = false
-    is_symmetric           = false
-    is_structure_symmetric = false
-    is_structure_only      = false
-    is_single_def          = false
+    if !haskey(call_sites.matrix_properties, M)
+        # This is a hack! Just to unblock us temporarily.
+        # TODO: Once Todd's structure analysis is done, this hack MUST be removed!
+        call_sites.matrix_properties[M] = MatrixProperties(false, true, false, false, false, false)
+        # TODO: Enable this once the hack is removed.
+        #throw(MatrixPropertiesUnavail(M))
+    end
+    properties = call_sites.matrix_properties[M]
+    mknob      = gensym(string("mknob", typeof(M) == Expr ? "Expr" : string(M)))
 
-    new_stmt = Expr(:(=), mknob,
-                Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
-                     M, constant_valued, constant_structured, is_symmetric,
-                     is_structure_symmetric, is_structure_only, is_single_def))
+    if properties.constant_valued
+        new_stmt = Expr(:(=), mknob,
+                    Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
+                         M,
+                         properties.constant_valued, 
+                         properties.constant_structured, 
+                         properties.is_symmetric,
+                         properties.is_structure_symmetric,
+                         properties.is_structure_only,
+                         properties.is_single_def))
+    else
+        # This is a hack, just to unblock us temporarily.
+        # TODO: once Todd's structure analysis is done, this MUST be removed!
+        if !properties.constant_structured
+            call_sites.matrix_properties[M].constant_structured = true
+            properties.constant_structured = true
+        end
+
+        assert(properties.constant_structured) 
+        new_stmt = Expr(:(=), mknob,
+                    Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
+                         properties.constant_valued, 
+                         properties.constant_structured, 
+                         properties.is_symmetric,
+                         properties.is_structure_symmetric,
+                         properties.is_structure_only,
+                         properties.is_single_def))
+    end
     push!(new_stmts, Statement(0, new_stmt))
-    
     mknob
 end
 
 @doc """
-Create statements that will increment a matrix knob's version.
+Create a statement to propagate matrix info from one matrix knob to another.
 """
-function create_increment_matrix_version(
-    new_stmts :: Vector{Statement},
-    mknob     :: Symbol
+function create_propagate_matrix_info(
+    to_mknob   :: Symbol,
+    from_mknob :: Symbol,
+    bb         :: BasicBlock,
+    stmt_idx   :: StatementIndex,
+    call_sites :: CallSites
 )
-    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :increment_matrix_version), mknob)
-    push!(new_stmts, Statement(0, new_stmt))
+    # Insert the propagation after the (assignment) statement.
+    action = InsertBeforeOrAfterStatement(Vector{Statement}(), false, bb, stmt_idx)
+    stmt = Statement(-1, 
+                     Expr(:call, GlobalRef(SparseAccelerator, :PropagateMatrixInfo), 
+                           to_mknob, from_mknob))
+    push!(action.new_stmts, stmt)
+    push!(call_sites.actions, action)
 end
 
 @doc """
@@ -331,13 +392,14 @@ Create statements that will create a function knob for the call site, and add
 the function knob to the call as a parameter.
 """
 function create_new_function_knob(
-    new_stmts :: Vector{Statement},
-    call_site :: CallSite
+    new_stmts     :: Vector{Statement},
+    ast           :: Expr,
+    fknob_creator :: String,
 )
-    assert(call_site.fknob_creator != "")
+    assert(fknob_creator != "")
     
     fknob = gensym("fknob")
-    if call_site.fknob_creator == "NewFunctionKnob"
+    if fknob_creator == "NewFunctionKnob"
         # Create a function knob. It has no private info specific to that function.
         # Call the parameterless version of new_function_knob for cleaner code.
         new_stmt = Expr(:(=), fknob, 
@@ -348,12 +410,12 @@ function create_new_function_knob(
         assert(false)
         new_stmt = Expr(:(=), fknob, 
                         Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob),
-                              call_site.fknob_creator
+                              fknob_creator
                         )
                    )
     end
     push!(new_stmts, Statement(0, new_stmt))
-    call_site.ast.args = [call_site.ast.args; fknob]
+    ast.args = [ast.args; fknob]
 
     fknob
 end
@@ -412,16 +474,18 @@ function-specific context info (mknobs and fknobs) into actions.
 function context_info_discovery(
     actions     :: Vector{Action},
     region      :: LoopRegion,
-    func_ast    :: Expr, 
-    symbol_info :: Sym2TypeMap, 
-    liveness    :: Liveness, 
+    func_ast    :: Expr,
+    symbol_info :: Sym2TypeMap,
+    liveness    :: Liveness,
     cfg         :: CFG
 )
-    L           = region.loop
-    blocks      = cfg.basic_blocks
-    constants   = find_constant_values(region, liveness, cfg)
-    call_sites  = CallSites(Set{CallSite}(), region, symbol_info, constants, CS_transformation_patterns, actions)
-    var_defs    = Dict{Sym, Set{Tuple{BasicBlock, StatementIndex}}}() # Map from a variable to a set of statements defining it
+    L                 = region.loop
+    blocks            = cfg.basic_blocks
+    matrix_properties = find_properties_of_matrices(region, liveness, cfg)
+    matrix_knobs      = Dict{Symexpr, Symbol}()
+    call_sites        = CallSites(Set{CallSite}(), region, symbol_info, 
+                            matrix_properties, CS_transformation_patterns,
+                            actions, Dict{Symexpr, Symbol}())
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements
@@ -432,69 +496,47 @@ function context_info_discovery(
                 continue
             end
 
+            # Create a function-specific knob at each call site of the context-specific
+            # functions. Create matrix-specific knobs for the matrices inputs.
+            # Create statements that will create and intialize a knob for
+            # the matrix before the loop region, and statements that will delete
+            # all the function knobs at each exit of the region
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
+        end
+    end
 
-            stmt_def = LivenessAnalysis.def(stmt, liveness)
-            for d in stmt_def
-                if type_of_ast_node(d, symbol_info) <: AbstractSparseMatrix
-                    if !haskey(var_defs, d)
-                        var_defs[d] = Set{Tuple{BasicBlock, StatementIndex}}()
-                    end
-                    push!(var_defs[d], (bb, stmt_idx))
+    # We have modified call_sites.matrix_knobs. Now pass results back
+    matrix_knobs = call_sites.matrix_knobs
+
+    # Propagate matrix info from one to another for assignment statements
+    for bb_idx in L.members
+        bb         = blocks[bb_idx]
+        statements = bb.statements
+        for stmt_idx in 1 : length(statements)
+            stmt = statements[stmt_idx]
+            expr = stmt.expr
+            if typeof(expr) != Expr
+                continue
+             end
+
+            if expr.head == :(=) && length(expr.args) == 2
+                # TODO: enable propagation for other kinds of assignment like >>=
+                if haskey(matrix_knobs, expr.args[1]) && 
+                   haskey(matrix_knobs, expr.args[2])
+                   mknob1 = matrix_knobs[expr.args[1]]
+                   mknob2 = matrix_knobs[expr.args[2]]
+                   create_propagate_matrix_info(mknob1, mknob2, bb, stmt_idx, call_sites)
                 end
             end
         end
     end
 
-    # Create a function-specific knob at each call site of the context-specific
-    # functions. Create matrix-specific knobs for the matrices inputs.
-    # First, create matrix knobs, as they will be needed for creating the function
-    # knobs.
-    matrix_knobs         = Dict{Any, Symbol}()
-    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
-    push!(actions, action_before_region)
-    for call_site in call_sites.sites
-        for M in call_site.matrices
-            if !haskey(matrix_knobs, M)
-                # Create statements that will create and intialize a knob for
-                # the matrix before the loop region
-                mknob = create_new_matrix_knob(action_before_region.new_stmts, M)
-                matrix_knobs[M] = mknob
-            end
-
-            if in(M, call_site.matrices_to_track_values)
-                # Create statements that will update the knob before every
-                # statement that defines the matrix
-                if haskey(var_defs, M)
-                    for (bb, stmt_idx) in var_defs[M]
-                        action = InsertBeforeStatement(Vector{Statement}(), bb, stmt_idx)
-                        push!(actions, action)
-                        mknob = matrix_knobs[M]
-                        create_increment_matrix_version(action.new_stmts, mknob)
-                    end
-                end
-            end
-        end
-    end
-
-    function_knobs = Set()
-    for call_site in call_sites.sites
-        fknob = create_new_function_knob(action_before_region.new_stmts, call_site)
-        push!(function_knobs, (fknob, call_site.fknob_deletor))
-        for M in call_site.matrices
-            create_add_mknob_to_fknob(action_before_region.new_stmts, matrix_knobs[M], fknob)
-        end
-    end
-    
-    # Create statemetns that will delete all the knobs at each exit of the region
-    for exit in region.exits
-        action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
-        push!(actions, action)
-        for (fknob, fknob_deletor) in function_knobs
-            create_delete_function_knob(action.new_stmts, fknob_deletor, fknob)
-        end
-        for mknob in values(matrix_knobs)
+    # Create statements that will delete the matrix knobs at each exit of the region
+    for mknob in values(matrix_knobs)
+        for exit in region.exits
+            action = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
             create_delete_matrix_knob(action.new_stmts, mknob)
+            push!(call_sites.actions, action)
         end
     end
 end

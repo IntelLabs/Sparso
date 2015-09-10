@@ -14,13 +14,28 @@ immutable TestPattern
     comment :: String
 end
 
+@doc """"
+A pattern not to match with a test's output. The pattern is a regular expression.
+The comment explains the pattern, e.g. what the pattern is supposed to do, as 
+a friendly message when the pattern does match.
+"""
+immutable AntiTestPattern
+    pattern :: Regex
+    comment :: String
+end
+
 immutable Test
     name     :: String
     command  :: String
-    patterns :: Vector{TestPattern}
+    patterns :: Vector{Union(TestPattern, AntiTestPattern)}
 end
 
 julia_command = "julia"
+
+const exception_pattern = AntiTestPattern(
+    r"Exception!",
+    "Test if an exception has been thrown in sparse accelerator"
+)
 
 const sanity_test1 = Test(
     "sanity-test1",
@@ -34,7 +49,8 @@ const sanity_test1 = Test(
         ),
         TestPattern(r" {12,12}3 tabs",
                      "Test tabbed output facility: 3 tabs."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -44,7 +60,8 @@ const sanity_test2 = Test(
     [
         TestPattern(r"I do nothing!",
                      "Test if optimization framework adds a new optimization pass."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -54,7 +71,8 @@ const sanity_test3 = Test(
     [
         TestPattern(r"New AST:(.|\n)*return A::Base.SparseMatrix.SparseMatrixCSC.*x::Array",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -64,15 +82,16 @@ const context_test1 = Test(
     [
         TestPattern(r"sum of x=-1.5773120434107328e-5",
                      "Test sum"
-        );
+        ),
 
         TestPattern(r"rel_err=6.384002479368132e-13",
                      "Test rel_err"
-        );
+        ),
 
         TestPattern(r"New AST:",
                      "Test New AST"
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -82,7 +101,8 @@ const context_test2 = Test(
     [
         TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434107334e-5(.|\n)*rel_err=6.382732220893931e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434515133e-5(.|\n)*rel_err=6.629156171119774e-11",
                      "Test pcg_symgs_with_context_opt"
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -92,7 +112,8 @@ const context_test2_without_reordering = Test(
     [
         TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434107334e-5(.|\n)*rel_err=6.382732220893931e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434515133e-5(.|\n)*rel_err=6.629156171119774e-11",
                      "Test pcg_symgs_with_context_opt"
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -103,33 +124,46 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*__AT__ = \(Main.ctranspose\)\(A",
                      "Test if accelerated ipm-ref generates AT"
         ),
-        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(R",
-                     "Test if accelerated ipm-ref generates matrix knob for R"
+        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob",
+                     "Test if accelerated ipm-ref generates matrix knob for AT"
         ),
-        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(B",
-                     "Test if accelerated ipm-ref generates matrix knob for B"
-        ),
-        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(__AT__",
-                     "Test if accelerated ipm-ref generates matrix knob for __AT__"
-        ),
-        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(D",
+# TODO: enable this: so far, the liveness/def issue makes A and AT not constant
+#       and thus the name of __AT__ does not appear in new_matrix_knob
+#        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob\)\(__AT__",
+#                     "Test if accelerated ipm-ref generates matrix knob for AT"
+#        ),
+        TestPattern(r"New AST:(.|\n)*mknobD.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for D"
         ),
-        TestPattern(r"New AST:(.|\n)*new_matrix_knob\)\(A",
+        TestPattern(r"New AST:(.|\n)*mknobA.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for A"
+        ),
+        TestPattern(r"New AST:(.|\n)*mknobB.*new_matrix_knob",
+                     "Test if accelerated ipm-ref generates matrix knob for B"
+        ),
+        TestPattern(r"New AST:(.|\n)*mknobR.*new_matrix_knob",
+                     "Test if accelerated ipm-ref generates matrix knob for R"
         ),
         TestPattern(r"New AST:(.|\n)*new_function_knob(.|\n)*new_function_knob(.|\n)*new_function_knob",
                      "Test if accelerated ipm-ref generates function knobs"
         ),
-        TestPattern(r"New AST:(.|\n)*\(SparseAccelerator,:ADB\)\)\(B,__AT__,D.*,A.*,##fknob#",
+        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\)\)\(__AT__,D.*,A.*,##fknob#",
                      "Test if accelerated ipm-ref generates ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*\(SparseAccelerator,:cholfact_int32\)\)\(R,B.*,##fknob#",
+        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\).*\n.*PropagateMatrixInfo.*mknobB.*mknobExpr",
+                     "Test if accelerated ipm-ref generates PropagateMatrixInfo after B = ADB"
+        ),
+        TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\)\)\(B.*,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_int32"
         ),
-        TestPattern(r"New AST:(.|\n)*\(SparseAccelerator,:cholmod_factor_inverse_divide\)\)\(dy,R.*,t2,##fknob#",
+        TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\).*\n.*PropagateMatrixInfo.*mknobR.*mknobExpr",
+                     "Test if accelerated ipm-ref generates PropagateMatrixInfo after R = cholfact_int32(B)"
+        ),
+        TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholmod_factor_inverse_divide\)\)\(R.*,t2,##fknob#",
                      "Test if accelerated ipm-ref generates cholmod_factor_inverse_divide"
-        )
+        ),
+        exception_pattern
+# TODO: once it runs, add the check for execution results
     ]
 )
 
@@ -139,7 +173,8 @@ const context_test4 = Test(
     [
         TestPattern(r"TODO",
                      "TODO"
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -149,7 +184,8 @@ const liveness_test1 = Test(
     [
         TestPattern(r"Def",
                      "Test liveness for cg."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -159,7 +195,8 @@ const call_replacement_test1 = Test(
     [
         TestPattern(r"AST:(.|\n)*Main.dot(.|\n)*New AST(.|\n)*SparseAccelerator,:dot",
                      "Test call replacement of Main.dot with SparseAccelerator.dot."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -169,7 +206,8 @@ const call_replacement_test2 = Test(
     [
         TestPattern(r"AST:(.|\n)*A::Base.SparseMatrix.SparseMatrixCSC.*\* x::Array(.|\n)*New AST(.|\n)*SparseAccelerator,:SpMV.*A::Base.SparseMatrix.SparseMatrixCSC.*,x::Array",
                      "Test call replacement of * with SparseAccelerator.SpMV."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -179,7 +217,8 @@ const call_replacement_test3 = Test(
     [
         TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
                      "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -189,7 +228,8 @@ const call_replacement_test4 = Test(
     [
         TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
                      "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -199,7 +239,8 @@ const call_replacement_test5 = Test(
     [
         TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},alpha::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for x += alpha * p."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -209,7 +250,8 @@ const call_replacement_test6 = Test(
     [
         TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},-alpha::Float64::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for x -= alpha * p."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -219,7 +261,8 @@ const call_replacement_test7 = Test(
     [
         TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,r::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -229,7 +272,8 @@ const call_replacement_test8 = Test(
     [
         TestPattern(r"Original:(.|\n)*sum of p=5.921969247266187e71(.|\n)*New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)(.|\n)*end::Array\{Float64,1\}\)\)\)\n(\*)+(\s)+sum of p=1.7721860479424595e104",
                      "Test call replacement of SpMV! in simple page rank."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -239,11 +283,13 @@ const call_replacement_test9 = Test(
     [
         TestPattern(r"sum of x=-1.5773120434107304e-5",
                      "Test orig sum"
-        );
+        ),
 
         TestPattern(r"accel sum of x=-1.577312043410732e-5",
                      "Test accelerated sum"
-        )
+        ),
+        
+        exception_pattern
     ]
 )
 
@@ -253,11 +299,12 @@ const call_replacement_test10 = Test(
     [
         TestPattern(r"sum of x=-1.5773120434107317e-5",
                      "Test orig sum"
-        );
+        ),
 
         TestPattern(r"accel sum of x=-1.5773120434107307e-5",
                      "Test accelerated sum"
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -267,11 +314,12 @@ const call_replacement_test11 = Test(
     [
         TestPattern(r"sum of x=-1.5773120434107328e-5",
                      "Test orig sum"
-        );
+        ),
 
         TestPattern(r"accel sum of x=-1.577312043410734e-5",
                      "Test accelerated sum"
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -281,7 +329,8 @@ const call_replacement_test12 = Test(
     [
         TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,z::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -292,7 +341,8 @@ const name_resolution_test1 = Test(
     [
         TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*Module name: Main\nFunction name: \*",
                      "Test name resolution."
-        )
+        ),
+        exception_pattern
     ]
 )
 
@@ -357,12 +407,15 @@ for test in tests
     # Match with patterns
     successful = true
     for pattern in test.patterns
+        assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
         m = match(pattern.pattern, output)
-        if m == nothing
+        if (m == nothing && typeof(pattern) == TestPattern) ||
+           (m != nothing && typeof(pattern) == AntiTestPattern)
             comment = pattern.comment
             file = open(log, "a")
-            write(file, "\n****** Failed in pattern:\n\tPattern: ",
-                  string(pattern.pattern), "\n\tComment: ", comment)
+            write(file, "\n****** Failed in ", 
+                (typeof(pattern) == AntiTestPattern) ? "anti-pattern" : "pattern",
+                string(pattern.pattern), "\n\tComment: ", comment)
             close(file)
             successful = false
         end

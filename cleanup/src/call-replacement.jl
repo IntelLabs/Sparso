@@ -686,7 +686,9 @@ function replace_calls(
     symbol_info :: Sym2TypeMap, 
     cfg         :: CFG
 )
-    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, Set{Sym}(), expr_patterns, Vector{Action}())
+    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, 
+                            Symexpr2PropertiesMap(), expr_patterns,
+                            Vector{Action}(), Dict{Symexpr, Symbol}())
     for (bb_idx, bb) in cfg.basic_blocks
         prev_expr = nothing
         for stmt in bb.statements

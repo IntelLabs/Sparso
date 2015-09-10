@@ -85,8 +85,8 @@ function show(
                 for stmt in action.new_stmts
                     println(io_buffer, "    ", stmt.expr)
                 end
-                if typeof(action) <: InsertBeforeStatement
-                    println(io_buffer, "before BB ", action.bb.label, " statement")
+                if typeof(action) <: InsertBeforeOrAfterStatement
+                    println(io_buffer, action.before ? "before" : "after", " BB ", action.bb.label, " statement")
                     println(io_buffer, "    ", action.bb.statements[action.stmt_idx].expr)
                 elseif typeof(action) <: InsertBeforeLoopHead
                     print(io_buffer, action.outside_loop ? "outisde" : "inside", " loop of BBs [")

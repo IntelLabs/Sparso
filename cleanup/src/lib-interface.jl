@@ -25,6 +25,7 @@ function new_matrix_knob(
     is_structure_only      = false,
     is_single_def          = false
  )
+    assert(constant_valued || constant_structured)
     assert(!constant_valued || constant_structured)
     assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
@@ -58,6 +59,7 @@ function new_matrix_knob(
     is_structure_only      = false,
     is_single_def          = false
  )
+    assert(constant_valued || constant_structured)
     assert(!constant_valued || constant_structured)
     assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},

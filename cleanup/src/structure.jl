@@ -2,15 +2,20 @@
 
 @doc """
 Describe part (lower, upper, diagonal) of a matrix, of which the structure matters.
-TODO: add symmetric properpty.
 """
 type StructureProxy
     lower    :: Bool
     upper    :: Bool
     diagonal :: Bool
+    symmetric:: Bool # Symmetric in structure (not necessarily in value)
     proxy    :: Any
 end
 
+# TODO: get rid of the global variable, and make it pass around in 
+# function parameters? Also, is it good to use a dictionary? What if
+# a symbol has more than one StructureProxy? In that case, maybe we
+# we should invent a special StructureProxy to indicate that the 
+# symbol does not have a constant structure?
 structure_proxies = Dict{Any, StructureProxy}()
 
 @doc """" Set for a matrix of AST a structure proxy in the dictionary """
@@ -18,6 +23,9 @@ function set_structure_proxy(
     A         :: Any,
     structure :: StructureProxy
 )
+    #TODO: This is not quite right. Should check if the structure
+    # proxy exists or not. If yes, then should set only one property
+    # each time.
     if typeof(A) == SymbolNode
         structure_proxies[A.name] = structure
     else
@@ -47,7 +55,7 @@ function propagate_lower_structure(
     matrices_to_track :: Tuple
 )
     proxy = ast.args[2]
-    set_structure_proxy(ast, StructureProxy(true, false, false, proxy))
+    set_structure_proxy(ast, StructureProxy(true, false, false, false, proxy))
     return true
 end
 
@@ -60,7 +68,7 @@ function propagate_upper_structure(
     matrices_to_track :: Tuple
 )
     proxy = ast.args[2]
-    set_structure_proxy(ast, StructureProxy(false, true, false, proxy))
+    set_structure_proxy(ast, StructureProxy(false, true, false, false, proxy))
     return true
 end
 
@@ -72,7 +80,7 @@ function memoize_diagonal_structure(
     fknob_deletor     :: String,
     matrices_to_track :: Tuple
 )
-    set_structure_proxy(ast, StructureProxy(false, false, true, nothing))
+    set_structure_proxy(ast, StructureProxy(false, false, true, false, nothing))
     return true
 end
 
@@ -220,8 +228,10 @@ function structure_discovery(
     cfg         :: CFG
 )
 
-    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, Set{Sym}(),
-                            CS_structure_propagation_patterns, Vector{Action}())
+    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info,
+                            Symexpr2PropertiesMap(),
+                            CS_structure_propagation_patterns,
+                            Vector{Action}(), Dict{Symexpr, Symbol}())
     for (bb_idx, bb) in cfg.basic_blocks
         for stmt in bb.statements
             expr = stmt.expr
@@ -234,4 +244,38 @@ function structure_discovery(
     
     dprintln(1, 0, "\nMatrix structures discovered:")
     dprintln(1, 1, "", structure_proxies)
+end
+
+@doc """ Find the properties of all the matrices in teh region. """
+function find_properties_of_matrices(
+    region      :: LoopRegion,
+    liveness    :: Liveness,
+    cfg         :: CFG
+)
+    constants   = find_constant_values(region, liveness, cfg)
+    single_defs = find_single_defs(region, liveness, cfg)
+
+    # Merge with structure info
+    symbols = union(constants, single_defs, collect(keys(structure_proxies)))
+    matrix_properties = Symexpr2PropertiesMap()
+    for s in symbols
+        # These symbols are not necessary related with matrices. But
+        # some symbols may be of subtypes of Array, some other may be
+        # not (like CHOLMOD.Factor, which is not a matrix, but is realted
+        # with matrix). So we'd better not to filter out any symbol.
+        matrix_properties[s] = MatrixProperties(false, false, false, false, false, false)
+        if in(s, constants)
+            matrix_properties[s].constant_valued = true
+        end
+        if in(s, single_defs)
+            matrix_properties[s].is_single_def = true
+        end
+        
+        # TODO: Todd, please fill the following fields:
+        # matrix_properties[s].constant_structured = ?
+        # matrix_properties[s].is_symmetric = ?
+        # matrix_properties[s].is_structure_symmetric = ?
+        # matrix_properties[s].is_structure_only = ?
+    end
+    matrix_properties
 end
