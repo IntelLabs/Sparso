@@ -32,13 +32,22 @@ void waxpby_(int n, T *w, T alpha, const T *x, T beta, const T *y)
   }
 }
 
+// w = alpha*x + beta
 template<class T>
 void waxpb_(int n, T *w, T alpha, const T *x, T beta)
 {
   if (1 == alpha) {
+    if (0 == beta) {
 #pragma omp parallel for
-    for (int i = 0; i < n; ++i) {
-      w[i] = x[i] + beta;
+      for (int i = 0; i < n; ++i) {
+        w[i] = x[i];
+      }
+    }
+    else {
+#pragma omp parallel for
+      for (int i = 0; i < n; ++i) {
+        w[i] = x[i] + beta;
+      }
     }
   }
   else {
