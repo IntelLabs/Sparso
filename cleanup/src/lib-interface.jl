@@ -249,17 +249,15 @@ function reorder_matrix(
     new_A            :: SparseMatrixCSC, 
     P                :: Vector, 
     inverse_P        :: Vector, 
-    get_permutation  :: Bool, 
-    one_based_input  :: Bool, 
-    one_based_output :: Bool
+    one_based_output :: Bool = true
 )
     ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),
+               Ptr{Cint}, Ptr{Cint}, Bool),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(new_A.colptr), pointer(new_A.rowval), pointer(new_A.nzval),
-               pointer(P), pointer(inverse_P), get_permutation, one_based_input, 
+               pointer(P), pointer(inverse_P),
                one_based_output)
 end
 
@@ -283,6 +281,27 @@ function reverse_reorder_vector(
     ccall((:reorderVectorWithInversePerm, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(new_V), pointer(P), length(V))
+end
+
+function set_reordering_decision_maker(
+    fknob :: Ptr{Void}
+ )
+    ccall((:SetReorderingDecisionMaker, LIB_PATH), Void,
+         (Ptr{Void},),
+         fknob)
+end
+
+function get_reordering_vectors(
+    fknob :: Ptr{Void}
+ )
+    len = Ref{Cint}(0)
+    perm = ccall((:GetReorderingVector, LIB_PATH), Ptr{Cint},
+         (Ptr{Void}, Ref{Cint}),
+         fknob, len)
+    inv_perm = ccall((:GetInverseReorderingVector, LIB_PATH), Ptr{Cint},
+         (Ptr{Void}, Ref{Cint}),
+         fknob, len)
+    pointer_to_array(perm, len[]), pointer_to_array(inv_perm, len[])
 end
 
 @doc """
@@ -416,6 +435,21 @@ function dot(
   else
     dot(x, y)
   end
+end
+
+@doc """ 2-norm of vector x """
+function norm(
+    x :: Vector
+)
+  sqrt(dot(x, x))
+end
+
+@doc """ copy x to y """
+function copy!(
+    y :: Vector,
+    x :: Vector
+)
+  WAXPB!(y, 1, x, 0)
 end
 
 @doc """ w = x./y """

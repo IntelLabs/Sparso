@@ -76,14 +76,24 @@ MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i);
 
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
-    double *y, const double *b, FunctionKnob* fknob);
+    double *y, double *b, FunctionKnob* fknob);
 
 void BackwardTriangularSolve(
     int U_numrows, int U_numcols, int* U_colptr, int* U_rowval, double* U_nzval,
-    double *y, const double *b, FunctionKnob* fknob);
+    double *y, double *b, FunctionKnob* fknob);
     
 FunctionKnob* NewFunctionKnob();
 void DeleteFunctionKnob(FunctionKnob* fknob);
+
+/**
+ * Let the function associated with fknob decide what permutation/inverse
+ * permutation vector should be, and reorders its inputs and outputs accordingly.
+ * Other functions just respect the decision, makes no decision, nor does any
+ * reordering.
+ */
+void SetReorderingDecisionMaker(FunctionKnob *fknob);
+int *GetReorderingVector(FunctionKnob *fknob, int *len);
+int *GetInverseReorderingVector(FunctionKnob *fknob, int *len);
 
 /******************************************************************************/
 
