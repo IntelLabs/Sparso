@@ -189,6 +189,35 @@ const liveness_test1 = Test(
     ]
 )
 
+const liveness_test2 = Test(
+    "liveness-test2",
+    "liveness-test2.jl",
+    [
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.*bigM.* A .*\) Use\(",
+                        "Test liveness for ipm-ref: A should not be updated in the block that sets bigM"
+        ),
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.* A .*bigM.*\) Use\(",
+                        "Test liveness for ipm-ref: A should not be updated in the block that sets bigM"
+        ),
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.*Rd.* A .*\) Use\(",
+                        "Test liveness for ipm-ref: A should not be updated in the block that sets Rd"
+        ),
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.* A .*Rd.*\) Use\(",
+                        "Test liveness for ipm-ref: A should not be updated in the block that sets Rd"
+        ),
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.* mu .*\) Use\(.*\n.* = mu <=",
+                        "Test liveness for ipm-ref: mu should not be updated in the block that tests mu <= 1.0e-7"
+        ),
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.*blas1_time.* (relResidual|x|p) .*\) Use\(.*\n\s*blas1_time =",
+                        "Test liveness for ipm-ref: relResidual, x, p should not be updated in the block that sets blas1_time"
+        ),
+        AntiTestPatter(r"Liveness of basic blocks:(.|\n)*Def\(.* (relResidual|x|p) .*blas1_time.*\) Use\(.*\n\s*blas1_time =",
+                        "Test liveness for ipm-ref: relResidual, x, p should not be updated in the block that sets blas1_time"
+        ),
+        exception_pattern
+    ]
+)
+
 const call_replacement_test1 = Test(
     "call-replacement-test1",
     "call-replacement-test1.jl small-diag.mtx",
@@ -356,6 +385,7 @@ const tests = [
     context_test3,
     context_test4,
     liveness_test1,
+    liveness_test2,
     call_replacement_test1,
     call_replacement_test2,
     call_replacement_test3,
@@ -414,7 +444,7 @@ for test in tests
             comment = pattern.comment
             file = open(log, "a")
             write(file, "\n****** Failed in ", 
-                (typeof(pattern) == AntiTestPattern) ? "anti-pattern" : "pattern",
+                (typeof(pattern) == AntiTestPattern) ? "anti-pattern\n" : "pattern\n",
                 string(pattern.pattern), "\n\tComment: ", comment)
             close(file)
             successful = false
