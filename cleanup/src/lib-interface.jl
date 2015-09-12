@@ -686,7 +686,7 @@ function ADB(
     colidx = pointer_to_array(
         ccall((:CSR_GetColIdx, LIB_PATH), Ptr{Cint}, (Ptr{Void},), csrADB), (nnz,))
     values = pointer_to_array(
-        ccall((:CSR_GetValues, LIB_PATH), Ptr{Cdouble}, (Ptr{Void},), csrADAT), (nnz,))
+        ccall((:CSR_GetValues, LIB_PATH), Ptr{Cdouble}, (Ptr{Void},), csrADB), (nnz,))
     ADB = SparseMatrixCSC{Cdouble, Cint}(m, m, rowptr, colidx, values)
 
     destroy_CSR(csrA)

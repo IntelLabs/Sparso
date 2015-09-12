@@ -99,8 +99,14 @@ const context_test2 = Test(
     "context-test2",
     "context-test2.jl small-diag.mtx",
     [
-        TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434107334e-5(.|\n)*rel_err=6.382732220893931e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434515133e-5(.|\n)*rel_err=6.629156171119774e-11",
-                     "Test pcg_symgs_with_context_opt"
+        TestPattern(r"Original:\s*\n.*\n\s*sum of x=-1.577312043411552e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453315942089819e-6",
+                     "Test original pcg_symgs"
+        ),
+        TestPattern(r"With manual context-sensitive optimization without reordering:\s*\n.*\n\s*sum of x=-1.5773120433545284e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278809182831e-6",
+                     "Test pcg_symgs with manual context-sensitive optimization without reordering"
+        ),
+        TestPattern(r"With manual context-sensitive optimization:\s*\n.*\n\s*sum of x=-1.5773120433546033e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278596596245e-6",
+                     "Test pcg_symgs with manual context-sensitive optimization"
         ),
         exception_pattern
     ]
@@ -363,13 +369,85 @@ const call_replacement_test12 = Test(
     ]
 )
 
-
 const name_resolution_test1 = Test(
     "name-resolution-test1",
     "name-resolution-test1.jl small-diag.mtx",
     [
         TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*Module name: Main\nFunction name: \*",
                      "Test name resolution."
+        ),
+        exception_pattern
+    ]
+)
+
+const constant_value_test1 = Test(
+    "constant-value-test1",
+    "constant-value-test1.jl",
+    [
+        TestPattern(r"Constants discovered:.*\n.*\[.*:A.*\]",
+                     "Test ipm-ref that A is recognized as a loop constant."
+        ),
+        exception_pattern
+    ]
+)
+
+const single_def_test1 = Test(
+    "single-def-test1",
+    "single-def-test1.jl",
+    [
+        TestPattern(r"Single-defs discovered:.*\n.*\[.*:D.*\]",
+                     "Test ipm-ref that D is recognized as a single-def in the loop."
+        ),
+        TestPattern(r"Single-defs discovered:.*\n.*\[.*:B.*\]",
+                     "Test ipm-ref that B is recognized as a single-def in the loop."
+        ),
+        TestPattern(r"Single-defs discovered:.*\n.*\[.*:R.*\]",
+                     "Test ipm-ref that R is recognized as a single-def in the loop."
+        ),
+        exception_pattern
+    ]
+)
+
+const constant_structure_test1 = Test(
+    "constant-structure-test1",
+    "constant-structure-test1.jl",
+    [
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:A.*\]",
+                     "Test ipm-ref that A is recognized as constant in structure."
+        ),
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:D.*\]",
+                     "Test ipm-ref that D is recognized as constant in structure."
+        ),
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:B.*\]",
+                     "Test ipm-ref that B is recognized as constant in structure."
+        ),
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:R.*\]",
+                     "Test ipm-ref that R is recognized as constant in structure."
+        ),
+        exception_pattern
+    ]
+)
+
+const value_symmetry_test1 = Test(
+    "value-symmetry-test1",
+    "value-symmetry-test1.jl",
+    [
+        TestPattern(r"Value symmetry discovered:.*\n.*\[.*:A.*\]",
+                     "Test ipm-ref that A is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+const structure_symmetry_test1 = Test(
+    "structure-symmetry-test1",
+    "structure-symmetry-test1.jl",
+    [
+        TestPattern(r"Structure symmetry discovered:.*\n.*\[.*:A.*\]",
+                     "Test ipm-ref that A is recognized as symmetric in structure."
+        ),
+        TestPattern(r"Structure symmetry discovered:.*\n.*\[.*:B.*\]",
+                     "Test ipm-ref that B is recognized as symmetric in structure."
         ),
         exception_pattern
     ]
@@ -398,7 +476,12 @@ const tests = [
     call_replacement_test10,
     call_replacement_test11,
     call_replacement_test12,
-    name_resolution_test1
+    name_resolution_test1,
+    constant_value_test1,
+    single_def_test1,
+    constant_structure_test1,
+    value_symmetry_test1,
+    structure_symmetry_test1
 ]
 
 if length(ARGS) > 0
