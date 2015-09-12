@@ -135,6 +135,8 @@ function pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
     (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
     (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
 
+    fknob_spmv = (SparseAccelerator.new_function_knob)()
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobA,fknob_spmv)
     __fknob_8201 = (SparseAccelerator.new_function_knob)()
     (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
     __fknob_8221 = (SparseAccelerator.new_function_knob)()
@@ -145,7 +147,7 @@ function pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
 
         spmv_time -= time()
         #Ap = A*p
-        Ap = SparseAccelerator.SpMV(A,p)
+        Ap = SparseAccelerator.SpMV(A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
@@ -244,6 +246,8 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
     (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
 
+    fknob_spmv = (SparseAccelerator.new_function_knob)()
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobA,fknob_spmv)
     __fknob_8201 = (SparseAccelerator.new_function_knob)()
     (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
     __fknob_8221 = (SparseAccelerator.new_function_knob)()
@@ -284,7 +288,7 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
 
         spmv_time -= time()
         #Ap = A*p
-        Ap = SparseAccelerator.SpMV(A,p)
+        Ap = SparseAccelerator.SpMV(A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()

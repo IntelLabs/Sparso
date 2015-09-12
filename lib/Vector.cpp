@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cassert>
+#include <cfloat>
 #include <algorithm>
 
 #include <omp.h>
@@ -13,15 +14,35 @@ template<class T>
 void waxpby_(int n, T *w, T alpha, const T *x, T beta, const T *y)
 {
   if (1 == alpha) {
+    if (1 == beta) {
 #pragma omp parallel for
-    for (int i = 0; i < n; ++i) {
-      w[i] = x[i] + beta*y[i];
+      for (int i = 0; i < n; ++i) {
+        w[i] = x[i] + y[i];
+      }
+    }
+    else if (-1 == beta) {
+#pragma omp parallel for
+      for (int i = 0; i < n; ++i) {
+        w[i] = x[i] - y[i];
+      }
+    }
+    else {
+#pragma omp parallel for
+      for (int i = 0; i < n; ++i) {
+        w[i] = x[i] + beta*y[i];
+      }
     }
   }
   else if (1 == beta) {
 #pragma omp parallel for
     for (int i = 0; i < n; ++i) {
       w[i] = alpha*x[i] + y[i];
+    }
+  }
+  else if (-1 == alpha) {
+#pragma omp parallel for
+    for (int i = 0; i < n; ++i) {
+      w[i] = beta*y[i] - x[i];
     }
   }
   else {
@@ -122,6 +143,34 @@ void pointwiseMultiply(int n, double *w, const double *x, const double *y)
 void waxpb(int n, double *w, double alpha, const double *x, double beta)
 {
   waxpb_(n, w, alpha, x, beta);
+}
+
+double sum(int n, const double *x)
+{
+  double sum = 0;
+#pragma omp parallel for reduction(+:sum)
+  for (int i = 0; i < n; i++) {
+    sum += x[i];
+  }
+  return sum;
+}
+
+double minimum(int n, const double *x)
+{
+  double minimum = DBL_MAX;
+#pragma omp parallel for reduction(min:minimum)
+  for (int i = 0; i < n; i++) {
+    minimum = min(minimum, x[i]);
+  }
+  return minimum;
+}
+
+void min(int n, double *w, const double *x, double alpha)
+{
+#pragma omp parallel for
+  for (int i = 0; i < n; i++) {
+    w[i] = min(x[i], alpha);
+  }
 }
 
 } // extern "C"

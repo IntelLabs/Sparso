@@ -246,19 +246,25 @@ static void CreateOptimizedRepresentation(
         fprintf(stderr, "Warning: pass nzval as NULL when we only care about structure\n");
     }
 
+    // If transpose is already available, just us it.
+    MatrixKnob *knobTranspose = m->derivatives[DERIVATIVE_TYPE_TRANSPOSE];
+    if (knobTranspose && (m->is_structure_only || !m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE])) {
+        m->A = new CSR(numrows, numcols, knobTranspose->colptr, knobTranspose->rowval, knobTranspose->nzval);
+        return;
+    }
+
     // Simply copying CSC to CSR will create a transposed version of original matrix
     CSR *AT = new CSR(numcols, numrows, colptr, rowval, nzval);
 
     // When compiler tells you matrix must be symmetric, we skip checking symmetry
     bool needTranspose = false;
-    if (!m->derivatives[DERIVATIVE_TYPE_TRANSPOSE] || !m->is_structure_only && m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE]) {
-        if (m->is_structure_only && !m->is_structure_symmetric) {
-            needTranspose = !AT->isSymmetric(false);
-        }
-        if (!m->is_structure_only && !m->is_symmetric) {
-            needTranspose = !AT->isSymmetric(true);
-        }
+    if (m->is_structure_only && !m->is_structure_symmetric) {
+        needTranspose = !AT->isSymmetric(false);
     }
+    if (!m->is_structure_only && !m->is_symmetric) {
+        needTranspose = !AT->isSymmetric(true);
+    }
+
     if (needTranspose) {
         m->A = AT->transpose();
 
@@ -429,7 +435,43 @@ void DeleteFunctionKnob(FunctionKnob* fknob)
     delete fknob;
 }
 
-static void TriangularSolve(
+void SpMV(
+    int m, int n,
+    double *w,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *x,
+    double beta,
+    double *y,
+    double gamma,
+    FunctionKnob *fknob)
+{
+    assert(fknob);
+    MatrixKnob *mknob = GetMatrixKnob(fknob, 0);
+    assert(mknob);
+
+    CreateOptimizedRepresentation(mknob, m, n, A_colptr, A_rowval, A_nzval);
+
+    if (mknob->reordering_info.perm != fknob->reordering_info.perm && fknob->is_reordering_decision_maker) {
+        assert(m == n); // currently only support square matrices
+
+        fknob->reordering_info.perm = new int[m];
+        fknob->reordering_info.inverse_perm = new int[n];
+
+        mknob->A->getRCMPermutation(fknob->reordering_info.perm, fknob->reordering_info.inverse_perm);
+        mknob->reordering_info = fknob->reordering_info;
+
+        reorderVectorWithInversePerm(
+            x, fknob->reordering_info.inverse_perm, n);
+        if (y)
+            reorderVectorWithInversePerm(
+                y, fknob->reordering_info.perm, m);
+    }
+
+    mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+}
+
+static void TriangularSolve_(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, double *b, FunctionKnob* fknob,
     void (*solveFunction)(CSR&, double *, const double *, const LevelSchedule&, const int *),
@@ -633,7 +675,7 @@ void ForwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, double *b, FunctionKnob* fknob)
 {
-    TriangularSolve(
+    TriangularSolve_(
         numrows, numcols, colptr, rowval, nzval, y, b, fknob,
         &forwardSolve,
         &forwardSolveWithReorderedMatrix);
@@ -643,7 +685,7 @@ void BackwardTriangularSolve(
     int numrows, int numcols, int* colptr, int* rowval, double* nzval,
     double *y, double *b, FunctionKnob* fknob)
 {
-    TriangularSolve(
+    TriangularSolve_(
         numrows, numcols, colptr, rowval, nzval, y, b, fknob,
         &backwardSolve,
         &backwardSolveWithReorderedMatrix);
@@ -837,6 +879,12 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
         itr->second->colptr = i1;
         itr->second->rowval = j1;
         itr->second->nzval = v1;
+
+        if (itr->second->A) {
+            itr->second->A = NULL;
+            CreateOptimizedRepresentation(
+                itr->second, numRows, numCols, i1, j1, v1);
+        }
     }
 
 #ifdef PERF_TUNE

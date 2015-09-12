@@ -17,7 +17,7 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   bigM = maximum(A)
   bigM = maximum([norm(b, Inf) norm(p, Inf) bigM])
   x = 100*bigM*ones(n)
-  s = x
+  s = copy(x)
   y = zeros(m)
 
   bc = 1 + maximum([norm(b) norm(p)])
@@ -81,6 +81,8 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   (SparseAccelerator.add_mknob_to_fknob)(__mknobD_8600,__fknob_8602)
   (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601,__fknob_8602)
 
+  (SparseAccelerator.set_derivative)(__mknobA_8601, SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE, __mknob__AT___8599)
+
   # For cholfact_int32
   __fknob_8622 = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(__mknobB_8598,__fknob_8622)
@@ -89,28 +91,47 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   __fknob_8623 = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(__mknobR_8596,__fknob_8623)
 
+  fknob_spmv1 = (SparseAccelerator.new_function_knob)()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknob__AT___8599, fknob_spmv1)
+
+  fknob_spmv2 = (SparseAccelerator.new_function_knob)()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601, fknob_spmv2)
+
+  fknob_spmv3 = (SparseAccelerator.new_function_knob)()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601, fknob_spmv3)
+
+  fknob_spmv4 = (SparseAccelerator.new_function_knob)()
+  (SparseAccelerator.add_mknob_to_fknob)(__mknob__AT___8599, fknob_spmv4)
+
   for iter=1:200
 
     # compute residuals
     spmv_time -= time()
-    Rd = A'*y + s - p
-    Rp = A*x - b
+    #Rd = __AT__*y + s - p
+    Rd = SparseAccelerator.SpMV(1, __AT__, y, 1, s - p, fknob_spmv1)
+    #Rp = A*x - b
+    Rp = SparseAccelerator.SpMV(1, A, x, -1, b, fknob_spmv2)
     spmv_time += time()
 
     blas1_time -= time()
-    Rc = x.*s
-    mu = mean(Rc)
+    #Rc = x.*s
+    Rc = SparseAccelerator.element_wise_multiply(x, s)
+    #mu = mean(Rc)
+    mu = SparseAccelerator.sum(Rc)/length(Rc)
     relResidual = norm([Rd; Rp; Rc])/bc
     blas1_time += time()
 
     if (relResidual <= 1e-7 && mu <= 1e-7) break; end
 
     blas1_time -= time()
-    Rc = Rc - min(0.1, 100*mu)*mu
+    #Rc = Rc - min(0.1, 100*mu)*mu
+    SparseAccelerator.WAXPB!(Rc, 1, Rc, -min(0.1, 100*mu)*mu)
 
     # set up the scaling matrix, and form the coefficient matrix for
     # the linear system
-    d = min(5.e+15, x./s)
+    #d = min(5.e+15, x./s)
+    d = SparseAccelerator.element_wise_divide(x, s)
+    SparseAccelerator.min!(d, d, 5.e+15)
     blas1_time += time()
 
     spgemm_time -= time()
@@ -129,11 +150,14 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
 
     # set up the right-hand side
     blas1_time -= time()
-    t1 = x.*Rd - Rc;
+    #t1 = x.*Rd - Rc;
+    t1 = SparseAccelerator.element_wise_multiply(x, Rd)
+    SparseAccelerator.WAXPBY!(t1, 1, t1, -1, Rc)
     blas1_time += time()
 
     spmv_time -= time()
-    t2 = -(Rp + A*(t1./s));
+    #t2 = -(Rp + A*(t1./s));
+    t2 = SparseAccelerator.SpMV(-1, A, t1./s, -1, Rp, fknob_spmv3)
     spmv_time += time()
 
     # solve it and recover the other step components
@@ -143,21 +167,35 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
     trslv_time += time()
 
     spmv_time -= time()
-    temp = A'*dy
+    #temp = A'*dy
+    temp = SparseAccelerator.SpMV(__AT__, dy, fknob_spmv4)
     spmv_time += time()
 
     blas1_time -= time()
-    dx = (x.*temp + t1)./s
-    ds = -(s.*dx + Rc)./x
+    #dx = (x.*temp + t1)./s
+    SparseAccelerator.element_wise_multiply!(temp, x, temp)
+    SparseAccelerator.WAXPBY!(temp, 1, temp, 1, t1)
+    dx = SparseAccelerator.element_wise_divide(temp, s)
+    #ds = -(s.*dx + Rc)./x
+    SparseAccelerator.element_wise_multiply!(temp, s, dx)
+    SparseAccelerator.WAXPBY!(temp, -1, temp, -1, Rc)
+    ds = SparseAccelerator.element_wise_divide(temp, x)
 
     tau = max(.9995, 1 - mu)
-    ap = -1/minimum([dx./x; -1])
-    ad = -1/minimum([ds./s; -1])
+    #ap = -1/minimum([dx./x; -1])
+    SparseAccelerator.element_wise_divide!(temp, dx, x)
+    ap = -1/min(SparseAccelerator.minimum(temp), -1)
+    #ad = -1/minimum([ds./s; -1])
+    SparseAccelerator.element_wise_divide!(temp, ds, s)
+    ad = -1/min(SparseAccelerator.minimum(temp), -1)
     ap = tau*ap
     ad = tau*ad
-    x = x + ap*dx
-    s = s + ad*ds
-    y = y + ad*dy
+    #x = x + ap*dx
+    #s = s + ad*ds
+    #y = y + ad*dy
+    SparseAccelerator.WAXPBY!(x, 1, x, ap, dx)
+    SparseAccelerator.WAXPBY!(s, 1, s, ad, ds)
+    SparseAccelerator.WAXPBY!(y, 1, y, ad, dy)
     blas1_time += time()
   end
 
@@ -213,7 +251,7 @@ println("\n\nWith manual context-sensitive optimization: ")
 x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_with_context_opt(A, b, p)
 println("sum of x=", sum(x))
-@printf "\nref_total_time = %f\n" ref_total_time
+@printf "\nopt_total_time = %f\n" ref_total_time
 @printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
 @printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
 

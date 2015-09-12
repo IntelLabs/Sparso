@@ -327,16 +327,35 @@ function SpMV!(
     x     :: Vector, 
     beta  :: Number, 
     y     :: Vector, 
-    gamma :: Number
+    gamma :: Number,
+    fknob :: Ptr{Void} = C_NULL # fknob == C_NULL => A is symmetric so we can directly call CSR_MultiplyWithVector with CSC matrix
 )
-    assert(length(w) == length(y))
+    assert(length(w) == length(y) || length(y) == 0)
 
     if use_SPMP
-        A1 = create_CSR(A)
-        ccall((:CSR_MultiplyWithVector, LIB_PATH), Void,
-              (Ptr{Cdouble}, Cdouble, Ptr{Void}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
-              pointer(w), alpha, A1, pointer(x), beta, pointer(y), gamma)
-        destroy_CSR(A1)
+        if fknob == C_NULL
+          A1 = create_CSR(A)
+          ccall((:CSR_MultiplyWithVector, LIB_PATH), Void,
+                (Ptr{Cdouble}, Cdouble, Ptr{Void}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
+                pointer(w), alpha, A1, pointer(x), beta, length(y) == 0 ? C_NULL : pointer(y), gamma)
+          destroy_CSR(A1)
+        else
+          ccall((:SpMV, LIB_PATH), Void,
+                (Cint, Cint,
+                 Ptr{Cdouble},
+                 Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+                 Ptr{Cdouble},
+                 Cdouble, Ptr{Cdouble},
+                 Cdouble,
+                 Ptr{Void}),
+                size(A, 1), size(A, 2),
+                w,
+                alpha, A.colptr, A.rowval, A.nzval,
+                x,
+                beta, length(y) == 0 ? C_NULL : y,
+                gamma,
+                fknob)
+        end
     else
         # use Julia implementation
         w = alpha * A * x + beta * y + gamma
@@ -345,8 +364,8 @@ function SpMV!(
 end
 
 @doc """ y = A*x """
-SpMV!(y :: Vector, A :: SparseMatrixCSC, x :: Vector) = 
-    SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)))
+SpMV!(y :: Vector, A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_NULL) = 
+    SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)), fknob)
 
 @doc """ alpha*A*x + beta*y + gamma """
 function SpMV(
@@ -355,28 +374,29 @@ function SpMV(
     x     :: Vector, 
     beta  :: Number, 
     y     :: Vector, 
-    gamma :: Number
+    gamma :: Number,
+    fknob :: Ptr{Void} = C_NULL
 )
-   w = Array(Cdouble, length(x))
-   SpMV!(w, alpha, A, x, beta, y, gamma)
+   w = Array(Cdouble, size(A, fknob != C_NULL ? 1 : 2))
+   SpMV!(w, alpha, A, x, beta, y, gamma, fknob)
    w
 end
 
 @doc """ alpha*A*x + beta*y """
-SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, beta :: Number, y :: Vector) =
-    SpMV(alpha, A, x, beta, y, zero(eltype(x)))
+SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, beta :: Number, y :: Vector, fknob :: Ptr{Void} = C_NULL) =
+    SpMV(alpha, A, x, beta, y, zero(eltype(x)), fknob)
 
 @doc """ alpha*A*x + y """
-SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, y :: Vector) = 
-    SpMV(alpha, A, x, one(eltype(y)), y, zero(eltype(x)))
+SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, y :: Vector, fknob :: Ptr{Void} = C_NULL) = 
+    SpMV(alpha, A, x, one(eltype(y)), y, zero(eltype(x)), fknob)
 
 @doc """ alpha*A*x """
-SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector) = 
-    SpMV(alpha, A, x, zero(eltype(x)), x, zero(eltype(x)))
+SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_NULL) = 
+    SpMV(alpha, A, x, zero(eltype(x)), Array{Float64,1}[], zero(eltype(x)), fknob)
 
 @doc """ A*x """
-SpMV(A :: SparseMatrixCSC, x :: Vector) = 
-    SpMV(one(eltype(x)), A, x, zero(eltype(x)), x, zero(eltype(x)))
+SpMV(A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_NULL) = 
+    SpMV(one(eltype(x)), A, x, zero(eltype(x)), Array{Float64,1}[], zero(eltype(x)), fknob)
 
 @doc """
 SpMV. In addition, measure the potential benefit of reordering its input matrix,
@@ -444,6 +464,47 @@ function norm(
   sqrt(dot(x, x))
 end
 
+@doc """ sum of vector x """
+function sum(
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:sum, LIB_PATH), Cdouble,
+          (Cint, Ptr{Cdouble}),
+          length(x), x)
+  else
+    sum(x)
+  end
+end
+
+function minimum(
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:minimum, LIB_PATH), Cdouble,
+          (Cint, Ptr{Cdouble}),
+          length(x), x)
+  else
+    minimum(x)
+  end
+end
+
+function min!(
+    w     :: Vector,
+    x     :: Vector,
+    alpha :: Number
+)
+  assert(length(x) == length(w))
+
+  if use_SPMP
+    ccall((:min, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Cdouble),
+          length(x), w, x, alpha)
+  else
+    w[:] = min(x, alpha)
+  end
+end
+
 @doc """ copy x to y """
 function copy!(
     y :: Vector,
@@ -465,9 +526,8 @@ function element_wise_divide!(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
   else
-    w = x./y
+    w[:] = x./y
   end
-  w
 end
 
 @doc """" Alocate space for and return element-wise division of two vectors. """
@@ -493,9 +553,8 @@ function element_wise_multiply!(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
   else
-    w = x.*y
+    w[:] = x.*y
   end
-  w
 end
 
 @doc """" Alocate space for and return element-wise multiplication of two vectors. """
@@ -524,9 +583,8 @@ function WAXPBY!(
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
           length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
   else
-    w = alpha*x + beta*y
+    w[:] = alpha*x + beta*y
   end
-  w
 end
 
 @doc """ Allocate space for and return alpha*x + beta*y """
@@ -555,9 +613,8 @@ function WAXPB!(
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
           length(x), pointer(w), alpha, pointer(x), beta)
   else
-    w = alpha*x + beta
+    w[:] = alpha*x + beta
   end
-  w
 end
 
 @doc """ Allocate space for and return alpha*x + beta """

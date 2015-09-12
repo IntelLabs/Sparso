@@ -74,6 +74,20 @@ void  SetStructureDerivative(MatrixKnob* mknob, DerivativeType type, MatrixKnob 
 void  AddMatrixKnob(FunctionKnob* fknob, MatrixKnob* mknob);
 MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i);
 
+/**
+ * w = alpha*A*x + beta*y + gamma
+ */
+void SpMV(
+    int m, int n,
+    double *w,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *x,
+    double beta,
+    double *y,
+    double gamma,
+    FunctionKnob *fknob);
+
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, double *b, FunctionKnob *fknob);

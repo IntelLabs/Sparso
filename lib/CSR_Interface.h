@@ -85,6 +85,12 @@ void pointwiseDivide(int n, double *w, const double *x, const double *y);
 void pointwiseMultiply(int n, double *w, const double *x, const double *y);
 // w = alpha*x + beta
 void waxpb(int n, double *w, double alpha, const double *x, double beta);
+// sum(x)
+double sum(int n, const double *x);
+// minimum(x)
+double minimum(int n, const double *x);
+// w = min(x, alpha)
+void min(int n, double *w, const double *x, double alpha); 
 
 void tallSkinnyDGEMM(
   int transA, int transB,
