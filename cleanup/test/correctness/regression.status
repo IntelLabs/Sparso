@@ -2,11 +2,12 @@ Testing sanity-test1: Pass
 Testing sanity-test2: Pass
 Testing sanity-test3: Pass
 Testing context-test1: FAIL. See context-test1.log
-Testing context-test2: FAIL. See context-test2.log
+Testing context-test2: Pass
 Testing context-test2-without-reordering: Pass
 Testing context-test3: Pass
 Testing context-test4: FAIL. See context-test4.log
 Testing liveness-test1: FAIL. See liveness-test1.log
+Testing liveness-test2: FAIL. See liveness-test2.log
 Testing call-replacement-test1: Pass
 Testing call-replacement-test2: Pass
 Testing call-replacement-test3: Pass
@@ -20,6 +21,11 @@ Testing call-replacement-test10: FAIL. See call-replacement-test10.log
 Testing call-replacement-test11: FAIL. See call-replacement-test11.log
 Testing call-replacement-test12: Pass
 Testing name-resolution-test1: Pass
-Total: 22
-Pass : 15
-Fail : 7
+Testing constant-value-test1: FAIL. See constant-value-test1.log
+Testing single-def-test1: FAIL. See single-def-test1.log
+Testing constant-structure-test1: FAIL. See constant-structure-test1.log
+Testing value-symmetry-test1: FAIL. See value-symmetry-test1.log
+Testing structure-symmetry-test1: FAIL. See structure-symmetry-test1.log
+Total: 28
+Pass : 16
+Fail : 12

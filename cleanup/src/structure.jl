@@ -244,6 +244,14 @@ function structure_discovery(
     
     dprintln(1, 0, "\nMatrix structures discovered:")
     dprintln(1, 1, "", structure_proxies)
+
+    # These are only to cause  structure-related tests fail until structure analysis succeeds.
+    # TODO: Linxiang: please copy them to appropriate places, and
+    # adding printing of meaningful data, so that regression.jl can test. 
+    # See the above two dprintln as an example.
+    dprintln(1, 0, "\nConstant structures discovered:")
+    dprintln(1, 0, "\nValue symmetry discovered:")
+    dprintln(1, 0, "\nStructure symmetry discovered:")
 end
 
 @doc """ Find the properties of all the matrices in teh region. """

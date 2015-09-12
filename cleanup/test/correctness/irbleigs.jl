@@ -2,7 +2,6 @@ include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
-CompilerTools.LivenessAnalysis.set_debug_level(6)
 
 global mainloop_time = 0.
 global deflate_time = 0.

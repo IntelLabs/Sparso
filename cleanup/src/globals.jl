@@ -340,10 +340,10 @@ function analyses(
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
-    loop_info   :: DomLoops)
+    loop_info   :: DomLoops
+)
 
     dprintln(1, 0, "\nAnalyzing ...", "\nCFG:")
-    LivenessAnalysis.set_debug_level(6)
     dprintln(1, 1, liveness)
         
     regions = region_formation(cfg, loop_info)
@@ -387,7 +387,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         loop_info   = Loops.compute_dom_loops(cfg)
 
         dprintln(1, 0, "\nFunction body showing structures:")
-        dsprintln(1, 1, symbol_info, func_ast)
+        dsprintln(1, 1, symbol_info, liveness, func_ast)
 
         if reorder_enabled || context_sensitive_opt_enabled
             # Reordering and context-sensitive optimization: Do all analyses, and 

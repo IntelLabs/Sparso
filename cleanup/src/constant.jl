@@ -32,6 +32,9 @@ function find_constant_values(
         end
     end
 
+    dprintln(1, 0, "\nConstants discovered:")
+    dprintln(1, 1, "", constants)
+
     constants
 end
 
@@ -57,6 +60,9 @@ function find_single_defs(
             single_defs    = setdiff(total, double_defined)
         end
     end
+
+    dprintln(1, 0, "\nSingle-defs discovered:")
+    dprintln(1, 1, "", single_defs)
 
     single_defs
 end
