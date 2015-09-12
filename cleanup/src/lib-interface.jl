@@ -311,7 +311,7 @@ format, in CSR format.
 function create_CSR(A :: SparseMatrixCSC)
     ccall((:CSR_Create, LIB_PATH), Ptr{Void},
         (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-        A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+        A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
 end
 
 @doc """ Destroy the CSR representation of the sparse matrix. """
@@ -636,9 +636,9 @@ ADB(A', D, B', fknob_ADB) functionality:
     return mknob_C->matrix in CSC format
 """
 function ADB(
-    AT    :: SparseMatrixCSC,
+    A     :: SparseMatrixCSC,
     D     :: SparseMatrixCSC,
-    BT    :: SparseMatrixCSC,
+    B     :: SparseMatrixCSC,
     fknob :: Ptr{Void}
 )
     if fknob == C_NULL
@@ -663,92 +663,33 @@ function ADB(
     #TODO: assert(mknob_D->diagonal)
     assert(ccall((:IsConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
 
-    csrA   = SparseAccelerator.create_CSR(AT)
-    csrB   = SparseAccelerator.create_CSR(BT)
-    csrADB = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_C)
-    if csrADB == C_NULL
-        csrADB = ccall((:CSR_ADBInspect, LIB_PATH), Ptr{Void},
-                        (Ptr{Void}, Ptr{Void}),
-                         csrA, csrB)
-        ccall((:SetMatrix, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_C, csrADB)
-    end
-
-    d = diag(D)
-    ccall((:CSR_ADB, LIB_PATH), Void,
-          (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Cdouble}),
-           csrADB, csrA, csrB, d)
-
-    # Represent the result in CSC format
-    m = size(AT, 2)
-    rowptr = pointer_to_array(
-        ccall((:CSR_GetRowPtr, LIB_PATH), Ptr{Cint}, (Ptr{Void},), csrADB), (m + 1,))
-    nnz = rowptr[m + 1] - 1
-    colidx = pointer_to_array(
-        ccall((:CSR_GetColIdx, LIB_PATH), Ptr{Cint}, (Ptr{Void},), csrADB), (nnz,))
-    values = pointer_to_array(
-        ccall((:CSR_GetValues, LIB_PATH), Ptr{Cdouble}, (Ptr{Void},), csrADAT), (nnz,))
-    ADB = SparseMatrixCSC{Cdouble, Cint}(m, m, rowptr, colidx, values)
-
-    destroy_CSR(csrA)
-    destroy_CSR(csrB)
-
-    ADB
-end
-
-const MKL_DSS_DEFAULTS = 0
-const MKL_DSS_NON_SYMMETRIC = 536871104
-const MKL_DSS_SUCCESS = 0
-const MKL_DSS_AUTO_ORDER = 268435520
-const MKL_DSS_POSITIVE_DEFINITE = 134217792
-
-function dss_analyze(A :: SparseMatrixCSC)
-    handle = Int[0]
-    opt = MKL_DSS_DEFAULTS
-    error = ccall((:dss_create, LIB_PATH), Cint,
-        (Ptr{Void}, Ptr{Cint}),
-        handle, &opt)
-    if error != MKL_DSS_SUCCESS
-        println("dss_create returned error code $error")
-    end
-
-    opt = MKL_DSS_NON_SYMMETRIC
     m = size(A, 1)
-    nnz = A.colptr[m + 1] - 1
-    error = ccall((:dss_define_structure, LIB_PATH), Cint,
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}),
-        handle, &opt, A.colptr, &m, &m, A.rowval, &nnz)
-    if error != MKL_DSS_SUCCESS
-        println("dss_define_structure returned error code $error")
-    end
+    n = size(B, 2)
+    k = size(A, 2)
 
-    opt = MKL_DSS_AUTO_ORDER
-    error = ccall((:dss_reorder, LIB_PATH), Cint,
-                (Ptr{Void}, Ptr{Cint}, Ptr{Cint}),
-                handle, &opt, C_NULL)
-    if error != MKL_DSS_SUCCESS
-        println("dss_reorder returned error code $error")
-    end
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
 
-    handle
-end
+    ccall((:ADB, LIB_PATH), Void,
+         (Cint, Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Ptr{Cdouble},
+           Ptr{Void}),
+         m, n, k,
+         C_colptr_ref, C_rowval_ref, C_nzval_ref,
+         A.colptr, A.rowval, A.nzval,
+         B.colptr, B.rowval, B.nzval,
+         D.nzval,
+         fknob)
 
-function dss_factor(handle, A::SparseMatrixCSC)
-    opt = MKL_DSS_POSITIVE_DEFINITE
-    error = ccall((:dss_factor_real, LIB_PATH), Cint,
-                (Ptr{Void}, Ptr{Cint}, Ptr{Cdouble}),
-                handle, &opt, A.nzval)
-    if error != MKL_DSS_SUCCESS
-        println("dss_factor_real returned error code $error")
-    end
-end
-
-# solve A*sol = rhs
-function dss_solve!(handle, rhs::Vector, sol::Vector)
-    opt = MKL_DSS_DEFAULTS
-    nrhs = 1
-    error = ccall((:dss_solve_real, LIB_PATH), Cint,
-                (Ptr{Void}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cdouble}),
-                handle, &opt, rhs, &nrhs, sol)
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
 end
 
 @doc """ 
@@ -774,33 +715,18 @@ function cholfact_int32(
     A     :: SparseMatrixCSC,
     fknob :: Ptr{Void}
 )
-    if fknob == NULL
+    if fknob == C_NULL
         # This case should never happen
         assert(false)
         return cholfact_int32(A)
     end
 
-    mknob_O = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 1)
-    assert(mknob_O != C_NULL)
+    mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
     assert(mknob_A != C_NULL)
-    
-    # Check inputs and output
-    assert(ccall((:IsConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_A))
 
-    csrA = ccall((:GetMatrix, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_A)
-    if csrA == C_NULL
-        return cholfact_int32(A)
-    end
-
-    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_O)
-    if dss_handle == NULL
-        dss_handle = dss_analyze(csrA)
-        ccall((:SetDssHandle, LIB_PATH), Void, (Ptr{Void}, Ptr{Void}), mknob_O, dss_handle)
-    end
-    dss_factor(dss_handles, csrA)
-
-    # ISSUE: how to return the original result?
+    ccall((:CholFact, LIB_PATH), Ptr{Void},
+         (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Void}),
+         size(A, 1), size(A, 2), A.colptr, A.rowval, A.nzval, fknob)
 end
 
 @doc """ 
@@ -816,26 +742,44 @@ Functionality:
        opt = MKL_DSS_DEFAULTS
        dss_solve!(mknob_R->dss_handle, t, y)
 """
-function cholmod_factor_inverse_divide(
-    y     :: Any,
-    R     :: Base.SparseMatrix.CHOLMOD.Factor{Float64},
-    t     :: Any,
+function cholfact_inverse_divide!(
+    y     :: Vector,
+    R     :: Any,
+    b     :: Vector,
     fknob :: Ptr{Void}
 )
-    if fknob == NULL
+    if fknob == C_NULL
         # This case should never happen
         assert(false)
-        return y = R \ t
+        y[:] = R \ b
     end
 
-    mknob_R    = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    dss_handle = ccall((:GetDssHandle, LIB_PATH), Ptr{Void}, (Ptr{Void}, ), mknob_R)
-    if dss_handle == NULL
-        return y = R \ t
-    end
+    ccall((:CholFactInverseDivide, LIB_PATH), Void,
+          (Ptr{Void}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+          R, y, b, fknob)
+end
 
-    opt = MKL_DSS_DEFAULTS
-    dss_solve!(dss_handle, t, y)
+@doc """ 
+Compute y = R \ t, where R is constant in structure.
+
+Functionality:
+    if fknob == NULL
+       return y = R \ t
+   get the input mknob_R from fknob
+   if mknob_R->dss_handle == NULL
+       return y = R \ t2
+   else
+       opt = MKL_DSS_DEFAULTS
+       dss_solve!(mknob_R->dss_handle, t, y)
+"""
+function cholfact_inverse_divide(
+    R     :: Any,
+    b     :: Vector,
+    fknob :: Ptr{Void}
+)
+    y = zeros(length(b))
+    cholfact_inverse_divide!(y, R, b, fknob)
+    y
 end
 
 @doc """

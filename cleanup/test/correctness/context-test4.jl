@@ -10,7 +10,7 @@ include("utils.jl")
 
 # This code is what we expect to generate by context-sensitive optimizations.
 # It is used for debugging purpose only
-function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: constraint rhs, p: objective
+function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constraint rhs, p: objective
   t0 = time()
   (m,n) = size(A)
 
@@ -84,7 +84,6 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
 
   # For cholfact_int32
   __fknob_8622 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknob_cholfact_int32,__fknob_8622)
   (SparseAccelerator.add_mknob_to_fknob)(__mknobB_8598,__fknob_8622)
 
   # For cholmod_factor_inverse_divide
@@ -118,7 +117,7 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
     spgemm_time -= time()
     D.nzval = d
     #B = A*D*A'
-    B = SparseAccelerator.ADB(__AT__,D,A,__fknob_8602)
+    B = SparseAccelerator.ADB(A,D,__AT__,__fknob_8602)
     SparseAccelerator.propagate_matrix_info(__mknobB_8598, __mknob_ADB)
     spgemm_time += time()
 
@@ -127,7 +126,6 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
     fact_time -= time()
     #R = cholfact_int32(B)
     R = SparseAccelerator.cholfact_int32(B,__fknob_8622)
-    SparseAccelerator.propagate_matrix_info(__mknobR_8596, __mknob_cholfact_int32)
     fact_time += time()
 
     # set up the right-hand side
@@ -142,7 +140,7 @@ function ipm_ref_with_context_opt(A, b, p) # A: constraint coefficients, b: cons
     # solve it and recover the other step components
     trslv_time -= time()
     #dy = R\t2
-    dy = SparseAccelerator.cholmod_factor_inverse_divide(R,t2,__fknob_8623)
+    dy = SparseAccelerator.cholfact_inverse_divide(R,t2,__fknob_8623)
     trslv_time += time()
 
     spmv_time -= time()
@@ -205,16 +203,16 @@ println("Problem size = [$m $n]")
 #println("\tsum of p=", sum(p))
 
 println("Original: ")
-#x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-#    iter, relResidual, objval = ipm_ref(A, b, p)
-#println("sum of x=", sum(x))
-#@printf "\nref_total_time = %f\n" ref_total_time
-#@printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
-#@printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
+x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
+    iter, relResidual, objval = ipm_ref(A, b, p)
+println("sum of x=", sum(x))
+@printf "\nref_total_time = %f\n" ref_total_time
+@printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
+@printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
 
 println("\n\nWith manual context-sensitive optimization: ")
 x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-    iter, relResidual, objval = ipm_ref_with_context_opt(A, b, p)
+    iter, relResidual, objval = ipm_with_context_opt(A, b, p)
 println("sum of x=", sum(x))
 @printf "\nref_total_time = %f\n" ref_total_time
 @printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time

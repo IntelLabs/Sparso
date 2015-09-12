@@ -76,11 +76,30 @@ MatrixKnob* GetMatrixKnob(FunctionKnob* fknob, int i);
 
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
-    double *y, double *b, FunctionKnob* fknob);
+    double *y, double *b, FunctionKnob *fknob);
 
 void BackwardTriangularSolve(
     int U_numrows, int U_numcols, int* U_colptr, int* U_rowval, double* U_nzval,
-    double *y, double *b, FunctionKnob* fknob);
+    double *y, double *b, FunctionKnob *fknob);
+
+void *CholFact(
+    int m, int n, int *colptr, int *rowval, double *nzval,
+    FunctionKnob *fknob);
+
+void CholFactInverseDivide(
+    void *factor, double *y, double *b, FunctionKnob *fknob);
+
+// C = A*D*B
+// A is m*k matrix
+// B is k*n matrix
+// C is m*n matrix
+void ADB(
+    int m, int n, int k,
+    int **C_colptr, int **C_rowval, double **C_nzval,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    int *B_colptr, int *B_rowval, double *B_nzval,
+    const double *d,
+    FunctionKnob *fknob);
     
 FunctionKnob* NewFunctionKnob();
 void DeleteFunctionKnob(FunctionKnob* fknob);

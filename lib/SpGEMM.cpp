@@ -50,7 +50,7 @@ void adb_(
 } // adb_
 
 template<typename T, int BASE = 0, bool SORT = true>
-CSR *inspectADB_(const CSR *A, const CSR *B)
+void inspectADB_(CSR * C, const CSR *A, const CSR *B)
 {
   assert(A->getBase() == BASE);
   assert(B->getBase() == BASE);
@@ -58,13 +58,9 @@ CSR *inspectADB_(const CSR *A, const CSR *B)
   if (A->n != B->m)
   {
     printf("Warning! incompatible matrix dimensions!\n");
-    return NULL;
+    return;
   }
 
-  CSR *C = new CSR;
-  C->m = A->m;
-  C->n = B->n;
-  C->rowptr = new int[C->m + 1];
   C->rowptr[0] = BASE;
 
   int *marker_array = new int[C->n*omp_get_max_threads()];
@@ -130,8 +126,22 @@ CSR *inspectADB_(const CSR *A, const CSR *B)
   } // for each row
 
   delete[] marker;
+}
 
-  return C;
+void inspectADB(CSR *C, const CSR *A, const CSR *B)
+{
+  if (A->getBase() != B->getBase()) {
+    fprintf(stderr, "Warning: matrix index bases don't match\n");
+    return;
+  }
+
+  if (0 == A->getBase()) {
+    inspectADB_<double, 0>(C, A, B);
+  }
+  else {
+    assert(1 == A->getBase());
+    inspectADB_<double, 1>(C, A, B);
+  }
 }
 
 CSR *inspectADB(const CSR *A, const CSR *B)
@@ -141,13 +151,14 @@ CSR *inspectADB(const CSR *A, const CSR *B)
     return NULL;
   }
 
-  if (0 == A->getBase()) {
-    return inspectADB_<double, 0>(A, B);
-  }
-  else {
-    assert(1 == A->getBase());
-    return inspectADB_<double, 1>(A, B);
-  }
+  CSR *C = new CSR;
+  C->m = A->m;
+  C->n = B->n;
+  C->rowptr = new int[C->m + 1];
+
+  inspectADB(C, A, B);
+
+  return C;
 }
 
 void adb(CSR *C, const CSR *A, const CSR *B, const double *d)

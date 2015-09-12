@@ -9,10 +9,18 @@
 #include "SpMP/Utils.hpp"
 #include "SpMP/LevelSchedule.hpp"
 #include "SpMP/synk/barrier.hpp"
+#include "SpGEMM.hpp"
 #include <mkl.h>
 
 using namespace std;
 using namespace SpMP;
+
+struct ReorderingInfo {
+    int *perm, *inverse_perm;
+    int perm_len;
+
+    ReorderingInfo() : perm(NULL), inverse_perm(NULL), perm_len(0) { }
+};
 
 // Julia variables' scope is function-wise at AST level, even though in the source
 // level, it may appears to have nested scopes. Our Julia compiler creates matrix 
@@ -38,8 +46,12 @@ struct MatrixKnob {
     bool         is_structure_derivatives[DERIVATIVE_TYPE_COUNT];
 
     MatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval) :
-        perm(NULL), inverse_perm(NULL), numrows(numrows), numcols(numcols), colptr(colptr), rowval(rowval), nzval(nzval)
+        schedule(NULL), dss_handle(NULL), A(NULL), numrows(numrows), numcols(numcols), colptr(colptr), rowval(rowval), nzval(nzval)
     {
+        for (int i = 0; i < DERIVATIVE_TYPE_COUNT; i++) {
+            derivatives[i] = NULL;
+            is_structure_derivatives[i] = false;
+        }
     }
 
     // auxiliary data structure
@@ -50,7 +62,7 @@ struct MatrixKnob {
     // of their format.
     CSR        * A; // CSC used in Julia is often not be the best performing format. We want to decouple from it by having a shadow copy of the Julia CSC matrix in more optimized representation. For now, we fix it as CSR in SpMP. Later, we need to make it something like union so that we can change the matrix representation depending on the context
 
-    int *perm, *inverse_perm;
+    ReorderingInfo reordering_info;
 
     // These are copied from Julia CSC matrix
     int numrows;
@@ -68,11 +80,11 @@ struct FunctionKnob {
     // like consumers of the function. Each function knob may define this 
     // vector in its own way.
     std::vector<MatrixKnob *> mknobs;
-    bool is_reordering_decision_maker;
-    int *perm, *inverse_perm;
-    int perm_len;
 
-    FunctionKnob() : is_reordering_decision_maker(false), perm(NULL), inverse_perm(NULL) { }
+    bool is_reordering_decision_maker;
+    ReorderingInfo reordering_info;
+
+    FunctionKnob() : is_reordering_decision_maker(false) { }
 };
 
 /**************************** Usage of knobs *****************************/
@@ -98,14 +110,6 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
     m->is_structure_symmetric = is_structure_symmetric;
     m->is_structure_only = is_structure_only;
     m->is_single_def = is_single_def;
-
-    for (int i = 0; i < DERIVATIVE_TYPE_COUNT; i++) {
-        m->derivatives[i] = NULL;
-        m->is_structure_derivatives[i] = false;
-    }
-
-    m->schedule = NULL;
-    m->A = NULL;
 
     if (rowval) mknob_map[rowval] = m;
 
@@ -386,8 +390,10 @@ void PropagateMatrixInfo(MatrixKnob* to_mknob, MatrixKnob* from_mknob)
     // destination matrix is a single-def.
 
     // QUESTION: Schedule and dss_handle should depend only on structure, not value, right?
-    to_mknob->schedule   = from_mknob->schedule;
-    to_mknob->dss_handle = from_mknob->dss_handle;
+    if (from_mknob->schedule && !to_mknob->schedule)
+        to_mknob->schedule   = from_mknob->schedule;
+    if (from_mknob->dss_handle && !to_mknob->dss_handle)
+        to_mknob->dss_handle = from_mknob->dss_handle;
 
     if (to_mknob->is_single_def) {
         to_mknob->A       = from_mknob->A;
@@ -585,16 +591,19 @@ static void TriangularSolve(
     }
 
     if (m && m->schedule && m->A) {
-        fknob->perm = m->schedule->origToThreadContPerm;
-        fknob->perm_len = m->A->m;
-        fknob->inverse_perm = m->schedule->threadContToOrigPerm;
+        fknob->reordering_info.perm = m->schedule->origToThreadContPerm;
+        fknob->reordering_info.perm_len = m->A->m;
+        fknob->reordering_info.inverse_perm = m->schedule->threadContToOrigPerm;
 
-        if (m->perm != fknob->perm && fknob->is_reordering_decision_maker) {
-            m->A = m->A->permute(fknob->perm, fknob->inverse_perm);
-            m->perm = fknob->perm;
-            m->inverse_perm = fknob->inverse_perm;
+        if (m->reordering_info.perm != fknob->reordering_info.perm && fknob->is_reordering_decision_maker) {
+            m->A = m->A->permute(
+                fknob->reordering_info.perm,
+                fknob->reordering_info.inverse_perm);
 
-            reorderVectorWithInversePerm(b, fknob->inverse_perm, L->m);
+            m->reordering_info = fknob->reordering_info;
+
+            reorderVectorWithInversePerm(
+                b, fknob->reordering_info.inverse_perm, L->m);
 
             L = m->A;
         }
@@ -604,11 +613,11 @@ static void TriangularSolve(
     assert(schedule != NULL);
     
     int* invPerm = schedule->threadContToOrigPerm;
-    if (fknob->perm == m->perm) {
+    if (fknob->reordering_info.perm == m->reordering_info.perm) {
         (*solveFunctionWithReorderedMatrix)(*L, y, b, *schedule);
     }
     else {
-        assert(m->perm == NULL);
+        assert(m->reordering_info.perm == NULL);
         (*solveFunction)(*L, y, b, *schedule, invPerm);
     }
 
@@ -640,6 +649,119 @@ void BackwardTriangularSolve(
         &backwardSolveWithReorderedMatrix);
 }
 
+void *CholFact(
+    int m, int n, int *colptr, int *rowval, double *nzval,
+    FunctionKnob *fknob)
+{
+    assert(fknob);
+
+    MatrixKnob *mknob_A = fknob->mknobs[0];
+    assert(mknob_A);
+    assert(mknob_A->constant_structured);
+
+    if (!mknob_A->dss_handle) {
+        MKL_INT opt = MKL_DSS_DEFAULTS;
+        MKL_INT error = dss_create(mknob_A->dss_handle, opt);
+        if (error != MKL_DSS_SUCCESS) {
+            fprintf(stderr, "dss_create returned error code %d\n", error);
+        }
+
+        opt = MKL_DSS_NON_SYMMETRIC;
+        int nnz = colptr[n] - 1;
+        error = dss_define_structure(mknob_A->dss_handle, opt, colptr, m, m, rowval, nnz);
+        if (error != MKL_DSS_SUCCESS) {
+            fprintf(stderr, "dss_define_structure returned error code %d\n", error);
+        }
+
+        opt = MKL_DSS_AUTO_ORDER;
+        error = dss_reorder(mknob_A->dss_handle, opt, NULL);
+        if (error != MKL_DSS_SUCCESS) {
+            fprintf(stderr, "dss_reorder returned error code %d\n", error);
+        }
+    }
+
+    MKL_INT opt = MKL_DSS_DEFAULTS;
+    MKL_INT error = dss_factor_real(mknob_A->dss_handle, opt, nzval);
+    if (error != MKL_DSS_SUCCESS) {
+        fprintf(stderr, "dss_factor_real returned error code %d\n", error);
+    }
+
+    return mknob_A->dss_handle;
+}
+
+void CholFactInverseDivide(
+    void *factor, double *y, double *b, FunctionKnob *fknob)
+{
+    assert(factor);
+    _MKL_DSS_HANDLE_t dss_handle = (_MKL_DSS_HANDLE_t)factor;
+
+    MKL_INT opt = MKL_DSS_DEFAULTS;
+    int nrhs = 1;
+    MKL_INT error = dss_solve_real(dss_handle, opt, b, nrhs, y);
+    if (error != MKL_DSS_SUCCESS) {
+        fprintf(stderr, "dss_solve_real returned error code %d\n", error);
+    }
+}
+
+// C = A*D*B
+// A is m*k matrix
+// B is k*n matrix
+// C is m*n matrix
+void ADB(
+    int m, int n, int k,
+    int **C_colptr, int **C_rowval, double **C_nzval,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    int *B_colptr, int *B_rowval, double *B_nzval,
+    const double *d,
+    FunctionKnob *fknob)
+{
+    MatrixKnob *mknob_C = GetMatrixKnob(fknob, 0);
+    MatrixKnob *mknob_A = GetMatrixKnob(fknob, 1);
+    MatrixKnob *mknob_D = GetMatrixKnob(fknob, 2);
+    MatrixKnob *mknob_B = GetMatrixKnob(fknob, 3);
+
+    // By simply casting CSC as CSR, we get transposes of A and B.
+    // Computing B'*D*A' gives (A*D*B)', so simply casting back the result
+    // back as CSC will give the desired result, A*D*B.
+    CSR *AT = new CSR(k, m, A_colptr, A_rowval, A_nzval);
+    CSR *BT = new CSR(n, k, B_colptr, B_rowval, B_nzval);
+
+    if (!mknob_C->A) {
+        if (*C_colptr) {
+            assert(*C_rowval);
+            assert(*C_nzval);
+
+            // Use memory passed from Julia, meaning
+            // Julia uses in-place interface.
+            mknob_C->A = new CSR(n, m, *C_colptr, *C_rowval, *C_nzval);
+            inspectADB(mknob_C->A, BT, AT);
+        }
+        else {
+            assert(!*C_rowval);
+            assert(!*C_nzval);
+
+            // Create memory inside
+            mknob_C->A = inspectADB(BT, AT);
+        }
+    }
+
+    adb(mknob_C->A, BT, AT, d);
+
+    if (*C_colptr) {
+        assert(*C_colptr == mknob_C->A->rowptr);
+        assert(*C_rowval == mknob_C->A->colidx);
+        assert(*C_nzval == mknob_C->A->values);
+    }
+    else {
+        assert(!*C_rowval);
+        assert(!*C_nzval);
+
+        *C_colptr = mknob_C->A->rowptr;
+        *C_rowval = mknob_C->A->colidx;
+        *C_nzval = mknob_C->A->values;
+    }
+}
+ 
 void SetReorderingDecisionMaker(FunctionKnob *fknob)
 {
     fknob->is_reordering_decision_maker = true;
@@ -647,14 +769,14 @@ void SetReorderingDecisionMaker(FunctionKnob *fknob)
 
 int *GetReorderingVector(FunctionKnob *fknob, int *len)
 {
-    *len = fknob->perm_len;
-    return fknob->perm;
+    *len = fknob->reordering_info.perm_len;
+    return fknob->reordering_info.perm;
 }
 
 int *GetInverseReorderingVector(FunctionKnob *fknob, int *len)
 {
-    *len = fknob->perm_len;
-    return fknob->inverse_perm;
+    *len = fknob->reordering_info.perm_len;
+    return fknob->reordering_info.inverse_perm;
 }
 
 // The first few parameters (numRows to v) represent the source matrix to be reordered. The next few
@@ -707,8 +829,8 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 
     auto itr = mknob_map.find(j);
     if (itr != mknob_map.end()) {
-        itr->second->perm = perm;
-        itr->second->inverse_perm = inversePerm;
+        itr->second->reordering_info.perm = perm;
+        itr->second->reordering_info.inverse_perm = inversePerm;
 
         mknob_map[j1] = itr->second;
 
