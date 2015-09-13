@@ -15,13 +15,11 @@ void backwardSolveRef(CSR& A, double y[], const double b[]);
 
 void forwardSolve(
   CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule,
-  const int *perm);
+  const LevelSchedule& schedule);
   
 void backwardSolve(
   CSR& A, double y[], const double b[],
-  const LevelSchedule& schedule,
-  const int *perm);
+  const LevelSchedule& schedule);
 
 void forwardSolveWithReorderedMatrix(
   CSR& A, double y[], const double b[],
