@@ -10,6 +10,8 @@
 #include "SpMP/LevelSchedule.hpp"
 #include "SpMP/synk/barrier.hpp"
 #include "SpGEMM.hpp"
+#include "ILU.hpp"
+#include "IChol.hpp"
 #include <mkl.h>
 
 using namespace std;
@@ -474,7 +476,7 @@ void SpMV(
 static void TriangularSolve_(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, double *b, FunctionKnob* fknob,
-    void (*solveFunction)(CSR&, double *, const double *, const LevelSchedule&, const int *),
+    void (*solveFunction)(CSR&, double *, const double *, const LevelSchedule&),
     void (*solveFunctionWithReorderedMatrix)(CSR&, double *, const double *, const LevelSchedule&))
 {
     CSR* L = NULL;
@@ -654,13 +656,12 @@ static void TriangularSolve_(
     assert(L != NULL);
     assert(schedule != NULL);
     
-    int* invPerm = schedule->threadContToOrigPerm;
     if (fknob->reordering_info.perm == m->reordering_info.perm) {
         (*solveFunctionWithReorderedMatrix)(*L, y, b, *schedule);
     }
     else {
         assert(m->reordering_info.perm == NULL);
-        (*solveFunction)(*L, y, b, *schedule, invPerm);
+        (*solveFunction)(*L, y, b, *schedule);
     }
 
     if (needToDeleteSchedule) {
@@ -802,6 +803,34 @@ void ADB(
         *C_rowval = mknob_C->A->colidx;
         *C_nzval = mknob_C->A->values;
     }
+}
+
+void ILU(
+    int m, int n,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *LU_nzval,
+    FunctionKnob *fknob)
+{
+    CSR *A = new CSR(m, n, A_colptr, A_rowval, A_nzval);
+    LevelSchedule *schedule = new LevelSchedule;
+    schedule->constructTaskGraph(*A);
+    ilu0(LU_nzval, *A, *schedule);
+    delete schedule;
+    delete A;
+}
+
+void IChol(
+    int m, int n,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *L_nzval,
+    FunctionKnob *fknob)
+{
+    CSR *A = new CSR(m, n, A_colptr, A_rowval, A_nzval);
+    LevelSchedule *schedule = new LevelSchedule;
+    schedule->constructTaskGraph(*A);
+    ichol0(*A, L_nzval, *schedule);
+    delete schedule;
+    delete A;
 }
  
 void SetReorderingDecisionMaker(FunctionKnob *fknob)

@@ -114,7 +114,19 @@ void ADB(
     int *B_colptr, int *B_rowval, double *B_nzval,
     const double *d,
     FunctionKnob *fknob);
+
+void ILU(
+    int m, int n,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *LU_nzval,
+    FunctionKnob *fknob);
     
+void IChol(
+    int m, int n,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *L_nzval,
+    FunctionKnob *fknob);
+
 FunctionKnob* NewFunctionKnob();
 void DeleteFunctionKnob(FunctionKnob* fknob);
 

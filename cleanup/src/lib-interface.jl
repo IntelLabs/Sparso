@@ -238,6 +238,34 @@ function bwdTriSolve!(
                pointer(b), pointer(b), fknob)
 end
 
+function speye_int32(m::Integer)
+  rowval = [Int32(x) for x in [1:m;]]
+  colptr = [Int32(x) for x in [rowval; m + 1]]
+  nzval = ones(Float64, m)
+  return SparseMatrixCSC(m, m, colptr, rowval, nzval)
+end
+
+function ilu(
+    A     :: SparseMatrixCSC{Float64, Int32}
+ )
+    LU_nzval = zeros(nnz(A))
+
+    ccall((:ILU, LIB_PATH), Void,
+          (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+          size(A, 1), size(A, 2),
+          A.colptr, A.rowval, A.nzval,
+          LU_nzval,
+          C_NULL)
+
+    LU = SparseMatrixCSC{Cdouble, Cint}(size(A, 1), size(A, 2), copy(A.colptr), copy(A.rowval), LU_nzval)
+    LU = LU'
+
+    L = tril(LU, -1) + speye_int32(size(LU, 1))
+    U = triu(LU)
+
+    L, U
+end
+
 @doc """ 
 Reorder a sparse matrix A and store the result in new_A. A itself is not changed.
 If get_permutation is true, then compute the permutation and inverse permutation
