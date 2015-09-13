@@ -307,7 +307,7 @@ function create_reorder_actions(
     # loop's head block. In case of conditional reordering, it is before
     # the head, but inside the loop
     outside_loop = !conditional_reordering
-    first_reorder_action = InsertBeforeBlock(Vector{Statement}(), region.loop, outside_loop)
+    first_reorder_action = InsertBeforeLoopHead(Vector{Statement}(), region.loop, outside_loop)
     push!(actions, first_reorder_action)
     
     if conditional_reordering
@@ -332,10 +332,14 @@ function create_reorder_actions(
     # (2) x is not in pred.Out but in succ.In, create action "reorder(x)"
     # Insert the action on the edge between pred and succ.
     blocks = cfg.basic_blocks
-    vertices = union(vertices_in_region, vertices_outside_region)
+    vertices = union(reorder_graph.vertices_in_region, reorder_graph.vertices_outside_region)
     for succ in vertices
+        if succ.bb_idx == PSEUDO_BLOCK_INDEX
+            continue
+        end
+
         succ_bb         = blocks[succ.bb_idx]
-        live_in_succ_bb = live_in(succ_bb, liveness)
+        live_in_succ_bb = LivenessAnalysis.live_in(succ_bb, liveness)
         for pred in succ.preds
             if pred.kind == RG_NODE_ENTRY
                 # Special handling for entry.
@@ -344,10 +348,11 @@ function create_reorder_actions(
                 # successor: the loop head. Avoid reordering M again, which has
                 # been reordered above.
                 assert(length(pred.succs) == 1)
-                assert(succ_bb = loop_head)
+                assert(succ.bb_idx == loop_head)
                 X = intersect(pred.Out, live_in_succ_bb)
-                X = setdiff(X, Set{M}) 
-                create_reorder_X(first_reorder_action.new_stmts, X, P, inverse_P, symbol_info)
+                m = Set(); push!(m, M)
+                setdiff!(X, m)
+                create_reorder_X(first_reorder_action.new_stmts, X, succ_bb, P, inverse_P, symbol_info)
             else
                 pred_bb = blocks[pred.bb_idx]
                 X       = setdiff(succ.In, pred.Out)
@@ -363,10 +368,10 @@ function create_reorder_actions(
                         push!(actions.new_stmts, check_stmt)
                     end
                     if !isempty(X)
-                        create_reorder_X(action.new_stmts, X, P, inverse_P, symbol_info)
+                        create_reorder_X(action.new_stmts, X, succ_bb, P, inverse_P, symbol_info)
                     end
                     if !isempty(X1)
-                        create_reverse_reorder_X(action.new_stmts, X1, P, inverse_P, symbol_info)
+                        create_reverse_reorder_X(action.new_stmts, X1, succ_bb, P, inverse_P, symbol_info)
                     end
                 end
             end
@@ -414,7 +419,7 @@ function reordering(
     for region in regions
         distributive = check_distributivity(region, cfg, symbol_info)
         if distributive
-            stmt_clusters = find_inter_dependent_arrays(region, symbol_info, FAR)
+            stmt_clusters = find_inter_dependent_arrays(region, cfg, symbol_info)
             reorder_graph = discover_reorderable_arrays(region, stmt_clusters, cfg, FAR)
             create_reorder_actions(actions, reorder_graph, region, symbol_info, liveness, cfg, FAR)
         end

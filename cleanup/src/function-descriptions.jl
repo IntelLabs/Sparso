@@ -31,8 +31,8 @@ end
 const UPDATED_NONE  = Set()
 const IA_NONE       = Set()
 
-const VECTOR_OR_NUM = Tuple{Vector{}, Number}
-const MATRIX_OR_NUM = Tuple{AbstractMatrix{}, Number}
+const VECTOR_OR_NUM = Union(Vector{}, Number)
+const MATRIX_OR_NUM = Union(AbstractMatrix{}, Number)
 
 ia(args ...) = Set(Any[args ...])
 
@@ -339,55 +339,10 @@ function_descriptions  = [
     bwdTriSolve!_Desc
 ]
 
-function show_function_descriptions()
-    println("Function descriptions: ", function_descriptions)
-end
-
 function look_for_function_description(
     module_name    :: String, 
     function_name  :: String, 
-    argument_types :: Tuple{Type}
+    argument_types :: Tuple
 )
     return look_for_function(function_descriptions, module_name, function_name, argument_types)
-end
-
-@doc """
-Takes a module and a function both as Strings. Looks up the specified module as
-part of the "Main" module and then looks and returns the Function object
-corresponding to the "func" String in that module.
-"""
-function get_function_from_string(mod :: String, func :: String)
-    # A module string may have submodules like "Base.SparseMatrix". We need to
-    # get module object level by level
-    modobj  = eval(:Main)
-    modules = split(mod, '.')
-    for m in modules
-        msym = symbol(m)
-        modobj = eval(:($modobj.$msym))
-    end
-    
-    fsym   = symbol(func)
-    return eval(:($modobj.$fsym))
-end
-
-@doc """
-Convert the function_descriptions table into a dictionary that can be passed to
-LivenessAnalysis to indicate which args are unmodified by which functions.
-"""
-function create_unmodified_args_dict()
-    res = Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}()
-
-    for desc in function_descriptions
-        num_args    = length(desc.argument_types)   # Get the number of arguments to the functions.
-        arg_type_array = collect(desc.argument_types)
-        #println(desc.function_name, " arg_type_array = ", arg_type_array, " type = ", typeof(arg_type_array))
-        unmodifieds = ones(Int64, num_args)         # desc.output contains "modifies" so we default to true and then turn off based on desc.output.
-        for j in desc.output
-            unmodifieds[j] = 0
-        end
-        res[(get_function_from_string(desc.module_name, desc.function_name), 
-             arg_type_array)] = unmodifieds
-    end
-
-    return res
 end

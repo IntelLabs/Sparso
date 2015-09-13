@@ -16,7 +16,7 @@ end
 Return true if the function call is distributive.
 """
 function check_distributivity_of_function_call(
-    ast         :: Expr,
+    expr         :: Expr,
     symbol_info :: Sym2TypeMap
 )
     head = expr.head
@@ -27,7 +27,7 @@ function check_distributivity_of_function_call(
     #   Expr(:call, :(:call, top(getfield), SparseAccelerator,:SpMV), :A, :x)
     # The first argument is the function, the others are the arguments for it.
     arg_types = ntuple(i-> type_of_ast_node(args[i+1], symbol_info), length(args) - 1)
-    all_numbers, some_arrays = are_numbers_or_arrays(expr.typ, arg_types)
+    all_numbers, some_arrays = numbers_or_arrays(expr.typ, arg_types)
     distributive = false
     if all_numbers || !some_arrays
         # The function call's result and arguments are all numbers, or 
@@ -39,7 +39,7 @@ function check_distributivity_of_function_call(
         if function_name == ""
             throw(UnresolvedFunction(head, args[1]))
         end
-        fd = lookup_function_description(module_name, function_name, arg_types)
+        fd = look_for_function_description(module_name, function_name, arg_types)
         if fd != nothing
             distributive = fd.distributive
         else

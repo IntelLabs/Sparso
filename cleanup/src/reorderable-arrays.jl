@@ -203,8 +203,8 @@ function forward_transfer(
         return copy(X)
     end
     
-    bb       = cfg.basic_blocks[B.bb_index]
-    stmt     = BB.statements[B.stmt_idx]
+    bb       = cfg.basic_blocks[B.bb_idx]
+    stmt     = bb.statements[B.stmt_idx]
     clusters = stmt_clusters[stmt]
     if isempty(clusters)
         return copy(X)
@@ -354,7 +354,7 @@ function discover_reorderable_arrays(
     cfg             :: CFG,
     FAR             :: Vector{Symbol}
 )
-    reorder_graph = build_reorder_graph_for_region(region)
+    reorder_graph = build_reorder_graph_for_region(region, cfg)
     
     # Do bi-directional dataflow analysis on the graph.
     vertices_in_region = reorder_graph.vertices_in_region

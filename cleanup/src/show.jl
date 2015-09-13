@@ -42,6 +42,7 @@ function show_liveness(
 )
     println(io_buffer, space, "")
     println(io_buffer, space, "Liveness of basic blocks:")
+    space = string(space, "    ")
     cfg = liveness.cfg
     for (bb_idx, bb) in cfg.basic_blocks
         print(io_buffer, space, "BB ", bb_idx)
@@ -99,6 +100,7 @@ function show_structure(
             show_liveness(space, liveness)
             println(io_buffer, space, "")
             println(io_buffer, space, "Expression trees:")
+            space = string(space, "    ")
         end
         println(io_buffer, space, "Expr ", node.head, " [", node.typ, "]")
         for i in 1 : length(args)
@@ -139,6 +141,8 @@ function show_structure(
         end
     end
 end
+
+import Base.show_backtrace
 
 function show(
     structure   :: Bool, 
