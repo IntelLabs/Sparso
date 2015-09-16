@@ -67,7 +67,7 @@ function find_inter_dependent_arrays(
             # Compose a type tuple for the arguments, except he first argument, 
             # which is the function.
             arg_types = ntuple(i-> type_of_ast_node(args[i+1], symbol_info), length(args) - 1)
-            all_numbers, some_arrays = are_numbers_or_arrays(node.typ, arg_types)
+            all_numbers, some_arrays = numbers_or_arrays(node.typ, arg_types)
             if all_numbers || !some_arrays
                 # The function call's result and arguments are all numbers, or 
                 # some are non-numbers (like Range{UInt64}) but not regular arrays. 
@@ -77,7 +77,7 @@ function find_inter_dependent_arrays(
                 if function_name == ""
                     throw(UnresolvedFunction(head, args[1]))
                 end
-                fd = lookup_function_description(module_name, function_name, arg_types)
+                fd = look_for_function_description(module_name, function_name, arg_types)
                 if fd != nothing
                     for S in fd.IA
                         for x in S
@@ -123,9 +123,9 @@ function find_inter_dependent_arrays(
     for bb_index in region.loop.members
         bb = blocks[bb_index]
         for stmt in bb.statements
-            mapping[stmt] = Cluster()
+            mapping[stmt] = Set{Cluster}()
             trees         = Set{ExpressionTree}()
-            push!(trees, ExpressionTree(stmt.tls.expr, false))
+            push!(trees, ExpressionTree(stmt.expr, false))
             while !isempty(trees)
                 tree    = pop!(trees)
                 cluster = Cluster()

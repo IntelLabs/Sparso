@@ -160,7 +160,7 @@ function is_number_or_array(typ :: Type)
 end
 
 @doc """ Are the types scalars (numbers), or are some of them arrays? """
-function are_numbers_or_arrays(result_type :: Type, arg_types :: Tuple{Type})
+function numbers_or_arrays(result_type, arg_types :: Tuple)
     all_numbers, some_arrays = is_number_or_array(result_type)
     for t in arg_types
         is_number, is_array = is_number_or_array(t)
@@ -343,9 +343,6 @@ function analyses(
     loop_info   :: DomLoops
 )
 
-    dprintln(1, 0, "\nAnalyzing ...", "\nCFG:")
-    dprintln(1, 1, liveness)
-        
     regions = region_formation(cfg, loop_info)
     actions = Vector{Action}()
     if reorder_enabled
@@ -380,9 +377,9 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         
         # Build the common facilities: symbols' type dictionary, liveness
         # info, and control flow graph.
-        #LivenessAnalysis.set_use_inplace_naming_convention()
+        LivenessAnalysis.set_use_inplace_naming_convention()
         symbol_info = build_symbol_dictionary(func_ast)
-        liveness    = LivenessAnalysis.from_expr(func_ast, no_mod = create_unmodified_args_dict())
+        liveness    = LivenessAnalysis.from_expr(func_ast, no_mod = LivenessAnalysis.create_unmodified_args_dict())
         cfg         = liveness.cfg
         loop_info   = Loops.compute_dom_loops(cfg)
 
@@ -411,8 +408,15 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)
     catch ex
-        dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
-        dprintln(1, 1, ex)
+        # In case any exception happen in the printing, try
+        try
+            Libc.flush_cstdio()
+            flush(STDOUT)
+            dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
+            dprintln(1, 1, ex)
+        catch
+            # Do nothing
+        end
 
         # Return the original AST without any change
         new_ast = old_ast
