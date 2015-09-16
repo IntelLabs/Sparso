@@ -407,6 +407,9 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
 
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)
+        dprintln(1, 0, "********************************************************************************")
+        Libc.flush_cstdio()
+        flush(STDOUT)
     catch ex
         # In case any exception happen in the printing, try
         try
@@ -414,6 +417,9 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             flush(STDOUT)
             dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
             dprintln(1, 1, ex)
+            dprintln(1, 0, "********************************************************************************")
+            Libc.flush_cstdio()
+            flush(STDOUT)
         catch
             # Do nothing
         end
@@ -421,9 +427,6 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Return the original AST without any change
         new_ast = old_ast
     finally
-        dprintln(1, 0, "********************************************************************************")
-        Libc.flush_cstdio()
-        flush(STDOUT)
         return new_ast
     end
 end
