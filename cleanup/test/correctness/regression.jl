@@ -214,10 +214,10 @@ const liveness_test2 = Test(
         AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* mu .*\) Use\(.*\n.* = mu <=",
                         "Test liveness for ipm-ref: mu should not be updated in the block that tests mu <= 1.0e-7"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.*blas1_time.* (relResidual|x|p) .*\) Use\(.*\n\s*blas1_time =",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.*blas1_time.* relResidual .*\) Use\(.*\n\s*blas1_time =.*\n.*Ac_mul_B",
                         "Test liveness for ipm-ref: relResidual, x, p should not be updated in the block that sets blas1_time"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* (relResidual|x|p) .*blas1_time.*\) Use\(.*\n\s*blas1_time =",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* relResidual .*blas1_time.*\) Use\(.*\n\s*blas1_time =.*\n.*Ac_mul_B",
                         "Test liveness for ipm-ref: relResidual, x, p should not be updated in the block that sets blas1_time"
         ),
         exception_pattern
