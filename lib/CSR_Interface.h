@@ -31,6 +31,8 @@ void load_matrix_market_step1 (char *file, int *sizes, bool force_symmetric = fa
 void load_matrix_market_step2(
   char *file, int *rowptr, int *colidx, double *values, int *sizes, bool one_based_CSR);
 
+void load_vector_matrix_market(const char *fileName, double **v, int *m, int *n);
+
 // C can directly call this once
 void load_matrix_market(
   char *file,

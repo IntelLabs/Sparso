@@ -1,6 +1,5 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
-using MatrixMarket
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
@@ -228,8 +227,8 @@ if length(ARGS) == 0
     p = [ 2 1 ]'
 else
     A = matrix_market_read(string(ARGS[1], "-A.mtx"))'
-    b = vec(MatrixMarket.mmread(string(ARGS[1], "-b.mtx")))
-    p = vec(MatrixMarket.mmread(string(ARGS[1], "-p.mtx")))
+    b = matrix_market_read(string(ARGS[1], "-b.mtx"))
+    p = matrix_market_read(string(ARGS[1], "-p.mtx"))
 end
 
 m = size(A, 1)

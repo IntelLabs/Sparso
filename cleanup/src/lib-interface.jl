@@ -878,35 +878,65 @@ function matrix_market_read(
     symmetric_only  :: Bool = false,
     force_symmetric :: Bool = false
 )
-    # Read into a COO array
-    sizes::Vector{Cint} = [0, 0, 0, 0]
-    ccall((:load_matrix_market_step1, LIB_PATH), Void, 
-        (Ptr{Uint8}, Ptr{Cint}, Bool, Bool), filename, pointer(sizes), force_symmetric, false)
-
-    is_symmetric::Cint = sizes[1] # 0/1: true/false    
-    if symmetric_only && is_symmetric == 0
-        # We cannot handle asymmetric matrix right now, since we need a matrix
-        # to be symmetric, and thus we can use its CSC representation as CSR (The
-        # SpMP library is based on CSR, while Julia is based on CSC.)
-        throw(AsymmetricMatrixMarketFile(filename))
+    # Read header to figure out if it's an array or sparse matrix
+    mmfile = open(filename,"r")
+    # Read first line
+    firstline = chomp(readline(mmfile))
+    tokens = split(firstline)
+    if length(tokens) != 5
+        throw(ParseError(string("Not enough words on first line: ", ll)))
     end
+    if tokens[1] != "%%MatrixMarket"
+        throw(ParseError(string("Not a valid MatrixMarket header:", ll)))
+    end
+    (head1, rep, field, symm) = map(lowercase, tokens[2:5])
+    if head1 != "matrix"
+        throw(ParseError("Unknown MatrixMarket data type: $head1 (only \"matrix\" is supported)"))
+    end
+    close(mmfile)
 
-    n::Cint = sizes[2]
-    m::Cint = sizes[3]
-    assert(is_symmetric == 0 || m == n)
-    nnz::Cint = sizes[4]  # Note: if symmetric, nnz includes elements in both 
-                          # upper and lower triangle 
+    if rep == "array"
+      m_ref = Ref{Cint}(0)
+      n_ref = Ref{Cint}(0)
+      v_ref = Ref{Ptr{Cdouble}}(C_NULL)
 
-    v = Array(Cdouble, nnz)
-    i = Array(Cint, nnz)
-    j = Array(Cint, n + 1)
-    
-    A = SparseMatrixCSC{Cdouble, Cint}(m, n, j, i, v)
+      ccall((:load_vector_matrix_market, LIB_PATH), Void,
+           (Ptr{Cchar}, Ref{Ptr{Cdouble}}, Ref{Cint}, Ref{Cint}),
+           filename, v_ref, m_ref, n_ref)
+      assert(n_ref[] == 1)
 
-    # Convert the COO array to CSC array.
-    ccall((:load_matrix_market_step2, LIB_PATH), Void, 
-        (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
-        filename, pointer(j), pointer(i), pointer(v), pointer(sizes), true)
+      return pointer_to_array(v_ref[], m_ref[])
+    else
+      # Read into a COO array
+      sizes::Vector{Cint} = [0, 0, 0, 0]
+      ccall((:load_matrix_market_step1, LIB_PATH), Void, 
+          (Ptr{Uint8}, Ptr{Cint}, Bool, Bool), filename, pointer(sizes), force_symmetric, false)
 
-    A
+      is_symmetric::Cint = sizes[1] # 0/1: true/false    
+      if symmetric_only && is_symmetric == 0
+          # We cannot handle asymmetric matrix right now, since we need a matrix
+          # to be symmetric, and thus we can use its CSC representation as CSR (The
+          # SpMP library is based on CSR, while Julia is based on CSC.)
+          throw(AsymmetricMatrixMarketFile(filename))
+      end
+
+      n::Cint = sizes[2]
+      m::Cint = sizes[3]
+      assert(is_symmetric == 0 || m == n)
+      nnz::Cint = sizes[4]  # Note: if symmetric, nnz includes elements in both 
+                            # upper and lower triangle 
+
+      v = Array(Cdouble, nnz)
+      i = Array(Cint, nnz)
+      j = Array(Cint, n + 1)
+      
+      A = SparseMatrixCSC{Cdouble, Cint}(m, n, j, i, v)
+
+      # Convert the COO array to CSC array.
+      ccall((:load_matrix_market_step2, LIB_PATH), Void, 
+          (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
+          filename, pointer(j), pointer(i), pointer(v), pointer(sizes), true)
+
+      return A
+    end
 end

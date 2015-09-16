@@ -10,6 +10,7 @@
 
 #include "SpMP/COO.hpp"
 #include "SpMP/mm_io.h"
+#include "SpMP/Vector.hpp"
 
 using namespace std;
 using namespace SpMP;
@@ -80,4 +81,9 @@ void load_matrix_market(
   load_matrix_market_step2(file, *rowptr, *colidx, *values, sizes, one_based_CSR);
 }
 
+void load_vector_matrix_market(const char *fileName, double **v, int *m, int *n)
+{
+  SpMP::loadVectorMatrixMarket(fileName, v, m, n);
 }
+
+} // extern "C"
