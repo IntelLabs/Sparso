@@ -4,34 +4,43 @@
 Describe part (lower, upper, diagonal) of a matrix, of which the structure matters.
 """
 type StructureProxy
-#    diagonal :: Bool
-#    symmetric:: Bool # Symmetric in structure (not necessarily in value)
-    constant_valued        :: Int
-    constant_structured    :: Int
-    symmetric_valued       :: Int
-    symmetric_structured   :: Int
-    lower_of  :: Any
-    upper_of  :: Any
-    proxy     :: Any
+    constant_valued         :: Int
+    constant_structured     :: Int
+    symmetric_valued        :: Int
+    symmetric_structured    :: Int
+    lower_of                :: Any
+    upper_of                :: Any
+    proxy                   :: Any
+
+    StructureProxy() = new(0, 0, 0, 0, nothing, nothing, nothing)
 end
 
+abstract MatrixProperty
+
+include("property-constant-structure.jl")
 
 @doc """ Find the properties of all the matrices in the region. 
 A region is currently defined as a loop region. 
 """
 function find_properties_of_matrices(
     region      :: LoopRegion,
-    liveness    :: Liveness,
     symbol_info :: Sym2TypeMap,
+    liveness    :: Liveness,
     cfg         :: CFG
 )
 
-    dprintln(1, 0, "\n----Matrix Property Pass-----\n")
+    dprintln(1, 0, "\n----Matrix Property Analysis-----\n")
 
     # symbol does not have a constant structure?
     structure_proxies = Dict{Any, StructureProxy}()
 
-    constant_property_match(structure_proxies, region, liveness, symbol_info, cfg)
+    all_structure_properties = [
+        ConstantStructureProperty()
+    ]
+
+    for one_property in all_structure_properties
+        one_property.set_property_for(structure_proxies, region, liveness, symbol_info, cfg)
+    end
    
     dprintln(1, 0, "\nMatrix structures discovered:")
     dprintln(1, 1, "", structure_proxies)
