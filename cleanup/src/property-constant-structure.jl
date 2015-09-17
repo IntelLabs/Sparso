@@ -147,10 +147,15 @@ type ConstantStructureProperty <: MatrixProperty
         depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
         depend_map[sym_non_constant] = Set{Union{GenSym, Symbol}}()
 
+<<<<<<< HEAD
         call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
                             Symexpr2PropertiesMap(),
                             [],
                             Vector{Action}(), Dict{Symexpr, Symbol}(), depend_map)
+=======
+        call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info,
+                            [], Vector{Action}(), depend_map)
+>>>>>>> c51f885f26c8dad783baaf8ee66867298f72f3aa
 
         # fill the dependence map by walking through all statements in the region
         for bb_idx in L.members
