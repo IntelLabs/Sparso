@@ -307,6 +307,7 @@ type CallSites
     patterns          :: Vector{Pattern}
     actions           :: Vector{Action}
     matrix_knobs      :: Dict{Symexpr, Symbol}
+    extra             :: Any
 end
 
 @doc """ Insert new statements to a basic block before or after a statement. """
