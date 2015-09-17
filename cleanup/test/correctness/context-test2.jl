@@ -260,42 +260,10 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     # reordering.
     (SparseAccelerator.set_reordering_decision_maker)(__fknob_8201)
 
-<<<<<<< HEAD
-    row_perm                         = C_NULL
-    row_inv_perm                     = C_NULL
-    col_perm                         = C_NULL
-    col_inv_perm                     = C_NULL
-    reordering_on_back_edge_done = false
-    initial_reordering_done      = false
-    while k <= maxiter
-        if initial_reordering_done && !reordering_on_back_edge_done
-            # This is the first time the execution reaches here (along the 
-            # backedge of the loop) after the initial reordering was done.
-            # Reorder all the arrays that are affected by the other
-            # already-reordered arrays.
-            assert(col_perm != C_NULL && row_inv_perm != C_NULL)
-
-            reorder_time -= time()
-
-            new_A = copy(A)
-            SparseAccelerator.reorder_matrix(A, new_A, col_perm, row_inv_perm)
-            A = new_A
-
-            new_x = copy(x)
-            SparseAccelerator.reorder_vector(x, new_x, col_perm)
-            x = new_x
-
-            reorder_time += time()
-
-            reordering_on_back_edge_done = true
-        end
-    
-=======
     # Reordering_status is a vector. See the comments in lib-interface.jl:
     # reordering() for the meaning of the elements
     reordering_status = [false, C_NULL, C_NULL, C_NULL, C_NULL, reorder_time]
     while k <= maxiter
->>>>>>> 93eb6a964af12f7fd044882dd4a2d0f89c570a16
         old_rz = rz
 
         spmv_time -= time()
@@ -328,40 +296,16 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         SparseAccelerator.fwdTriSolve!(L, z, __fknob_8201)
         trsv_time += time()
 
-<<<<<<< HEAD
-        if !initial_reordering_done
-            reorder_time -= time()
-
-            row_perm, row_inv_perm, col_perm, col_inv_perm = SparseAccelerator.get_reordering_vectors(__fknob_8201)
-            if row_inv_perm != C_NULL
-                assert(col_perm != C_NULL && row_perm != C_NULL)
-
-                # This is the first time fwdTriSolve! has decided to do reordering.
-                # Its own inputs and outputs (L and z) have already been reordered.
-                # We need to reorder other arrays that affected by L and z in the
-                # subsequent execution.
-                new_U = copy(U)
-                SparseAccelerator.reorder_matrix(U, new_U, col_perm, row_inv_perm)
-                U = new_U
-                
-                new_r = copy(r)
-                SparseAccelerator.reorder_vector(r, new_r, row_perm)
-                r = new_r
-                
-                new_p = copy(p)
-                SparseAccelerator.reorder_vector(p, new_p, col_perm)
-                p = new_p
-
-                initial_reordering_done = true
-                # For any static program point from here to the end of the loop,
-                # any array that needs to be reordered has been reordered.
-            end
-
-            reorder_time += time()
-        end
-=======
-        SparseAccelerator.reordering(__fknob_8201, reordering_status, A, U, :__delimitor__, r, x, p)
->>>>>>> 93eb6a964af12f7fd044882dd4a2d0f89c570a16
+        SparseAccelerator.reordering(
+            __fknob_8201, 
+            reordering_status, 
+            A, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM,
+            U, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, 
+            :__delimitor__,
+            r, SparseAccelerator.ROW_PERM,
+            x, SparseAccelerator.COL_PERM,
+            p, SparseAccelerator.COL_PERM
+        )
 
         trsv_time -= time()
         #Base.SparseMatrix.bwdTriSolve!(U, z)
@@ -379,21 +323,12 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         k += 1
     end
 
-<<<<<<< HEAD
-    if reordering_on_back_edge_done
-        # Reverse reorder live arrays that have been reordered.
-        # Only x will live out here, and it is reordered only if reordering_on_back_edge_done
-        reorder_time -= time()
-        new_x = copy(x)
-        SparseAccelerator.reverse_reorder_vector(x, new_x, col_perm)
-        x = new_x
-        reorder_time += time()
-    end
-    
-=======
-    SparseAccelerator.reverse_reordering(reordering_status, :__delimitor__, x)
+    SparseAccelerator.reverse_reordering(
+        reordering_status, 
+        :__delimitor__, 
+        x, SparseAccelerator.COL_PERM
+    )
 
->>>>>>> 93eb6a964af12f7fd044882dd4a2d0f89c570a16
     (SparseAccelerator.delete_function_knob)(__fknob_8221)
     (SparseAccelerator.delete_function_knob)(__fknob_8201)
     (SparseAccelerator.delete_matrix_knob)(__mknobL)
@@ -419,7 +354,7 @@ maxiter = 20000
 
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
+println("\tsum of x=", sum(x))
 println("\tk=", k)
 println("\trel_err=", rel_err)
 flush(STDOUT)
@@ -428,7 +363,7 @@ println("\nWith manual context-sensitive optimization without reordering: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
 x, k, rel_err = pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
+println("\tsum of x=", sum(x))
 println("\tk=", k)
 println("\trel_err=", rel_err)
 
@@ -436,7 +371,7 @@ println("\nWith manual context-sensitive optimization: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
 x, k, rel_err = pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
+println("\tsum of x=", sum(x))
 println("\tk=", k)
 println("\trel_err=", rel_err)
 
