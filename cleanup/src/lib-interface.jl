@@ -868,6 +868,113 @@ function cholfact_inverse_divide(
 end
 
 @doc """
+Reorder arrays based on the the given permutation and inverse permutation vectors.
+If reverse_reorder is true, do reverse reordering instead.
+"""
+function reorder_arrays(
+    reverse_reorder :: Bool,
+    perm            :: Vector,
+    inv_perm        :: Vector,
+    arrays...
+)
+    matrices_done = false
+    for A in arrays[1]
+        if A == :__delimitor__
+            # A delimiter that separate matrices from vectors
+            # It means that all matrices have been processed
+            matrices_done = true
+            continue
+        end
+        if matrices_done
+            assert(typeof(A) <: AbstractVector)
+            new_A = copy(A)
+            if reverse_reorder
+                reverse_reorder_vector(A, new_A, perm)
+            else
+                reorder_vector(A, new_A, perm)
+            end
+            A[:] = new_A
+        else
+            assert(typeof(A) <: AbstractSparseMatrix)
+            new_A = copy(A)
+            if reverse_reorder
+                reorder_matrix(A, new_A, inv_perm, perm)
+            else
+                reorder_matrix(A, new_A, perm, inv_perm)
+            end
+            A[:,] = new_A
+        end
+    end
+end
+
+@doc """
+The first time an reordering decision maker (a function, represented by the
+fknob) has decided that reordering should be done, this function should be 
+called to reorder the specified arrays. 
+
+Status is a vector of the following 4 elements:
+(1) reordering_done:       Bool, true if reordering has already been done
+(2) perm:                  C pointer to the permutation vector
+(3) inv_perm:              C pointer to the inverse permutaiton vector
+(4) reordering_time:       time spent on reordering so far (for statistics)
+The vector is updated when the function returns.
+"""
+function reordering(
+    fknob  :: Ptr{Void},
+    status :: Vector,
+    arrays...
+)
+    reordering_done = status[1]
+    reordering_time = status[4]
+    if !reordering_done
+        perm, inv_perm = get_reordering_vectors(fknob)
+        if perm != C_NULL
+            assert(inv_perm != C_NULL)
+            # This is the first time it is decided to do reordering. Reorder
+            # the specified arrays.
+            reordering_time -= time()
+
+            reorder_arrays(false, perm, inv_perm, arrays)
+            reordering_done = true
+
+            reordering_time += time()
+
+            status[2] = perm
+            status[3] = inv_perm
+        end
+    end
+    status[1] = reordering_done 
+    status[4] = reordering_time
+end
+
+@doc """
+Reverse reorder the specified arrays. 
+
+Status is a vector of the following 4 elements. See the above reordering()
+function for details.
+"""
+function reverse_reordering(
+    status :: Vector,
+    arrays...
+)
+    reordering_done = status[1]
+    reordering_time = status[4]
+
+    if reordering_done
+        perm          = status[2]
+        inv_perm      = status[3]
+
+        reordering_time -= time()
+
+        reorder_arrays(true, perm, inv_perm, arrays)
+
+        reordering_time += time()
+    end
+
+    status[4] = reordering_time
+end
+
+@doc """
 Read a matrix market file. Force it to be symmetric if force_symmetric is true.
 Error when symmetric_only is true but the matrix is not symmetric (and not
 forced to be symmetric). It calls SpMP library to do the actual work, which is 

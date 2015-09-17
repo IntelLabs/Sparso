@@ -105,7 +105,7 @@ const context_test2 = Test(
         TestPattern(r"With manual context-sensitive optimization without reordering:\s*\n.*\n\s*sum of x=-1.5773120433545284e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278809182831e-6",
                      "Test pcg_symgs with manual context-sensitive optimization without reordering"
         ),
-        TestPattern(r"With manual context-sensitive optimization:\s*\n.*\n\s*sum of x=-1.5773120433546033e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278596596245e-6",
+        TestPattern(r"With manual context-sensitive optimization:\s*\n.*\n\s*sum of x=-1.57731204.*e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278596596245e-6",
                      "Test pcg_symgs with manual context-sensitive optimization"
         ),
         exception_pattern
