@@ -322,14 +322,21 @@ end
 function get_reordering_vectors(
     fknob :: Ptr{Void}
  )
-    len = Ref{Cint}(0)
-    perm = ccall((:GetReorderingVector, LIB_PATH), Ptr{Cint},
+    m = Ref{Cint}(0)
+    n = Ref{Cint}(0)
+    row_perm = ccall((:GetRowReorderingVector, LIB_PATH), Ptr{Cint},
          (Ptr{Void}, Ref{Cint}),
-         fknob, len)
-    inv_perm = ccall((:GetInverseReorderingVector, LIB_PATH), Ptr{Cint},
+         fknob, m)
+    row_inv_perm = ccall((:GetRowInverseReorderingVector, LIB_PATH), Ptr{Cint},
          (Ptr{Void}, Ref{Cint}),
-         fknob, len)
-    pointer_to_array(perm, len[]), pointer_to_array(inv_perm, len[])
+         fknob, m)
+    col_perm = ccall((:GetColReorderingVector, LIB_PATH), Ptr{Cint},
+         (Ptr{Void}, Ref{Cint}),
+         fknob, n)
+    col_inv_perm = ccall((:GetColInverseReorderingVector, LIB_PATH), Ptr{Cint},
+         (Ptr{Void}, Ref{Cint}),
+         fknob, n)
+    pointer_to_array(row_perm, m[]), pointer_to_array(row_inv_perm, m[]), pointer_to_array(col_perm, n[]), pointer_to_array(col_inv_perm, n[])
 end
 
 @doc """
@@ -405,7 +412,10 @@ function SpMV(
     gamma :: Number,
     fknob :: Ptr{Void} = C_NULL
 )
-   w = Array(Cdouble, size(A, fknob != C_NULL ? 1 : 2))
+   # When fknob is not null, we just use
+   # the CSC input matrix as if it's CSR
+   # assuming the input matrix is symmetric
+   w = Array(Cdouble, size(A, 1))
    SpMV!(w, alpha, A, x, beta, y, gamma, fknob)
    w
 end
@@ -514,6 +524,45 @@ function minimum(
           length(x), x)
   else
     minimum(x)
+  end
+end
+
+function abs!(
+    w :: Vector,
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:CSR_abs, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = abs(x)
+  end
+end
+
+function exp!(
+    w :: Vector,
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:CSR_exp, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = exp(x)
+  end
+end
+
+function log1p!(
+    w :: Vector,
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:CSR_log1p, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = log1p(x)
   end
 end
 
@@ -940,3 +989,56 @@ function matrix_market_read(
       return A
     end
 end
+
+function lbfgs_compute_direction(
+    k     :: Int,
+    it    :: Int,
+    n     :: Int,
+    S,
+    Y,
+    dfk)
+
+    if use_SPMP
+      r = zeros(n)
+      ccall((:LBFGSComputeDirection, LIB_PATH), Void,
+            (Cint, Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+            k, it, n, S, Y, dfk, r)
+      r
+    else
+      a = zeros(k)
+
+      mm = min(it - 1, k)
+      begin_idx = it + k - mm - 2
+
+      yk = 1
+      if it <= k
+      else
+        skm1 = S[:,(begin_idx + mm)%k + 1]
+        ykm1 = Y[:,(begin_idx + mm)%k + 1]
+        yk = dot(skm1, ykm1)/dot(ykm1, ykm1)
+      end
+
+      p = zeros(mm, 1)
+      for i = 1:mm
+        p[i] = 1.0/dot(S[:,(begin_idx + i)%k + 1], Y[:,(begin_idx + i)%k + 1])
+      end
+
+      q = copy(dfk)
+      for i = mm:-1:1
+        si = S[:,(begin_idx + i)%k + 1]
+        yi = Y[:,(begin_idx + i)%k + 1]
+        a[i] = p[i]*dot(si, q)
+        q = q - a[i]*yi
+      end
+
+      r = yk*q
+      for i = 1:mm
+        si = S[:,(begin_idx + i)%k + 1]
+        yi = Y[:,(begin_idx + i)%k + 1]
+        b = p[i]*dot(yi, r)
+        r = r + si*(a[i] - b)
+      end
+
+      -r
+    end
+end 

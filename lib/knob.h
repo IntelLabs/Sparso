@@ -137,8 +137,10 @@ void DeleteFunctionKnob(FunctionKnob* fknob);
  * reordering.
  */
 void SetReorderingDecisionMaker(FunctionKnob *fknob);
-int *GetReorderingVector(FunctionKnob *fknob, int *len);
-int *GetInverseReorderingVector(FunctionKnob *fknob, int *len);
+int *GetRowReorderingVector(FunctionKnob *fknob, int *len);
+int *GetRowInverseReorderingVector(FunctionKnob *fknob, int *len);
+int *GetColReorderingVector(FunctionKnob *fknob, int *len);
+int *GetColInverseReorderingVector(FunctionKnob *fknob, int *len);
 
 /******************************************************************************/
 
