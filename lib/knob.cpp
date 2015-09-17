@@ -866,7 +866,68 @@ void IChol(
     delete schedule;
     delete A;
 }
- 
+
+void SpSquareWithEps(
+    int m, int n,
+    int **C_colptr, int **C_rowval, double **C_nzval,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double eps,
+    FunctionKnob *fknob)
+{
+    CSR AT(n, m, A_colptr, A_rowval, A_nzval);
+
+    CSR *A;
+    if (fknob && fknob->mknobs[0] && fknob->mknobs[0]->is_symmetric) {
+        A = &AT;
+    }
+    else {
+        A = AT.transpose();
+    }
+
+    CSR *C = SpGEMMWithEps(A, &AT, eps);
+
+    if (A != &AT) {
+        delete A;
+    }
+
+    *C_colptr = C->rowptr;
+    *C_rowval = C->colidx;
+    *C_nzval = C->values;
+}
+
+void SpAdd(
+    int m, int n,
+    int **C_colptr, int **C_rowval, double **C_nzval,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double beta,
+    int *B_colptr, int *B_rowval, double *B_nzval,
+    FunctionKnob *fknob)
+{
+    CSR AT(n, m, A_colptr, A_rowval, A_nzval);
+    CSR BT(n, m, B_colptr, B_rowval, B_nzval);
+    // It doesn't matter if we do matrix addition in CSR or CSC
+    CSR *C = SpAdd(alpha, &AT, beta, &BT);
+
+    *C_colptr = C->rowptr;
+    *C_rowval = C->colidx;
+    *C_nzval = C->values;
+}
+
+double Trace(int n, int *A_colptr, int *A_rowval, double *A_nzval)
+{
+    double trace = 0;
+#pragma omp parallel for reduction(+:trace)
+    for (int i = 0; i < n; ++i) {
+        for (int j = A_colptr[i] - 1; j < A_colptr[i + 1] - 1; ++j) {
+            if (A_rowval[j] - 1 == i) {
+                trace += A_nzval[j];
+            }
+        }
+    }
+    return trace;
+}
+
 void SetReorderingDecisionMaker(FunctionKnob *fknob)
 {
     fknob->is_reordering_decision_maker = true;

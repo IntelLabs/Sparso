@@ -127,6 +127,24 @@ void IChol(
     double *L_nzval,
     FunctionKnob *fknob);
 
+void SpSquareWithEps(
+    int m, int n,
+    int **C_colptr, int **C_rowval, double **C_nzval,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double eps,
+    FunctionKnob *fknob);
+
+void SpAdd(
+    int m, int n,
+    int **C_colptr, int **C_rowval, double **C_nzval,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double beta,
+    int *B_colptr, int *B_rowval, double *B_nzval,
+    FunctionKnob *fknob);
+
+double Trace(int n, int *A_colptr, int *A_rowval, double *A_nzval);
+
 FunctionKnob* NewFunctionKnob();
 void DeleteFunctionKnob(FunctionKnob* fknob);
 
