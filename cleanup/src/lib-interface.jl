@@ -25,7 +25,6 @@ function new_matrix_knob(
     is_structure_only      = false,
     is_single_def          = false
  )
-    assert(constant_valued || constant_structured)
     assert(!constant_valued || constant_structured)
     assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
@@ -824,6 +823,85 @@ function ADB(
     C_rowval = pointer_to_array(C_rowval_ref[], nnz)
     C_nzval = pointer_to_array(C_nzval_ref[], nnz)
     SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+# A*A'
+function SpSquareWithEps(
+    A     :: SparseMatrixCSC{Float64, Int32},
+    eps   :: Number,
+    fknob :: Ptr{Void} = C_NULL)
+
+    m = size(A, 1)
+    n = size(A, 2)
+
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
+
+    ccall((:SpSquareWithEps, LIB_PATH), Ptr{Void},
+          (Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Cdouble,
+           Ptr{Void}),
+          m, n,
+          C_colptr_ref, C_rowval_ref, C_nzval_ref,
+          A.colptr, A.rowval, A.nzval,
+          eps,
+          fknob)
+
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+# alpha*A + beta*B
+function SpAdd(
+    alpha :: Number,
+    A     :: SparseMatrixCSC{Float64, Int32},
+    beta  :: Number,
+    B     :: SparseMatrixCSC{Float64, Int32})
+
+    m = size(A, 1)
+    n = size(A, 2)
+    assert(m == size(B, 1))
+    assert(n == size(B, 2))
+
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
+
+    ccall((:SpAdd, LIB_PATH), Ptr{Void},
+          (Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Cdouble,
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Cdouble,
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Ptr{Void}),
+          m, n,
+          C_colptr_ref, C_rowval_ref, C_nzval_ref,
+          alpha,
+          A.colptr, A.rowval, A.nzval,
+          beta,
+          B.colptr, B.rowval, B.nzval,
+          C_NULL)
+
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+function trace(
+    A   :: SparseMatrixCSC{Float64, Int32})
+
+    ccall((:Trace, LIB_PATH), Cdouble,
+          (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+          size(A, 1), A.colptr, A.rowval, A.nzval)
 end
 
 @doc """ 
