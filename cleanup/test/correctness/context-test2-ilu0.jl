@@ -257,8 +257,10 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     # reordering.
     (SparseAccelerator.set_reordering_decision_maker)(__fknob_8201)
 
-    perm                         = C_NULL
-    inv_perm                     = C_NULL
+    row_perm                         = C_NULL
+    row_inv_perm                     = C_NULL
+    col_perm                         = C_NULL
+    col_inv_perm                     = C_NULL
     reordering_on_back_edge_done = false
     initial_reordering_done      = false
     while k <= maxiter
@@ -267,19 +269,22 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
             # backedge of the loop) after the initial reordering was done.
             # Reorder all the arrays that are affected by the other
             # already-reordered arrays.
-            assert(perm != C_NULL && inv_perm != C_NULL)
+            assert(col_perm != C_NULL && row_inv_perm != C_NULL)
 
             reorder_time -= time()
 
             new_A = copy(A)
-            SparseAccelerator.reorder_matrix(A, new_A, perm, inv_perm)
+            SparseAccelerator.reorder_matrix(A, new_A, col_perm, row_inv_perm)
             A = new_A
+
+            new_x = copy(x)
+            SparseAccelerator.reorder_vector(x, new_x, col_perm)
+            x = new_x
 
             reorder_time += time()
 
             reordering_on_back_edge_done = true
         end
-    
     
         old_rz = rz
 
@@ -316,24 +321,24 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         if !initial_reordering_done
             reorder_time -= time()
 
-            perm, inv_perm = SparseAccelerator.get_reordering_vectors(__fknob_8201)
-            if perm != C_NULL
-                assert(inv_perm != C_NULL)
+            row_perm, row_inv_perm, col_perm, col_inv_perm = SparseAccelerator.get_reordering_vectors(__fknob_8201)
+            if row_inv_perm != C_NULL
+                assert(col_perm != C_NULL && row_perm != C_NULL)
 
                 # This is the first time fwdTriSolve! has decided to do reordering.
                 # Its own inputs and outputs (L and z) have already been reordered.
                 # We need to reorder other arrays that affected by L and z in the
                 # subsequent execution.
                 new_U = copy(U)
-                SparseAccelerator.reorder_matrix(U, new_U, perm, inv_perm)
+                SparseAccelerator.reorder_matrix(U, new_U, col_perm, row_inv_perm)
                 U = new_U
                 
                 new_r = copy(r)
-                SparseAccelerator.reorder_vector(r, new_r, perm)
+                SparseAccelerator.reorder_vector(r, new_r, row_perm)
                 r = new_r
                 
                 new_p = copy(p)
-                SparseAccelerator.reorder_vector(p, new_p, perm)
+                SparseAccelerator.reorder_vector(p, new_p, col_perm)
                 p = new_p
 
                 initial_reordering_done = true
@@ -365,7 +370,7 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
         # Only x will live out here, and it is reordered only if reordering_on_back_edge_done
         reorder_time -= time()
         new_x = copy(x)
-        SparseAccelerator.reverse_reorder_vector(x, new_x, perm)
+        SparseAccelerator.reverse_reorder_vector(x, new_x, col_perm)
         x = new_x
         reorder_time += time()
     end

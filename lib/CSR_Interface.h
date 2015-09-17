@@ -93,6 +93,9 @@ double sum(int n, const double *x);
 double minimum(int n, const double *x);
 // w = min(x, alpha)
 void min(int n, double *w, const double *x, double alpha); 
+void CSR_abs(int n, double *w, const double *x);
+void CSR_exp(int n, double *w, const double *x);
+void CSR_log1p(int n, double *w, const double *x);
 
 void tallSkinnyDGEMM(
   int transA, int transB,

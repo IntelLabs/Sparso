@@ -48,24 +48,23 @@ vertices in and outside the region.
 type ReorderGraph
     vertices_in_region      :: Set{ReorderGraphVertex}
     vertices_outside_region :: Set{ReorderGraphVertex}
+    stmt_clusters           :: Statement2Clusters      # Only for debugging purpose
     
-    ReorderGraph() = new(Set{ReorderGraphVertex}(), Set{ReorderGraphVertex}())
+    ReorderGraph(_stmt_clusters) = new(Set{ReorderGraphVertex}(), Set{ReorderGraphVertex}(), _stmt_clusters)
 end
 
 function build_reorder_graph_for_region(
-    region :: LoopRegion,
-    cfg    :: CFG
+    region        :: LoopRegion,
+    stmt_clusters :: Statement2Clusters,
+    liveness      :: Liveness, 
+    cfg           :: CFG
 )
-    graph = ReorderGraph()
+    graph = ReorderGraph(stmt_clusters)
     
     L = region.loop
     if isempty(L.members) 
         return graph
     end
-    
-    # Build a pseudo entry vertex
-    entry = ReorderGraphVertex(PSEUDO_BLOCK_INDEX, PSEUDO_STATEMENT_INDEX, RG_NODE_ENTRY)
-    push!(graph.vertices_in_region, entry)
 
     # Build vertices and connect vertices in the same block
     first_node = Dict{BasicBlockIndex, ReorderGraphVertex}()
@@ -108,8 +107,15 @@ function build_reorder_graph_for_region(
         for pred in bb.preds
             pred_bb_idx = pred.label
             if !in(pred_bb_idx, L.members) && !haskey(first_node, pred_bb_idx)
-                vertex = ReorderGraphVertex(pred_bb_idx, PSEUDO_STATEMENT_INDEX, RG_NODE_OUTSIDE)
-                push!(graph.vertices_outside_region, vertex)
+                # if pred is the predecessor of the loop head outside the loop,
+                # Build a pseudo entry vertex
+                if bb_idx == L.head
+                    vertex = ReorderGraphVertex(pred_bb_idx, PSEUDO_STATEMENT_INDEX, RG_NODE_ENTRY)
+                    push!(graph.vertices_in_region, vertex)
+                else
+                    vertex = ReorderGraphVertex(pred_bb_idx, PSEUDO_STATEMENT_INDEX, RG_NODE_OUTSIDE)
+                    push!(graph.vertices_outside_region, vertex)
+                end
                 first_node[pred_bb_idx] = last_node[pred_bb_idx] = vertex
             end
         end
@@ -139,13 +145,7 @@ function build_reorder_graph_for_region(
             push!(last_node[bb_idx].succs, first_node[succ_bb_idx])
         end
     end
-    
-    # Connect ENTRY with the first vertex of the loop head
-    block = blocks[L.head]
-    bb_idx = block.label
-    push!(first_node[bb_idx].preds, entry)
-    push!(entry.succs, first_node[bb_idx])
-    
+
     return graph
 end
 
@@ -351,11 +351,15 @@ Find what arrays to be reordered and where.
 function discover_reorderable_arrays(
     region          :: Region, 
     stmt_clusters   :: Statement2Clusters, 
+    liveness        :: Liveness, 
     cfg             :: CFG,
     FAR             :: Vector{Symbol}
 )
-    reorder_graph = build_reorder_graph_for_region(region, cfg)
-    
+    reorder_graph = build_reorder_graph_for_region(region, stmt_clusters, liveness, cfg)
+
+    dprintln(1, 0, "Initial reorder graph:")
+    dprintln(1, 1, liveness, reorder_graph)
+
     # Do bi-directional dataflow analysis on the graph.
     vertices_in_region = reorder_graph.vertices_in_region
     
@@ -367,15 +371,30 @@ function discover_reorderable_arrays(
             push!(vertex.Out, UNIVERSE_SYM)
         end
     end
+    dprintln(1, 0, "Initialized reorder graph:")
+    dprintln(1, 1, liveness, reorder_graph)
 
     # Step 2: preconditioning
     forward_pass(vertices_in_region, stmt_clusters, cfg, true)
-    
+
+    dprintln(1, 0, "Preconditioned reorder graph:")
+    dprintln(1, 1, liveness, reorder_graph)
+
     # Step 3: Growth (repetitive backward and forward pass)
     changed = true
+    i       = 1
     while changed
         changed  = backward_pass(vertices_in_region, stmt_clusters, cfg)
+        
+        dprintln(1, 0, "Reorder graph after backward pass ", i)
+        dprintln(1, 1, liveness, reorder_graph)
+
         changed |= forward_pass(vertices_in_region, stmt_clusters, cfg, false)
+
+        dprintln(1, 0, "Reorder graph after forward pass ", i)
+        dprintln(1, 1, liveness, reorder_graph)
+        
+        i = i + 1
     end
         
     return reorder_graph

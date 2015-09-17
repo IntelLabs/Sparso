@@ -13,7 +13,6 @@ end
 # to STDOUT
 io_buffer = IOBuffer()
 
-
 function statement_of_ast_node(
     node :: Any,
     cfg  :: CFG
@@ -33,6 +32,88 @@ function show_set(
 )
     for x in s
         print(io_buffer, " ", x)
+    end
+end
+
+function DFS_reorder_graph!(
+    sorted :: Vector{ReorderGraphVertex}, 
+    vertex :: ReorderGraphVertex
+)
+    if in(vertex, sorted)
+        return
+    end
+
+    push!(sorted, vertex)
+    for s in vertex.succs
+        DFS_reorder_graph!(sorted, s)
+    end
+    for p in vertex.preds
+        DFS_reorder_graph!(sorted, p)
+    end
+end
+
+function show_reorder_graph(
+    liveness :: Liveness,
+    graph    :: ReorderGraph
+)
+    graph_entry = nothing
+    for graph_entry in graph.vertices_in_region
+        if graph_entry.kind == RG_NODE_ENTRY
+            break
+        end
+    end
+    assert(graph_entry != nothing)
+
+    sorted_vertices = Vector{ReorderGraphVertex}()
+    DFS_reorder_graph!(sorted_vertices, graph_entry)
+
+    vertex2index = Dict{ReorderGraphVertex, Int}()
+    i = 1
+    for vertex in sorted_vertices
+        vertex2index[vertex] = i
+        i = i + 1
+    end
+    for vertex in sorted_vertices
+        print(io_buffer, "Vertex ", vertex2index[vertex])
+        print(io_buffer, ": (BB ", 
+                (vertex.bb_idx == PSEUDO_BLOCK_INDEX) ? "PSEUDO" : vertex.bb_idx,
+                ", Stmt ",
+                (vertex.stmt_idx == PSEUDO_STATEMENT_INDEX) ? "PSEUDO" : vertex.stmt_idx,
+                ")")
+        print(io_buffer, vertex.kind == RG_NODE_ENTRY ? " ENTRY" :
+                         vertex.kind == RG_NODE_EMPTY ? " EMPTY" :
+                         vertex.kind == RG_NODE_NORMAL ? " NORMAL" :
+                         vertex.kind == RG_NODE_OUTSIDE ? " OUTSIDE" : 
+                         "IllegalKind!")
+        print(io_buffer, " Preds(")
+        for p in vertex.preds
+            print(io_buffer, " ", vertex2index[p])
+        end
+        print(io_buffer, " )")
+        print(io_buffer, " Succs(")
+        for s in vertex.succs
+            print(io_buffer, " ", vertex2index[s])
+        end
+        print(io_buffer, " )")
+        print(io_buffer, " In(")
+        show_set(vertex.In)
+        print(io_buffer, " )")
+        print(io_buffer, " Out(")
+        show_set(vertex.Out)
+        print(io_buffer, " )")
+        if vertex.kind == RG_NODE_NORMAL
+            bb   = liveness.cfg.basic_blocks[vertex.bb_idx]
+            stmt = bb.statements[vertex.stmt_idx]
+            for cluster in graph.stmt_clusters[stmt]
+                print(io_buffer, " Cluster(LHS:");
+                show_set(cluster.LHS)
+                print(io_buffer, "; RHS:");
+                show_set(cluster.RHS)
+                print(io_buffer, " )")
+            end
+            print(io_buffer, "    ", stmt.expr)
+        end
+        println(io_buffer, "")
     end
 end
 
@@ -196,6 +277,8 @@ function show(
                 println(io_buffer, "Matrix ", ast)
                 println(io_buffer, "     ==> ", structure)
             end
+        elseif typeof(msg) <: ReorderGraph
+            show_reorder_graph(liveness, msg)
         else
             print(io_buffer, msg)
         end
@@ -203,12 +286,12 @@ function show(
 end
 
 function show(
-    level       :: Int, 
-    indent      :: Int, 
-    new_line    :: Bool, 
-    structure   :: Bool,
-    symbol_info :: Sym2TypeMap,
-    liveness    :: Liveness,
+    level         :: Int, 
+    indent        :: Int, 
+    new_line      :: Bool, 
+    structure     :: Bool,
+    symbol_info   :: Sym2TypeMap,
+    liveness      :: Liveness,
     msgs...
 )
     if(level >= verbosity)
@@ -240,6 +323,8 @@ const empty_liveness = Liveness(Dict(), CFG(Dict(), Set()))
 # Debug printing
 dprint(level, indent, msgs...)   = show(level, indent, false, false, Sym2TypeMap(), empty_liveness, msgs)
 dprintln(level, indent, msgs...) = show(level, indent, true, false, Sym2TypeMap(), empty_liveness, msgs)
+dprint(level, indent, liveness :: Liveness, msgs...)   = show(level, indent, false, false, Sym2TypeMap(), liveness, msgs)
+dprintln(level, indent, liveness :: Liveness, msgs...) = show(level, indent, true, false, Sym2TypeMap(), liveness, msgs)
 dsprint(level, indent, symbol_info, ast :: Expr...)   = show(level, indent, false, true, symbol_info, empty_liveness, ast)
 dsprintln(level, indent, symbol_info, ast :: Expr...) = show(level, indent, true, true, symbol_info, empty_liveness, ast)
 dsprint(level, indent, symbol_info, liveness :: Liveness, msgs...)   = show(level, indent, false, true, symbol_info, liveness, msgs)

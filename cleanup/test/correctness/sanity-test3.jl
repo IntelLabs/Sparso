@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_REORDER_WHEN_BENEFICIAL)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_REORDER)
 
 function foo(A, x)
     A*x

@@ -12,16 +12,22 @@
 #include "SpGEMM.hpp"
 #include "ILU.hpp"
 #include "IChol.hpp"
+#include "BFSBipartite.h"
 #include <mkl.h>
 
 using namespace std;
 using namespace SpMP;
 
 struct ReorderingInfo {
-    int *perm, *inverse_perm;
-    int perm_len;
+    int *row_perm, *row_inverse_perm;
+    int row_perm_len;
+    int *col_perm, *col_inverse_perm;
+    int col_perm_len;
 
-    ReorderingInfo() : perm(NULL), inverse_perm(NULL), perm_len(0) { }
+    ReorderingInfo() :
+        row_perm(NULL), row_inverse_perm(NULL), row_perm_len(0),
+        col_perm(NULL), col_inverse_perm(NULL), col_perm_len(0)
+    { }
 };
 
 // Julia variables' scope is function-wise at AST level, even though in the source
@@ -454,20 +460,44 @@ void SpMV(
 
     CreateOptimizedRepresentation(mknob, m, n, A_colptr, A_rowval, A_nzval);
 
-    if (mknob->reordering_info.perm != fknob->reordering_info.perm && fknob->is_reordering_decision_maker) {
-        assert(m == n); // currently only support square matrices
+    if (fknob->reordering_info.row_inverse_perm == NULL && fknob->is_reordering_decision_maker) {
+        fknob->reordering_info.row_perm = new int[m];
+        fknob->reordering_info.row_inverse_perm = new int[m];
+        fknob->reordering_info.col_perm = new int[n];
+        fknob->reordering_info.col_inverse_perm = new int[n];
 
-        fknob->reordering_info.perm = new int[m];
-        fknob->reordering_info.inverse_perm = new int[n];
+        if (m != n) {
+            CSR AT(n, m, A_colptr, A_rowval, A_nzval);
 
-        mknob->A->getRCMPermutation(fknob->reordering_info.perm, fknob->reordering_info.inverse_perm);
+            double t = omp_get_wtime();
+            bfsBipartite(
+                *mknob->A, AT,
+                fknob->reordering_info.row_perm,
+                fknob->reordering_info.row_inverse_perm,
+                fknob->reordering_info.col_perm,
+                fknob->reordering_info.col_inverse_perm);
+            printf("bfsBipartite takes %f\n", omp_get_wtime() - t);
+        }
+        else {
+            mknob->A->getRCMPermutation(fknob->reordering_info.col_perm, fknob->reordering_info.row_inverse_perm);
+#pragma omp parallel for
+            for (int i = 0; i < m; i++) {
+                fknob->reordering_info.row_perm[i] = fknob->reordering_info.col_perm[i];
+                fknob->reordering_info.col_inverse_perm[i] = fknob->reordering_info.row_inverse_perm[i];
+            }
+        }
+
+        mknob->A = mknob->A->permute(
+            fknob->reordering_info.col_perm,
+            fknob->reordering_info.row_inverse_perm);
+
         mknob->reordering_info = fknob->reordering_info;
 
         reorderVectorWithInversePerm(
-            x, fknob->reordering_info.inverse_perm, n);
+            x, fknob->reordering_info.col_inverse_perm, n);
         if (y)
             reorderVectorWithInversePerm(
-                y, fknob->reordering_info.perm, m);
+                y, fknob->reordering_info.row_perm, m);
     }
 
     mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
@@ -635,19 +665,23 @@ static void TriangularSolve_(
     }
 
     if (m && m->schedule && m->A) {
-        fknob->reordering_info.perm = m->schedule->origToThreadContPerm;
-        fknob->reordering_info.perm_len = m->A->m;
-        fknob->reordering_info.inverse_perm = m->schedule->threadContToOrigPerm;
+        fknob->reordering_info.col_perm = m->schedule->origToThreadContPerm;
+        fknob->reordering_info.row_perm = m->schedule->origToThreadContPerm;
+        fknob->reordering_info.row_inverse_perm = m->schedule->threadContToOrigPerm;
+        fknob->reordering_info.col_inverse_perm = m->schedule->threadContToOrigPerm;
+        fknob->reordering_info.row_perm_len = m->A->m;
+        fknob->reordering_info.col_perm_len = m->A->n;
+        assert(m->A->m == m->A->n);
 
-        if (m->reordering_info.perm != fknob->reordering_info.perm && fknob->is_reordering_decision_maker) {
+        if (m->reordering_info.row_perm != fknob->reordering_info.row_perm && fknob->is_reordering_decision_maker) {
             m->A = m->A->permute(
-                fknob->reordering_info.perm,
-                fknob->reordering_info.inverse_perm);
+                fknob->reordering_info.col_perm,
+                fknob->reordering_info.row_inverse_perm);
 
             m->reordering_info = fknob->reordering_info;
 
             reorderVectorWithInversePerm(
-                b, fknob->reordering_info.inverse_perm, L->m);
+                b, fknob->reordering_info.col_inverse_perm, L->m);
 
             L = m->A;
         }
@@ -656,11 +690,11 @@ static void TriangularSolve_(
     assert(L != NULL);
     assert(schedule != NULL);
     
-    if (fknob->reordering_info.perm == m->reordering_info.perm) {
+    if (fknob->reordering_info.row_inverse_perm == m->reordering_info.row_inverse_perm) {
         (*solveFunctionWithReorderedMatrix)(*L, y, b, *schedule);
     }
     else {
-        assert(m->reordering_info.perm == NULL);
+        assert(m->reordering_info.row_inverse_perm == NULL);
         (*solveFunction)(*L, y, b, *schedule);
     }
 
@@ -838,16 +872,28 @@ void SetReorderingDecisionMaker(FunctionKnob *fknob)
     fknob->is_reordering_decision_maker = true;
 }
 
-int *GetReorderingVector(FunctionKnob *fknob, int *len)
+int *GetRowReorderingVector(FunctionKnob *fknob, int *len)
 {
-    *len = fknob->reordering_info.perm_len;
-    return fknob->reordering_info.perm;
+    *len = fknob->reordering_info.row_perm_len;
+    return fknob->reordering_info.row_perm;
 }
 
-int *GetInverseReorderingVector(FunctionKnob *fknob, int *len)
+int *GetRowInverseReorderingVector(FunctionKnob *fknob, int *len)
 {
-    *len = fknob->reordering_info.perm_len;
-    return fknob->reordering_info.inverse_perm;
+    *len = fknob->reordering_info.row_perm_len;
+    return fknob->reordering_info.row_inverse_perm;
+}
+
+int *GetColReorderingVector(FunctionKnob *fknob, int *len)
+{
+    *len = fknob->reordering_info.col_perm_len;
+    return fknob->reordering_info.col_perm;
+}
+
+int *GetColInverseReorderingVector(FunctionKnob *fknob, int *len)
+{
+    *len = fknob->reordering_info.col_perm_len;
+    return fknob->reordering_info.col_inverse_perm;
 }
 
 // The first few parameters (numRows to v) represent the source matrix to be reordered. The next few
@@ -869,7 +915,7 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     assert(j != j1);    
     assert(v != v1);
     
-    CSR *AT = new CSR(numRows, numCols, i, j, v);
+    CSR *AT = new CSR(numCols, numRows, i, j, v);
 
 #ifdef PERF_TUNE
     int orig_bw = AT->getBandwidth();
@@ -880,7 +926,9 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
     t3 = omp_get_wtime();
 #endif
 
-    CSR *newAT = new CSR(numRows, numCols, i1, j1, v1);
+    CSR *newAT = new CSR(numCols, numRows, i1, j1, v1);
+    assert(perm);
+    assert(inversePerm);
     AT->permuteRowptr(newAT, inversePerm);
     AT->permuteMain(newAT, perm, inversePerm);
     
@@ -900,8 +948,12 @@ void CSR_ReorderMatrix(int numRows, int numCols, int *i, int *j, double *v, int 
 
     auto itr = mknob_map.find(j);
     if (itr != mknob_map.end()) {
-        itr->second->reordering_info.perm = perm;
-        itr->second->reordering_info.inverse_perm = inversePerm;
+        itr->second->reordering_info.row_perm = perm;
+        itr->second->reordering_info.col_perm = perm;
+        itr->second->reordering_info.col_inverse_perm = inversePerm;
+        itr->second->reordering_info.row_inverse_perm = inversePerm;
+        itr->second->reordering_info.row_perm_len = numRows;
+        itr->second->reordering_info.col_perm_len = numCols;
 
         mknob_map[j1] = itr->second;
 
