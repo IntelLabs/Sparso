@@ -1,186 +1,125 @@
-@doc """ Describle the constant_structured perperty of a matrix """
+@doc """ Set constant_structured perperty for matrics in a region """
 type ConstantStructureProperty <: MatrixProperty 
 
     @doc """ set_property_for method"""
-    set_property_for::Function
-    matrics         ::Dict
+    set_property_for    :: Function
 
-    @doc """ Post-processing function. Propagate lower part of a matrix. """
-    function propagate_lower_structure(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator     :: String,
-        fknob_deletor     :: String,
-        matrices_to_track :: Tuple
+    @doc """
+    Match an expression pattern and do replacement.
+    """
+    function build_dependence(
+        ast        :: Any,
+        call_sites :: CallSites,
+        level      :: Int
     )
-        proxy = ast.args[2]
-        set_structure_proxy(ast, StructureProxy(true, false, false, false, proxy))
-        return true
-    end
+        const skip_types = [GlobalRef, Int64, Float64, QuoteNode, Bool]
 
-    @doc """ Post-processing function. Propagate upper part of a matrix. """
-    function propagate_upper_structure(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator     :: String,
-        fknob_deletor     :: String,
-        matrices_to_track :: Tuple
-    )
-        proxy = ast.args[2]
-        set_structure_proxy(ast, StructureProxy(false, true, false, false, proxy))
-        return true
-    end
+        symbol_info = call_sites.symbol_info
+        patterns    = call_sites.patterns
+        depend_sets = call_sites.extra
 
-    @doc """ Post-processing function. Memoize a diagonal matrix. """
-    function memoize_diagonal_structure(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator     :: String,
-        fknob_deletor     :: String,
-        matrices_to_track :: Tuple
-    )
-        set_structure_proxy(ast, StructureProxy(false, false, true, false, nothing))
-        return true
-    end
+        ret_set = Set{Union{GenSym,Symbol}}()
 
-    @doc """ Pre-processing function. Check if arg2 is a sparse diagonal matrix """
-    function CS_spdiagm_times_any_check(
-        ast           :: Expr,
-        call_sites    :: CallSites,
-        fknob_creator :: String,
-        fknob_deletor :: String
-    )
-        A = ast.args[2]
-        structure = get_structure_proxy(A) 
-        if structure == nothing || !(structure.diagonal)
-            return false
-        end
-        return true
-    end
-
-    @doc """ Post-processing function. Propagate the structure of the last arg. """
-    function propagate_last_structure(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator     :: String,
-        fknob_deletor     :: String,
-        matrices_to_track :: Tuple
-    )
-        A = last(ast.args)
-        structure = get_structure_proxy(A) 
-        if structure != nothing
+        if typeof(ast) <: Expr
+            dprintln(1, level, "-> ", ast)
             if ast.head == :(=)
-                set_structure_proxy(ast.args[1], structure_proxies[A])
+                if ast.head == :(=)
+                    # must be at top level?
+                    if level != 1
+                        error("Non-top level assignment")
+                    end
+                end
+                k =  ast.args[1]
+
+                if typeof(k) != Symbol && typeof(k) != GenSym
+                    dprintln(1, 2, k, "\n")
+                    dump(k)
+                    error("LHS is not symbol")
+                end
+
+                if !haskey(depend_sets, k)
+                    depend_sets[k] = Set{Union{GenSym,Symbol}}() 
+                end 
+                for arg in ast.args[2:end]
+                    arg_tp = typeof(arg)
+                    if arg_tp <: Expr 
+                        union!(depend_sets[k], build_dependence(arg, call_sites, level+1))
+                    elseif arg_tp <: Symbol || typeof(arg) <: GenSym 
+                        push!(depend_sets[k], arg)
+                    elseif arg_tp <: SymbolNode  
+                        push!(depend_sets[k], arg.name)
+                    elseif in(arg_tp, skip_types)
+                        # skip GlobalRef
+                    else
+                        dprintln(1, 2, typeof(arg), "\n")
+                        dump(arg)
+                        error("Unknown type")
+                    end
+                end
+                dprintln(1, 1, k, " : ", depend_sets[k], "\n")
+            elseif ast.head == :call 
+                """ TODO: check function description to 
+                1: get each arg's IO property
+                2: handle dependence among args
+                """
+                for arg in ast.args[2:end]
+                    arg_tp = typeof(arg)
+                    if arg_tp <: Expr 
+                        union!(ret_set, build_dependence(arg, call_sites, level+1))
+                    elseif arg_tp <: Symbol || arg_tp <: GenSym 
+                        push!(ret_set, arg)
+                    elseif arg_tp <: SymbolNode  
+                        push!(ret_set, arg.name)
+                    elseif in(arg_tp, skip_types)
+                        # skip GlobalRef
+                    else
+                        dprintln(1, 2, typeof(arg), "\n")
+                        dump(arg)
+                        error("Unknown type")
+                    end
+                end
+            elseif in(ast.head, [:gotoifnot, :return])
+                # skip
             else
-                set_structure_proxy(ast, structure_proxies[A])
+                dump(ast)
+                error("Unhandled expr type")
             end
         end
-        return true
+
+        return ret_set
     end
 
     @doc """
-    Pre-processing function: A function that will be called when no pattern
-    could handle an AST.
+    Match an expression pattern and do replacement.
     """
-    function last_resort(
-        ast           :: Expr,
-        call_sites    :: CallSites,
-        fknob_creator :: String,
-        fknob_deletor :: String
-    )
-        # TODO: put whatever you want as the last resort of the analysis here.
-        return true
+    function build_dependence(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
+        build_dependence(ast, call_sites, 1)
     end
 
-    const CS_tril_pattern = ExprPattern(
-        "CS_tril_pattern",
-        (:call, GlobalRef(Main, :tril), SparseMatrixCSC),
-        (:NO_SUB_PATTERNS,),
-        do_nothing,
-        (:NO_CHANGE, ),
-        propagate_lower_structure,
-        "",
-        "",
-        ()
-    )
-
-    const CS_triu_pattern = ExprPattern(
-        "CS_triu_pattern",
-        (:call, GlobalRef(Main, :triu), SparseMatrixCSC),
-        (:NO_SUB_PATTERNS,),
-        do_nothing,
-        (:NO_CHANGE, ),
-        propagate_upper_structure,
-        "",
-        "",
-        ()
-    )
-
-    const CS_spdiagm_pattern = ExprPattern(
-        "CS_spdiagm_pattern",
-        (:call, GlobalRef(Main, :spdiagm), Vector),
-        (:NO_SUB_PATTERNS,),
-        do_nothing,
-        (:NO_CHANGE, ),
-        memoize_diagonal_structure,
-        "",
-        "",
-        ()
-    )
-
-    const CS_spdiagm_times_any_pattern = ExprPattern(
-        "CS_spdiagm_times_any_pattern",
-        (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC),
-        (:NO_SUB_PATTERNS,),
-        CS_spdiagm_times_any_check,
-        (:NO_CHANGE, ),
-        propagate_last_structure,
-        "",
-        "",
-        ()
-    )
-
-    const CS_assign_pattern = ExprPattern(
-        "CS_assign_pattern",
-        (:(=), Any, Any),
-        (:NO_SUB_PATTERNS,),
-        do_nothing,
-        (:NO_CHANGE, ),
-        propagate_last_structure,
-        "",
-        "",
-        ()
-    )
-
-    # This is the only pattern that will always be matched, justed based on its name.
-    # It should always be put as the last pattern, and when it is matched, 
-    # the last_resort() function will be called.
-    const CS_last_resort_pattern = ExprPattern(
-        "CS_last_resort_pattern", # Useless
-        (),                       # Useless
-        (:NO_SUB_PATTERNS,),      # Useless
-        last_resort,
-        (:NO_CHANGE, ),           # Useless
-        do_nothing,               # Useless
-        "",                       # Useless
-        "",                       # Useless
-        ()
-    )
-
-    @doc """
-    Patterns used for discovering matrix structures. 
+    #@doc """
+    #Collapse a denpendence set so that only dependences among symbols are retained in the set.
+    #"""
+    #function collapse_depend_sets(
+    #    depend_sets :: Dict 
+    #)
+    #    new_sets = depend_sets
+    #    working_queue = Array{DependenceSet}[]
+    #    append!(working_queue, keys(new_sets))
+    #    while !isempty(working_queue) 
+    #        k = shift!(working_queue)
+    #        if !haskey(new_sets, k)
+    #            continue
+    #        end
+    #
+    #        if !haskey(new_sets, k) || isempty(new_sets[k].depends)
+    #        end
+    #    end
+    #    return new_sets
+    #end
+    
+    @doc """ 
+    Figure out the constant_structured property of all the matrices in a given region.
     """
-    CS_structure_propagation_patterns = [
-    #    CS_tril_pattern,
-    #    CS_triu_pattern,
-    #    CS_spdiagm_pattern,
-    #    CS_spdiagm_times_any_pattern,
-        CS_assign_pattern,
-        CS_last_resort_pattern
-    ]
-
-
-    @doc """ Figure out the constant_structured property of all the matrices in the region."""
     function set_property_for(
         matrics     :: Dict,
         region      :: LoopRegion,
@@ -191,11 +130,93 @@ type ConstantStructureProperty <: MatrixProperty
         constants   = find_constant_values(region, liveness, cfg)
         single_defs = find_single_defs(region, liveness, cfg)
 
+        # dependence map: k -> symbols that k depends on
+        depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
 
         call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info,
-                            Symexpr2PropertiesMap(),
-                            CS_structure_propagation_patterns,
-                            Vector{Action}(), Dict{Symexpr, Symbol}())
+                            [], Vector{Action}(), depend_map)
+
+        # fill the dependence map by walking through all statements in the region
+        for (bb_idx, bb) in cfg.basic_blocks
+            for stmt in bb.statements
+                expr = stmt.expr
+                if typeof(expr) != Expr
+                    continue
+                end
+                CompilerTools.AstWalker.AstWalk(expr, build_dependence, call_sites)
+            end
+        end
+
+        # reverse dependence map: k -> symbols that depends on k 
+        reverse_depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
+
+        # fill reverse dependence map
+        for (k, s) in depend_map
+            for v in s
+                if !haskey(reverse_depend_map, v)
+                    reverse_depend_map[v] = Set{Union{GenSym,Symbol}}()
+                end
+                push!(reverse_depend_map[v], k)
+            end
+        end
+
+        # property: 0: unknow, -1: not constant, 1: constant, 2: external(constant)
+        property_map = Dict{Union{GenSym,Symbol}, Int}()
+        for k in keys(depend_map)
+            property_map[k] = in(k, single_defs) ? 0 : -1
+        end
+        for rk in keys(reverse_depend_map)
+            if !haskey(property_map, rk)
+                property_map[rk] = 2
+            end
+        end
+
+        for c in constants
+            if !haskey(property_map, c)
+                error("Mismatched key")
+            end
+
+            if property_map[c] == 0
+                property_map[c] = 1
+            elseif property_map[c] < 0
+                dprintln(1, 1, "WW constant property conflicts: ", c)
+            end
+        end
+
+        for (k, v) in property_map
+            if haskey(depend_map, k)
+                dprintln(1, 1, v, "\t", k, "\t", depend_map[k])
+            end
+        end
+
+        working_set = []
+        # propagate non-constant property 
+        for (k, v) in property_map
+            if v < 0
+                push!(working_set, k)
+            end
+        end
+
+        while !isempty(working_set) 
+            s = shift!(working_set)
+            if !haskey(reverse_depend_map, s)
+                continue
+            end
+            for d in reverse_depend_map[s]
+                if property_map[d] >= 0
+                    property_map[d] = -1
+                    push!(working_set, d)
+                end
+            end
+        end
+
+        dprintln(1, 0, "after non-constant propagation:\n")
+        for (k, v) in property_map
+            if haskey(depend_map, k)
+                dprintln(1, 1, v, "\t", k, "\t", depend_map[k])
+            end
+        end
+
 
         converged = false
         while converged == false

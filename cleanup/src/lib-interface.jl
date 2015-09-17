@@ -994,26 +994,38 @@ function cholfact_inverse_divide(
     y
 end
 
+# Some symbolic names for each permutation vector.
+const ROW_PERM     = 1
+const ROW_INV_PERM = 2
+const COL_PERM     = 3
+const COL_INV_PERM = 4
+
 @doc """
 Reorder arrays based on the the given permutation and inverse permutation vectors.
 If reverse_reorder is true, do reverse reordering instead.
 """
 function reorder_arrays(
-    reverse_reorder :: Bool,
-    perm            :: Vector,
-    inv_perm        :: Vector,
+    reverse_reorder     :: Bool,
+    permutation_vectors :: Vector,
     arrays...
 )
     matrices_done = false
-    for A in arrays[1]
+    array_tuple   = arrays[1]
+    i = 1
+    while i <= length(array_tuple)
+        A = array_tuple[i]
         if A == :__delimitor__
             # A delimiter that separate matrices from vectors
             # It means that all matrices have been processed
             matrices_done = true
+            i             = i + 1
             continue
         end
         if matrices_done
             assert(typeof(A) <: AbstractVector)
+            # For each vector, 1 permutation vector follows
+            perm = permutation_vectors[array_tuple[i + 1]]
+            i    = i + 2
             new_A = copy(A)
             if reverse_reorder
                 reverse_reorder_vector(A, new_A, perm)
@@ -1023,11 +1035,15 @@ function reorder_arrays(
             A[:] = new_A
         else
             assert(typeof(A) <: AbstractSparseMatrix)
+            # For each matrix, 2 permutation vectors follow
+            perm1 = permutation_vectors[array_tuple[i + 1]]
+            perm2 = permutation_vectors[array_tuple[i + 2]]
+            i     = i + 3
             new_A = copy(A)
             if reverse_reorder
-                reorder_matrix(A, new_A, inv_perm, perm)
+                reorder_matrix(A, new_A, perm2, perm1)
             else
-                reorder_matrix(A, new_A, perm, inv_perm)
+                reorder_matrix(A, new_A, perm1, perm2)
             end
             A[:,] = new_A
         end
@@ -1037,13 +1053,15 @@ end
 @doc """
 The first time an reordering decision maker (a function, represented by the
 fknob) has decided that reordering should be done, this function should be 
-called to reorder the specified arrays. 
+called to reorder the specified arrays.
 
-Status is a vector of the following 4 elements:
+Status is a vector of the following elements:
 (1) reordering_done:       Bool, true if reordering has already been done
-(2) perm:                  C pointer to the permutation vector
-(3) inv_perm:              C pointer to the inverse permutaiton vector
-(4) reordering_time:       time spent on reordering so far (for statistics)
+(2) row_perm:              row permutation vector
+(3) row_inv_perm:          row inverse permutaiton vector
+(4) col_perm:              column permutation vector
+(5) col_inv_perm:          column inverse permutaiton vector
+(6) reordering_time:       time spent on reordering so far (for statistics)
 The vector is updated when the function returns.
 """
 function reordering(
@@ -1052,26 +1070,26 @@ function reordering(
     arrays...
 )
     reordering_done = status[1]
-    reordering_time = status[4]
     if !reordering_done
-        perm, inv_perm = get_reordering_vectors(fknob)
-        if perm != C_NULL
-            assert(inv_perm != C_NULL)
-            # This is the first time it is decided to do reordering. Reorder
-            # the specified arrays.
+        row_perm, row_inv_perm, col_perm, col_inv_perm = get_reordering_vectors(fknob)
+        if row_perm != C_NULL
+            assert(row_inv_perm != C_NULL && col_perm != C_NULL && col_inv_perm != C_NULL)
+
+            status[2] = row_perm
+            status[3] = row_inv_perm
+            status[4] = col_perm
+            status[5] = col_inv_perm
+
+            reordering_time  = status[6]
             reordering_time -= time()
 
-            reorder_arrays(false, perm, inv_perm, arrays)
-            reordering_done = true
+            reorder_arrays(false, status[2 : 5], arrays)
 
             reordering_time += time()
-
-            status[2] = perm
-            status[3] = inv_perm
+            status[6]        = reordering_time
+            status[1]        = true # reordering is done 
         end
     end
-    status[1] = reordering_done 
-    status[4] = reordering_time
 end
 
 @doc """
@@ -1085,20 +1103,15 @@ function reverse_reordering(
     arrays...
 )
     reordering_done = status[1]
-    reordering_time = status[4]
-
     if reordering_done
-        perm          = status[2]
-        inv_perm      = status[3]
-
+        reordering_time  = status[6]
         reordering_time -= time()
 
-        reorder_arrays(true, perm, inv_perm, arrays)
+        reorder_arrays(true, status[2 : 5], arrays)
 
         reordering_time += time()
+        status[6]        = reordering_time
     end
-
-    status[4] = reordering_time
 end
 
 @doc """
