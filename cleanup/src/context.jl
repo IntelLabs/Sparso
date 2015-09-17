@@ -1,3 +1,15 @@
+@doc """
+The CallSites' extra field for context info discovery.
+"""
+type ContextExtra
+    matrix_properties :: Symexpr2PropertiesMap
+    matrix_knobs      :: Dict{Symexpr, Symbol}
+    function_knobs    :: Dict{Symexpr, Symbol}
+    
+    ContextExtra(_matrix_properties) = new(_matrix_properties, 
+                         Dict{Symexpr, Symbol}(), Dict{Symexpr, Symbol}())
+end
+
 # Below are the patterns that we would like to replace a function with another,
 # which is semantically equivalent, but is context-sensitive
 # For short, CS represents "Context Sensitive".
@@ -15,7 +27,7 @@ function CS_fwdBwdTriSolve!_check(
     fknob_creator :: String,
     fknob_deletor :: String
 )
-    # TODO: replace the code to be based on call_sites.matrix_properties.
+    # TODO: replace the code to be based on call_sites.extra.matrix_properties.
 
     L_or_U = ast.args[2]
     structure = get_structure_proxy(L_or_U) 
@@ -67,15 +79,15 @@ function gather_context_sensitive_info(
                    typeof(new_arg) == GenSym)
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
         end
-        if !haskey(call_sites.matrix_knobs, M)
+        if !haskey(call_sites.extra.matrix_knobs, M)
             # Create statements that will create and intialize a knob for
             # the matrix before the loop region
             mknob = create_new_matrix_knob(action_before_region.new_stmts, M,
                                            call_sites)
-            call_sites.matrix_knobs[M] = mknob
+            call_sites.extra.matrix_knobs[M] = mknob
         end
         create_add_mknob_to_fknob(action_before_region.new_stmts,
-                                  call_sites.matrix_knobs[M], fknob)
+                                  call_sites.extra.matrix_knobs[M], fknob)
     end
 
     # Create statements that will delete the function knob at region exits
@@ -326,14 +338,14 @@ function create_new_matrix_knob(
     M          :: Symexpr,
     call_sites :: CallSites
 )
-    if !haskey(call_sites.matrix_properties, M)
+    if !haskey(call_sites.extra.matrix_properties, M)
         # This is a hack! Just to unblock us temporarily.
         # TODO: Once Todd's structure analysis is done, this hack MUST be removed!
-        call_sites.matrix_properties[M] = MatrixProperties(false, true, false, false, false, false)
+        call_sites.extra.matrix_properties[M] = MatrixProperties(false, true, false, false, false, false)
         # TODO: Enable this once the hack is removed.
         #throw(MatrixPropertiesUnavail(M))
     end
-    properties = call_sites.matrix_properties[M]
+    properties = call_sites.extra.matrix_properties[M]
     mknob      = gensym(string("mknob", typeof(M) == Expr ? "Expr" : string(M)))
 
     if properties.constant_valued
@@ -350,7 +362,7 @@ function create_new_matrix_knob(
         # This is a hack, just to unblock us temporarily.
         # TODO: once Todd's structure analysis is done, this MUST be removed!
         if !properties.constant_structured
-            call_sites.matrix_properties[M].constant_structured = true
+            call_sites.extra.matrix_properties[M].constant_structured = true
             properties.constant_structured = true
         end
 
@@ -483,9 +495,9 @@ function context_info_discovery(
     blocks            = cfg.basic_blocks
     matrix_properties = find_properties_of_matrices(region, symbol_info, liveness, cfg)
     matrix_knobs      = Dict{Symexpr, Symbol}()
-    call_sites        = CallSites(Set{CallSite}(), region, symbol_info, 
-                            matrix_properties, CS_transformation_patterns,
-                            actions, Dict{Symexpr, Symbol}())
+    call_sites        = CallSites(Set{CallSite}(), region, symbol_info,
+                            CS_transformation_patterns,
+                            actions, ContextExtra(matrix_properties))
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements
@@ -505,8 +517,8 @@ function context_info_discovery(
         end
     end
 
-    # We have modified call_sites.matrix_knobs. Now pass results back
-    matrix_knobs = call_sites.matrix_knobs
+    # We have modified call_sites.extra.matrix_knobs. Now pass results back
+    matrix_knobs = call_sites.extra.matrix_knobs
 
     # Propagate matrix info from one to another for assignment statements
     for bb_idx in L.members

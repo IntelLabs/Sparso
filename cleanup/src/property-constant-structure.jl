@@ -134,9 +134,7 @@ type ConstantStructureProperty <: MatrixProperty
         depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
 
         call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info,
-                            Symexpr2PropertiesMap(),
-                            [],
-                            Vector{Action}(), Dict{Symexpr, Symbol}(), depend_map)
+                            [], Vector{Action}(), depend_map)
 
         # fill the dependence map by walking through all statements in the region
         for (bb_idx, bb) in cfg.basic_blocks

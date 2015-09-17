@@ -687,8 +687,7 @@ function replace_calls(
     cfg         :: CFG
 )
     call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, 
-                            Symexpr2PropertiesMap(), expr_patterns,
-                            Vector{Action}(), Dict{Symexpr, Symbol}())
+                            expr_patterns, Vector{Action}(), nothing)
     for (bb_idx, bb) in cfg.basic_blocks
         prev_expr = nothing
         for stmt in bb.statements

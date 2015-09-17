@@ -293,19 +293,16 @@ Some patterns may need matrix properties in order to match.
 The patterns to match are specified by the specific analysis. In addition to the 
 direct change of the call site ASTs due to replacement, there might be additional
 actions resulted (like hoisting some computation out of a loop, etc.)
-The call site ASTs might also be added matrix knobs and function knobs (We 
-remember only matrix knobs here. Function knobs can be remembered in future, if
-needed.
+Additional information specific to each analysis can be attached to the "extra"
+field.
 """
 type CallSites
-    sites             :: Set{CallSite}
-    region            :: Region
-    symbol_info       :: Sym2TypeMap
-    matrix_properties :: Symexpr2PropertiesMap
-    patterns          :: Vector{Pattern}
-    actions           :: Vector{Action}
-    matrix_knobs      :: Dict{Symexpr, Symbol}
-    extra             :: Any
+    sites       :: Set{CallSite}
+    region      :: Region
+    symbol_info :: Sym2TypeMap
+    patterns    :: Vector{Pattern}
+    actions     :: Vector{Action}
+    extra       :: Any
 end
 
 @doc """ Insert new statements to a basic block before or after a statement. """
