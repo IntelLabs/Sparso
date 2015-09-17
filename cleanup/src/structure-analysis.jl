@@ -15,6 +15,8 @@ type StructureProxy
     StructureProxy() = new(0, 0, 0, 0, nothing, nothing, nothing)
 end
 
+const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
+
 abstract MatrixProperty
 
 include("property-constant-structure.jl")
@@ -29,10 +31,10 @@ function find_properties_of_matrices(
     cfg         :: CFG
 )
 
-    dprintln(1, 0, "\n----Matrix Property Analysis-----\n")
+    dprintln(1, 0, "\n---- Matrix Structure Property Analysis -----\n")
 
     # symbol does not have a constant structure?
-    structure_proxies = Dict{Any, StructureProxy}()
+    structure_proxies = Dict{Union{GenSym, Symbol}, StructureProxy}()
 
     all_structure_properties = [
         ConstantStructureProperty()
@@ -43,17 +45,20 @@ function find_properties_of_matrices(
     end
    
     dprintln(1, 0, "\nMatrix structures discovered:")
-    dprintln(1, 1, "", structure_proxies)
+    dprintln(1, 1, keys(structure_proxies))
 
     # These are only to cause  structure-related tests fail until structure analysis succeeds.
-    # TODO: Linxiang: please copy them to appropriate places, and
-    # adding printing of meaningful data, so that regression.jl can test. 
-    # See the above two dprintln as an example.
     dprintln(1, 0, "\nConstant structures discovered:")
+    res = keys(filter((k, v) -> v.constant_structured>0, structure_proxies))
+    dprintln(1, 1, res)
+     
     dprintln(1, 0, "\nValue symmetry discovered:")
     dprintln(1, 0, "\nStructure symmetry discovered:")
 
     # Merge with structure info
+    constants   = find_constant_values(region, liveness, cfg)
+    single_defs = find_single_defs(region, liveness, cfg)
+
     symbols = union(constants, single_defs, collect(keys(structure_proxies)))
     matrix_properties = Symexpr2PropertiesMap()
     for s in symbols
@@ -69,11 +74,12 @@ function find_properties_of_matrices(
             matrix_properties[s].is_single_def = true
         end
         
-        # TODO: Todd, please fill the following fields:
-        # matrix_properties[s].constant_structured = ?
-        # matrix_properties[s].is_symmetric = ?
-        # matrix_properties[s].is_structure_symmetric = ?
-        # matrix_properties[s].is_structure_only = ?
+        if haskey(structure_proxies, s)
+            matrix_properties[s].constant_structured = (structure_proxies[s].constant_structured>0)
+            #matrix_properties[s].is_symmetric = ?
+            #matrix_properties[s].is_structure_symmetric = ?
+            #matrix_properties[s].is_structure_only = structure_proxies[s].
+        end
     end
     matrix_properties
 end

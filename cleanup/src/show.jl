@@ -35,6 +35,18 @@ function show_set(
     end
 end
 
+function set_to_str(
+    s :: Set
+)
+    str = string("[ ")
+    for x in s
+        str = str * string(x) * ", "
+    end
+    str = str * "]"
+    return str
+end
+
+
 function DFS_reorder_graph!(
     sorted :: Vector{ReorderGraphVertex}, 
     vertex :: ReorderGraphVertex

@@ -1,4 +1,4 @@
-@doc """ Set constant_structured perperty for matrics in a region """
+@doc """ Set is_constant_structured perperty for matrics in a region """
 type ConstantStructureProperty <: MatrixProperty 
 
     @doc """ set_property_for method"""
@@ -12,7 +12,7 @@ type ConstantStructureProperty <: MatrixProperty
         call_sites :: CallSites,
         level      :: Int
     )
-        const skip_types = [GlobalRef, Int64, Float64, QuoteNode, Bool]
+        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode]
 
         symbol_info = call_sites.symbol_info
         patterns    = call_sites.patterns
@@ -62,6 +62,19 @@ type ConstantStructureProperty <: MatrixProperty
                 1: get each arg's IO property
                 2: handle dependence among args
                 """
+                func = ast.args[1]
+                # a quick hack for setfield! call
+                if func.name == :(setfield!) && ast.args[2].typ <: SparseMatrixCSC
+                    m = ast.args[2].name
+                    if ast.args[3].value != :nzval
+                        dump(ast.args[3])
+                        if !haskey(depend_sets, m)
+                            depend_sets[m] = Set{Union{GenSym,Symbol}}()
+                        end
+                        push!(depend_sets[m], :NON_CONSTANT)
+                    end
+                    return ret_set 
+                end
                 for arg in ast.args[2:end]
                     arg_tp = typeof(arg)
                     if arg_tp <: Expr 
@@ -96,27 +109,23 @@ type ConstantStructureProperty <: MatrixProperty
         build_dependence(ast, call_sites, 1)
     end
 
-    #@doc """
-    #Collapse a denpendence set so that only dependences among symbols are retained in the set.
-    #"""
-    #function collapse_depend_sets(
-    #    depend_sets :: Dict 
-    #)
-    #    new_sets = depend_sets
-    #    working_queue = Array{DependenceSet}[]
-    #    append!(working_queue, keys(new_sets))
-    #    while !isempty(working_queue) 
-    #        k = shift!(working_queue)
-    #        if !haskey(new_sets, k)
-    #            continue
-    #        end
-    #
-    #        if !haskey(new_sets, k) || isempty(new_sets[k].depends)
-    #        end
-    #    end
-    #    return new_sets
-    #end
-    
+    @doc """
+    Print out a property map.
+    """
+    function print_property_map(
+        level       :: Int,
+        pm          :: Dict,
+        depend_map  :: Dict
+    )
+        for (k, v) in pm
+            if haskey(depend_map, k)
+                dprintln(1, level, v, "\t", k, "\t", set_to_str(depend_map[k]))
+            else
+                dprintln(1, level, v, "\t", k)
+            end
+        end
+    end
+
     @doc """ 
     Figure out the constant_structured property of all the matrices in a given region.
     """
@@ -127,19 +136,25 @@ type ConstantStructureProperty <: MatrixProperty
         symbol_info :: Sym2TypeMap,
         cfg         :: CFG
     )
+        L           = region.loop
         constants   = find_constant_values(region, liveness, cfg)
         single_defs = find_single_defs(region, liveness, cfg)
 
+        #sym_non_constant = gensym("SYMBOL_NON_CONSTANT")
+        const sym_non_constant = Symbol(:NON_CONSTANT)
+
         # dependence map: k -> symbols that k depends on
         depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
+        depend_map[sym_non_constant] = Set{Union{GenSym, Symbol}}()
 
-        call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info,
+        call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
                             Symexpr2PropertiesMap(),
                             [],
                             Vector{Action}(), Dict{Symexpr, Symbol}(), depend_map)
 
         # fill the dependence map by walking through all statements in the region
-        for (bb_idx, bb) in cfg.basic_blocks
+        for bb_idx in L.members
+            bb = cfg.basic_blocks[bb_idx]
             for stmt in bb.statements
                 expr = stmt.expr
                 if typeof(expr) != Expr
@@ -164,9 +179,12 @@ type ConstantStructureProperty <: MatrixProperty
 
         # property: 0: unknow, -1: not constant, 1: constant, 2: external(constant)
         property_map = Dict{Union{GenSym,Symbol}, Int}()
+        property_map[sym_non_constant] = -1
+
         for k in keys(depend_map)
             property_map[k] = in(k, single_defs) ? 0 : -1
         end
+
         for rk in keys(reverse_depend_map)
             if !haskey(property_map, rk)
                 property_map[rk] = 2
@@ -175,24 +193,16 @@ type ConstantStructureProperty <: MatrixProperty
 
         for c in constants
             if !haskey(property_map, c)
-                error("Mismatched key")
+                error("Mismatched key", c)
             end
-
-            if property_map[c] == 0
-                property_map[c] = 1
-            elseif property_map[c] < 0
-                dprintln(1, 1, "WW constant property conflicts: ", c)
-            end
+            property_map[c] = 2
         end
 
-        for (k, v) in property_map
-            if haskey(depend_map, k)
-                dprintln(1, 1, v, "\t", k, "\t", depend_map[k])
-            end
-        end
+        print_property_map(1, property_map, depend_map)
 
-        working_set = []
         # propagate non-constant property 
+        # 
+        working_set = []
         for (k, v) in property_map
             if v < 0
                 push!(working_set, k)
@@ -212,26 +222,55 @@ type ConstantStructureProperty <: MatrixProperty
             end
         end
 
-        dprintln(1, 0, "after non-constant propagation:\n")
+        dprintln(1, 1, "\nAfter non-constant propagation:")
+        print_property_map(1, property_map, depend_map)
+
+
+        # propagate constant property 
+        working_set = []
         for (k, v) in property_map
-            if haskey(depend_map, k)
-                dprintln(1, 1, v, "\t", k, "\t", depend_map[k])
+            if v > 0
+                push!(working_set, k)
             end
         end
 
-
-        converged = false
-        while converged == false
-            converged = true
-            for (bb_idx, bb) in cfg.basic_blocks
-                for stmt in bb.statements
-                    expr = stmt.expr
-                    if typeof(expr) != Expr
-                        continue
-                    end
-                    dprintln(1, 0, "", expr)
-                    CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
+        while !isempty(working_set) 
+            s = shift!(working_set)
+            if !haskey(reverse_depend_map, s)
+                continue
+            end
+            # check every symbol that depends on s
+            # 
+            for rd in reverse_depend_map[s]
+                if property_map[rd] != 0
+                    continue
                 end
+                constant = true
+                for d in depend_map[rd]
+                    if property_map[d] == 0 
+                        constant = false
+                    end
+                end
+                if constant
+                    property_map[rd] = 1
+                    push!(working_set, rd)
+                end
+            end
+        end
+
+        dprintln(1, 1, "\nAfter constant propagation:")
+        print_property_map(1, property_map, depend_map)
+
+        # copy back result
+        delete!(property_map, :NON_CONSTANT)
+        for (k, v) in property_map
+            if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES)
+                if !haskey(matrics, k)
+                    matrics[k] = StructureProxy()
+                end
+                matrics[k].constant_structured = v
+            else
+                dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
             end
         end
     end 
