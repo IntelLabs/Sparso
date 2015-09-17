@@ -10,7 +10,7 @@ using CompilerTools.Loops
 
 # Options user can set
 export SA_ENABLE, SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, 
-       SA_REPLACE_CALLS, SA_REORDER, SA_REORDER_WHEN_BENEFICIAL, SA_CONTEXT
+       SA_REPLACE_CALLS, SA_REORDER, SA_CONTEXT
 
 export @acc
 
@@ -31,7 +31,7 @@ include("call-replacement.jl")
 include("code-transformation.jl")
 include("constant.jl")
 include("reordering.jl")
-include("structure.jl")
+include("structure-analysis.jl")
 include("context.jl")
 include("lib-interface.jl")
 include("show.jl")

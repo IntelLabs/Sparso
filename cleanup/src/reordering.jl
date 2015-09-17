@@ -36,8 +36,7 @@ function create_reorder_matrix(
     M                :: Symbol, 
     P                :: Symbol, 
     inverse_P        :: Symbol, 
-    permute          :: Bool, 
-    one_based_input  :: Bool, 
+    permute          :: Bool,
     one_based_output :: Bool
 )
     # Allocate space that stores the reordering result in Julia
@@ -61,7 +60,7 @@ function create_reorder_matrix(
 
     # Do the actual reordering through the C library
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :reorder_matrix),
-                M, new_M, P, inverse_P, permute, one_based_input, one_based_output)
+                M, new_M, P, inverse_P, permute, one_based_output)
     push!(new_stmts, Statement(0, stmt))
 
     # Update the original matrix with the new data.
@@ -78,11 +77,9 @@ function create_reverse_reorder_matrix(
     M                :: Symbol, 
     P                :: Symbol, 
     inverse_P        :: Symbol, 
-    one_based_input  :: Bool, 
     one_based_output :: Bool
 )
-    create_reorder_matrix(new_stmts, M, inverse_P, P, false, 
-        one_based_input, one_based_output)
+    create_reorder_matrix(new_stmts, M, inverse_P, P, false, one_based_output)
 end
 
 @doc """
@@ -147,9 +144,9 @@ function create_reorder_X(
     symbol_info :: Sym2TypeMap
 )
     for x in X
-        if typeof(x, symbol_info) <: AbstractMatrix
-            create_reorder_matrix(new_stmts, x, P, inverse_P, false, true, true)
-        elseif typeof(x, symbol_info) <: AbstractVector
+        if type_of_ast_node(x, symbol_info) <: AbstractMatrix
+            create_reorder_matrix(new_stmts, x, P, inverse_P, true, true)
+        elseif type_of_ast_node(x, symbol_info) <: AbstractVector
             create_reorder_vector(new_stmts, x, P)
         else
             throw(UnknownTypeToReorder(x, typeof(x, symbol_info)))
@@ -170,9 +167,9 @@ function create_reverse_reorder_X(
     symbol_info :: Sym2TypeMap
 )
     for x in X
-        if typeof(x, symbol_info) <: AbstractMatrix
-            create_reverse_reorder_matrix(new_stmts, x, P, inverse_P, false, true, true)
-        elseif typeof(x, symbol_info) <: AbstractVector
+        if type_of_ast_node(x, symbol_info) <: AbstractMatrix
+            create_reverse_reorder_matrix(new_stmts, x, P, inverse_P, true)
+        elseif type_of_ast_node(x, symbol_info) <: AbstractVector
             create_reverse_reorder_vector(new_stmts, x, P)
         else
             throw(UnknownTypeToReorder(x, typeof(x, symbol_info)))
@@ -306,7 +303,7 @@ function create_reorder_actions(
     # Create an action that would insert new statements before the region
     # loop's head block. In case of conditional reordering, it is before
     # the head, but inside the loop
-    outside_loop = !conditional_reordering
+    outside_loop         = !conditional_reordering
     first_reorder_action = InsertBeforeLoopHead(Vector{Statement}(), region.loop, outside_loop)
     push!(actions, first_reorder_action)
     
@@ -325,7 +322,7 @@ function create_reorder_actions(
     P, inverse_P = create_allocate_space_for_permutation(first_reorder_action.new_stmts, M)
 
     # Compute P and inverse_P, and reorder M
-    create_reorder_matrix(first_reorder_action.new_stmts, M, P, inverse_P, true, true, true)
+    create_reorder_matrix(first_reorder_action.new_stmts, M, P, inverse_P, true, true)
 
     # For every edge pred->succ, for any x live into succ, if 
     # (1) x is in pred.Out but not in succ.In, create action "reverse_reorder(x)"
@@ -420,7 +417,7 @@ function reordering(
         distributive = check_distributivity(region, cfg, symbol_info)
         if distributive
             stmt_clusters = find_inter_dependent_arrays(region, cfg, symbol_info)
-            reorder_graph = discover_reorderable_arrays(region, stmt_clusters, cfg, FAR)
+            reorder_graph = discover_reorderable_arrays(region, stmt_clusters, liveness, cfg, FAR)
             create_reorder_actions(actions, reorder_graph, region, symbol_info, liveness, cfg, FAR)
         end
     end

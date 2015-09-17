@@ -481,7 +481,7 @@ function context_info_discovery(
 )
     L                 = region.loop
     blocks            = cfg.basic_blocks
-    matrix_properties = find_properties_of_matrices(region, liveness, cfg)
+    matrix_properties = find_properties_of_matrices(region, symbol_info, liveness, cfg)
     matrix_knobs      = Dict{Symexpr, Symbol}()
     call_sites        = CallSites(Set{CallSite}(), region, symbol_info, 
                             matrix_properties, CS_transformation_patterns,
@@ -554,7 +554,7 @@ function context_info_discovery(
     cfg         :: CFG
 )
     # Discover structures of matrices in the whole function
-    structure_discovery(symbol_info, cfg)
+    #structure_discovery(symbol_info, cfg)
 
     # Discover context info for each loop region
     for region in regions

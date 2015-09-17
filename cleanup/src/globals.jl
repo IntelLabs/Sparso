@@ -39,15 +39,11 @@ WAXPBY, etc. with calls to the corresponding SPMP library functions.
 """
 const SA_REPLACE_CALLS = 40
 
-@doc """ Enable reordering of arrays. """
-const SA_REORDER = 48
-
-@doc """ Enable reordering only when it is potentially beneficial """
-const SA_REORDER_WHEN_BENEFICIAL = 56
-
 @doc """ Enable context-sensitive optimization. """
-const SA_CONTEXT = 64
+const SA_CONTEXT = 48
 
+@doc """ Enable reordering of arrays. """
+const SA_REORDER = 56
 
 # The internal booleans corresponding to the above options, and their default values
 sparse_acc_enabled            = false
@@ -57,13 +53,13 @@ use_MKL                       = false
 use_SPMP                      = true
 replace_calls_enabled         = false
 reorder_enabled               = false
-reorder_when_beneficial       = false
+reorder_when_beneficial       = true # By default, reordering with benefit-cost analysis
 context_sensitive_opt_enabled = false
 
 @doc """ 
 Set options for SparseAccelerator. The arguments can be any one or more 
-of the following: SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, 
-SA_REORDER_WHEN_BENEFICIAL. They can appear in any order, except that 
+of the following: SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP. 
+They can appear in any order, except that 
 SA_USE_JULIA, SA_USE_MKL and SA_USE_SPMP are exclusive with each other, and the
 last one of them wins. 
 """
@@ -87,12 +83,14 @@ function set_options(args...)
             global use_Julia = false; global use_MKL = false; global use_SPMP = true
         elseif arg == SA_REPLACE_CALLS
             global replace_calls_enabled = true
-        elseif arg == SA_REORDER
-            global reorder_enabled = true
-        elseif arg == SA_REORDER_WHEN_BENEFICIAL 
-            global reorder_when_beneficial = true
         elseif arg == SA_CONTEXT
             global context_sensitive_opt_enabled = true
+        elseif arg == SA_REORDER
+            # Reordering is a kind of context-sensitive optimization: without
+            # know a matrix is constant valued, the library might not want to
+            # do reordering.
+            global context_sensitive_opt_enabled = true
+            global reorder_enabled               = true
         else
             # TODO: print usage info
         end
@@ -149,7 +147,7 @@ function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
 end
 
 @doc """ Is the type a scalar (number), or an array? """
-function is_number_or_array(typ :: Type)
+function number_or_array(typ :: Type)
     is_number = (typ <: Number)
 
     # We assume the user program does not use Range for any array
@@ -161,9 +159,9 @@ end
 
 @doc """ Are the types scalars (numbers), or are some of them arrays? """
 function numbers_or_arrays(result_type, arg_types :: Tuple)
-    all_numbers, some_arrays = is_number_or_array(result_type)
+    all_numbers, some_arrays = number_or_array(result_type)
     for t in arg_types
-        is_number, is_array = is_number_or_array(t)
+        is_number, is_array = number_or_array(t)
         all_numbers         = all_numbers && is_number
         some_arrays         = some_arrays || is_array
     end
@@ -407,6 +405,9 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
 
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)
+        dprintln(1, 0, "********************************************************************************")
+        Libc.flush_cstdio()
+        flush(STDOUT)
     catch ex
         # In case any exception happen in the printing, try
         try
@@ -414,6 +415,9 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             flush(STDOUT)
             dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
             dprintln(1, 1, ex)
+            dprintln(1, 0, "********************************************************************************")
+            Libc.flush_cstdio()
+            flush(STDOUT)
         catch
             # Do nothing
         end
@@ -421,9 +425,6 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Return the original AST without any change
         new_ast = old_ast
     finally
-        dprintln(1, 0, "********************************************************************************")
-        Libc.flush_cstdio()
-        flush(STDOUT)
         return new_ast
     end
 end
