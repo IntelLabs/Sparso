@@ -199,13 +199,14 @@ function resolve_call_names(call_args :: Vector)
         function_name = string(call_args[1])
     elseif isa(call_args[1], TopNode) && length(call_args) == 3
         # Example: top(getfield), SparseAccelerator,:SpMV
-        if call_args[1] == TopNode(:getfield)
+        # special case: top(getfield), GenSym, ...
+        if call_args[1] == TopNode(:getfield) && !isa(call_args[2], GenSym)
             module_name   = module_or_function_name(call_args[2])
             function_name = module_or_function_name(call_args[3])
         else
             function_name = module_or_function_name(call_args[1].name)
         end
-    elseif  isa(call_args[1], Expr) && call_args[1].head == :call
+    elseif isa(call_args[1], Expr) && call_args[1].head == :call
         # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
         return resolve_call_names(call_args[1].args)
     end

@@ -1,4 +1,4 @@
-@doc """ Set is_constant_structured perperty for matrics in a region """
+@doc """ Set is_constant_structured perperty for mat_property in a region """
 type ConstantStructureProperty <: MatrixProperty 
 
     @doc """ set_property_for method"""
@@ -62,9 +62,9 @@ type ConstantStructureProperty <: MatrixProperty
                 1: get each arg's IO property
                 2: handle dependence among args
                 """
-                func = ast.args[1]
+                m, func_name = resolve_call_names(ast.args)
                 # a quick hack for setfield! call
-                if func.name == :(setfield!) && ast.args[2].typ <: SparseMatrixCSC
+                if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
                     m = ast.args[2].name
                     if ast.args[3].value != :nzval
                         dump(ast.args[3])
@@ -130,7 +130,7 @@ type ConstantStructureProperty <: MatrixProperty
     Figure out the constant_structured property of all the matrices in a given region.
     """
     function set_property_for(
-        matrics     :: Dict,
+        mat_property:: Dict,
         region      :: LoopRegion,
         liveness    :: Liveness,
         symbol_info :: Sym2TypeMap,
@@ -181,7 +181,12 @@ type ConstantStructureProperty <: MatrixProperty
         property_map[sym_non_constant] = -1
 
         for k in keys(depend_map)
-            property_map[k] = in(k, single_defs) ? 0 : -1
+            # always prefer predefined values
+            if haskey(mat_property, k) && mat_property[k].constant_structured!=0 
+                property_map[k] = mat_property[k].constant_structured 
+            else
+                property_map[k] = in(k, single_defs) ? 0 : -1
+            end
         end
 
         for rk in keys(reverse_depend_map)
@@ -191,10 +196,12 @@ type ConstantStructureProperty <: MatrixProperty
         end
 
         for c in constants
-            if !haskey(property_map, c)
-                error("Mismatched key", c)
+            #if !haskey(property_map, c)
+            #    error("Mismatched key: ", c)
+            #end
+            if property_map[c] <=0
+                property_map[c] = 2
             end
-            property_map[c] = 2
         end
 
         print_property_map(1, property_map, depend_map)
@@ -264,10 +271,10 @@ type ConstantStructureProperty <: MatrixProperty
         delete!(property_map, :NON_CONSTANT)
         for (k, v) in property_map
             if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES)
-                if !haskey(matrics, k)
-                    matrics[k] = StructureProxy()
+                if !haskey(mat_property, k)
+                    mat_property[k] = StructureProxy()
                 end
-                matrics[k].constant_structured = v
+                mat_property[k].constant_structured = v
             else
                 dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
             end
