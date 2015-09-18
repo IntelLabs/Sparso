@@ -20,6 +20,13 @@ export set_options, matrix_market_read
 # Data structures user can extend
 export FunctionDescription
 
+# Explicitly specify matrix property
+export  SA_CONST_VALUED, SA_CONST_STUCTURED, SA_SYMMETRIC,
+        SA_STRUCTURE_SYMMETRIC, SA_STRUCTURE_ONLY
+
+export set_matrix_property, unset_matrix_property
+
+
 include("globals.jl")
 include("exceptions.jl")
 include("function-descriptions.jl")
