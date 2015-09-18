@@ -25,7 +25,6 @@ function new_matrix_knob(
     is_structure_only      = false,
     is_single_def          = false
  )
-    assert(constant_valued || constant_structured)
     assert(!constant_valued || constant_structured)
     assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
@@ -273,20 +272,30 @@ vector P and inverse_P. Otherwise, P and inverse_P are given inputs.
 One_based_input/output tells if A and new_A are 1-based.
 """
 function reorder_matrix(
-    A                :: SparseMatrixCSC, 
-    new_A            :: SparseMatrixCSC, 
+    A                :: SparseMatrixCSC{Float64, Int32}, 
+    new_A            :: SparseMatrixCSC{Float64, Int32}, 
     P                :: Vector, 
-    inverse_P        :: Vector, 
-    one_based_output :: Bool = true
+    inverse_P        :: Vector
 )
-    ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
+    ccall((:ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Bool),
+               Ptr{Cint}, Ptr{Cint}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(new_A.colptr), pointer(new_A.rowval), pointer(new_A.nzval),
-               pointer(P), pointer(inverse_P),
-               one_based_output)
+               pointer(P), pointer(inverse_P))
+end
+
+function reorder_matrix!(
+    A                :: SparseMatrixCSC{Float64, Int32}, 
+    P                :: Vector, 
+    inverse_P        :: Vector,
+)
+    ccall((:ReorderMatrixInplace, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cint}, Ptr{Cint}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(P), pointer(inverse_P))
 end
 
 @doc """ Reorder vector V into new vector new_V with permutation vector P """
@@ -826,6 +835,85 @@ function ADB(
     SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
 end
 
+# A*A'
+function SpSquareWithEps(
+    A     :: SparseMatrixCSC{Float64, Int32},
+    eps   :: Number,
+    fknob :: Ptr{Void} = C_NULL)
+
+    m = size(A, 1)
+    n = size(A, 2)
+
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
+
+    ccall((:SpSquareWithEps, LIB_PATH), Ptr{Void},
+          (Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Cdouble,
+           Ptr{Void}),
+          m, n,
+          C_colptr_ref, C_rowval_ref, C_nzval_ref,
+          A.colptr, A.rowval, A.nzval,
+          eps,
+          fknob)
+
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+# alpha*A + beta*B
+function SpAdd(
+    alpha :: Number,
+    A     :: SparseMatrixCSC{Float64, Int32},
+    beta  :: Number,
+    B     :: SparseMatrixCSC{Float64, Int32})
+
+    m = size(A, 1)
+    n = size(A, 2)
+    assert(m == size(B, 1))
+    assert(n == size(B, 2))
+
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
+
+    ccall((:SpAdd, LIB_PATH), Ptr{Void},
+          (Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Cdouble,
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Cdouble,
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Ptr{Void}),
+          m, n,
+          C_colptr_ref, C_rowval_ref, C_nzval_ref,
+          alpha,
+          A.colptr, A.rowval, A.nzval,
+          beta,
+          B.colptr, B.rowval, B.nzval,
+          C_NULL)
+
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+function trace(
+    A   :: SparseMatrixCSC{Float64, Int32})
+
+    ccall((:Trace, LIB_PATH), Cdouble,
+          (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+          size(A, 1), A.colptr, A.rowval, A.nzval)
+end
+
 @doc """ 
 Compute the sparse Cholesky factorization of a sparse matrix A, where A is
 constant in structure.
@@ -922,6 +1010,8 @@ const ROW_INV_PERM = 2
 const COL_PERM     = 3
 const COL_INV_PERM = 4
 
+const LOG_REORDERING = false
+
 @doc """
 Reorder arrays based on the the given permutation and inverse permutation vectors.
 If reverse_reorder is true, do reverse reordering instead.
@@ -931,6 +1021,10 @@ function reorder_arrays(
     permutation_vectors :: Vector,
     arrays...
 )
+    if LOG_REORDERING
+      println("reorder_arrays")
+    end
+
     matrices_done = false
     array_tuple   = arrays[1]
     i = 1
@@ -961,13 +1055,11 @@ function reorder_arrays(
             perm1 = permutation_vectors[array_tuple[i + 1]]
             perm2 = permutation_vectors[array_tuple[i + 2]]
             i     = i + 3
-            new_A = copy(A)
             if reverse_reorder
-                reorder_matrix(A, new_A, perm2, perm1)
+                reorder_matrix!(A, perm2, perm1)
             else
-                reorder_matrix(A, new_A, perm1, perm2)
+                reorder_matrix!(A, perm1, perm2)
             end
-            A[:,] = new_A
         end
     end
 end

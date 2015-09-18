@@ -349,6 +349,7 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
   spmv_time = 0
   log_time = 0
   direction_time = 0
+  reorder_time = 0
 
   m, n = size(X)
   x = xinit
@@ -380,41 +381,23 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
   t0 = time()
   it = 1
 
-  row_perm                         = C_NULL
-  row_inv_perm                     = C_NULL
-  col_perm                         = C_NULL
-  col_inv_perm                     = C_NULL
-  reordering_on_back_edge_done = false
-  initial_reordering_done      = false
-
   spmv_count = 0
 
+  reordering_status = [false, C_NULL, C_NULL, C_NULL, C_NULL, reorder_time]
   for it=1:100
-    if initial_reordering_done && !reordering_on_back_edge_done
-      assert(row_perm != C_NULL && col_inv_perm != C_NULL)
-
-      new_Xt = copy(Xt)
-      SparseAccelerator.reorder_matrix(Xt, new_Xt, col_perm, row_inv_perm)
-      Xt = new_Xt
-
-      reordering_on_back_edge_done = true
-    end
-
     spmv_time -= time()
     #Xw = X*x
     Xw = SparseAccelerator.SpMV(X, x, fknob_spmv1)
     spmv_count += 1
     spmv_time += time()
 
-    if !initial_reordering_done
-      row_perm, row_inv_perm, col_perm, col_inv_perm = SparseAccelerator.get_reordering_vectors(fknob_spmv1)
-
-      new_y = copy(y)
-      SparseAccelerator.reorder_vector(y, new_y, row_perm)
-      y = new_y
-
-      initial_reordering_done = true
-    end
+    SparseAccelerator.reordering(
+      fknob_spmv1,
+      reordering_status,
+      Xt, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM,
+      :__delimitor__,
+      y, SparseAccelerator.ROW_PERM
+    )
 
     #yXw = y.*Xw
     yXw = SparseAccelerator.element_wise_multiply(y, Xw)
@@ -530,11 +513,10 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
     Y[:, (it - 1)%k + 1] = SparseAccelerator.WAXPBY(1, dfkp1, -1, dfk)
   end
 
-  if initial_reordering_done
-    new_x = copy(x)
-    SparseAccelerator.reverse_reorder_vector(x, new_x, col_perm)
-    x = new_x
-  end
+  SparseAccelerator.reverse_reordering(
+    reordering_status,
+    :__delimitor__,
+    x, SparseAccelerator.COL_PERM)
 
   bw = (nnz(X)*12. + (size(X,1) + size(X,2))*8)*spmv_count/spmv_time/1e9
   println("\nSpMV takes $spmv_time sec ($bw gbps)")
