@@ -272,20 +272,30 @@ vector P and inverse_P. Otherwise, P and inverse_P are given inputs.
 One_based_input/output tells if A and new_A are 1-based.
 """
 function reorder_matrix(
-    A                :: SparseMatrixCSC, 
-    new_A            :: SparseMatrixCSC, 
+    A                :: SparseMatrixCSC{Float64, Int32}, 
+    new_A            :: SparseMatrixCSC{Float64, Int32}, 
     P                :: Vector, 
-    inverse_P        :: Vector, 
-    one_based_output :: Bool = true
+    inverse_P        :: Vector
 )
-    ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
+    ccall((:ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Bool),
+               Ptr{Cint}, Ptr{Cint}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(new_A.colptr), pointer(new_A.rowval), pointer(new_A.nzval),
-               pointer(P), pointer(inverse_P),
-               one_based_output)
+               pointer(P), pointer(inverse_P))
+end
+
+function reorder_matrix!(
+    A                :: SparseMatrixCSC{Float64, Int32}, 
+    P                :: Vector, 
+    inverse_P        :: Vector,
+)
+    ccall((:ReorderMatrixInplace, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cint}, Ptr{Cint}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(P), pointer(inverse_P))
 end
 
 @doc """ Reorder vector V into new vector new_V with permutation vector P """
@@ -1000,6 +1010,8 @@ const ROW_INV_PERM = 2
 const COL_PERM     = 3
 const COL_INV_PERM = 4
 
+const LOG_REORDERING = false
+
 @doc """
 Reorder arrays based on the the given permutation and inverse permutation vectors.
 If reverse_reorder is true, do reverse reordering instead.
@@ -1009,6 +1021,10 @@ function reorder_arrays(
     permutation_vectors :: Vector,
     arrays...
 )
+    if LOG_REORDERING
+      println("reorder_arrays")
+    end
+
     matrices_done = false
     array_tuple   = arrays[1]
     i = 1
@@ -1039,13 +1055,11 @@ function reorder_arrays(
             perm1 = permutation_vectors[array_tuple[i + 1]]
             perm2 = permutation_vectors[array_tuple[i + 2]]
             i     = i + 3
-            new_A = copy(A)
             if reverse_reorder
-                reorder_matrix(A, new_A, perm2, perm1)
+                reorder_matrix!(A, perm2, perm1)
             else
-                reorder_matrix(A, new_A, perm1, perm2)
+                reorder_matrix!(A, perm1, perm2)
             end
-            A[:,] = new_A
         end
     end
 end

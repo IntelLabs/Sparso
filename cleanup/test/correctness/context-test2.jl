@@ -354,16 +354,15 @@ maxiter = 20000
 
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-println("\tsum of x=", sum(x))
+#println("\tsum of x=", sum(x))
 println("\tk=", k)
 println("\trel_err=", rel_err)
-flush(STDOUT)
 
 println("\nWith manual context-sensitive optimization without reordering: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
 x, k, rel_err = pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
-println("\tsum of x=", sum(x))
+#println("\tsum of x=", sum(x))
 println("\tk=", k)
 println("\trel_err=", rel_err)
 
@@ -371,7 +370,6 @@ println("\nWith manual context-sensitive optimization: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
 x, k, rel_err = pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
-println("\tsum of x=", sum(x))
+#println("\tsum of x=", sum(x))
 println("\tk=", k)
 println("\trel_err=", rel_err)
-

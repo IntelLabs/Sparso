@@ -160,6 +160,11 @@ int *GetRowInverseReorderingVector(FunctionKnob *fknob, int *len);
 int *GetColReorderingVector(FunctionKnob *fknob, int *len);
 int *GetColInverseReorderingVector(FunctionKnob *fknob, int *len);
 
+void ReorderMatrixInplace(int numRows, int numCols, int *colptr, int *rowval, double *nzval,
+                 int *perm, int *inversePerm);
+void ReorderMatrix(int numRows, int numCols, int *colptr, int *rowval, double *nzval, int *colptr_out, int *rowval_out, double *nzval_out, 
+                 int *perm, int *inversePerm);
+                 
 /******************************************************************************/
 
 #ifdef __cplusplus
