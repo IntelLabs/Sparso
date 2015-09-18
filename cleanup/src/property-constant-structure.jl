@@ -196,10 +196,7 @@ type ConstantStructureProperty <: MatrixProperty
         end
 
         for c in constants
-            #if !haskey(property_map, c)
-            #    error("Mismatched key: ", c)
-            #end
-            if property_map[c] <=0
+            if !haskey(property_map, c) || property_map[c] <=0
                 property_map[c] = 2
             end
         end
