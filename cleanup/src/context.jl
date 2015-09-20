@@ -186,7 +186,7 @@ function CS_ADAT_post_replacement(
     stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
 
-    ast.args[4] = AT
+    ast.args[4] = SymbolNode(AT, A.typ)
 
     # AT has the same properties as A. But AT has only a single static definition.
     call_sites.extra.matrix_properties[AT]               = properties

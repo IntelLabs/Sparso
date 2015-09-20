@@ -133,11 +133,9 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for AT"
         ),
-# TODO: enable this: so far, the liveness/def issue makes A and AT not constant
-#       and thus the name of __AT__ does not appear in new_matrix_knob
-#        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob\)\(__AT__",
-#                     "Test if accelerated ipm-ref generates matrix knob for AT"
-#        ),
+        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob\)\(__AT__",
+                     "Test if accelerated ipm-ref generates matrix knob for AT"
+        ),
         TestPattern(r"New AST:(.|\n)*mknobD.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for D"
         ),
@@ -153,23 +151,25 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*new_function_knob(.|\n)*new_function_knob(.|\n)*new_function_knob",
                      "Test if accelerated ipm-ref generates function knobs"
         ),
-        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\)\)\(__AT__,D.*,A.*,##fknob#",
+        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\)\)\(A,D.*,__AT__.*,##fknob#",
                      "Test if accelerated ipm-ref generates ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\).*\n.*PropagateMatrixInfo.*mknobB.*mknobExpr",
-                     "Test if accelerated ipm-ref generates PropagateMatrixInfo after B = ADB"
+        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\).*\n.*propagate_matrix_info.*mknobB.*mknobExpr",
+                     "Test if accelerated ipm-ref generates propagate_matrix_info after B = ADB"
         ),
         TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\)\)\(B.*,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_int32"
         ),
-        TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\).*\n.*PropagateMatrixInfo.*mknobR.*mknobExpr",
-                     "Test if accelerated ipm-ref generates PropagateMatrixInfo after R = cholfact_int32(B)"
+        TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
+                     "Test if accelerated ipm-ref generates cholfact_inverse_divide"
         ),
-        TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholmod_factor_inverse_divide\)\)\(R.*,t2,##fknob#",
-                     "Test if accelerated ipm-ref generates cholmod_factor_inverse_divide"
+        TestPattern(r"Original sum of x=715375.9885000014",
+                     "Test original ipm-ref"
+        ),
+        TestPattern(r"Accelerated sum of x=715375.9885000014",
+                     "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
-# TODO: once it runs, add the check for execution results
     ]
 )
 
