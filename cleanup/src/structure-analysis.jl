@@ -126,7 +126,7 @@ function find_properties_of_matrices(
         # some symbols may be of subtypes of Array, some other may be
         # not (like CHOLMOD.Factor, which is not a matrix, but is realted
         # with matrix). So we'd better not to filter out any symbol.
-        matrix_properties[s] = MatrixProperties(false, false, false, false, false, false)
+        matrix_properties[s] = MatrixProperties()
         if in(s, constants)
             matrix_properties[s].constant_valued = true
         end

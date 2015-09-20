@@ -46,86 +46,55 @@ function set_to_str(
     return str
 end
 
-
-function DFS_reorder_graph!(
-    sorted :: Vector{ReorderGraphVertex}, 
-    vertex :: ReorderGraphVertex
+function show_inter_dependence_graph_vertex(
+    vertex       :: InterDependenceGraphVertex,
+    vertex2index :: Dict{InterDependenceGraphVertex, Int},
+    symbol_info  :: Sym2TypeMap, 
+    liveness     :: Liveness
 )
-    if in(vertex, sorted)
-        return
+    print(io_buffer, "Vertex ", vertex2index[vertex], ": ")
+    print(io_buffer, vertex.row_perm ? "rows " : "columns ")
+    print(io_buffer, vertex.color == NO_PERM ? "colorless " :
+                     vertex.color == ROW_PERM ? "Pr " :
+                     vertex.color == ROW_INV_PERM ? "Pr' " :
+                     vertex.color == COL_PERM ? "Pc " :
+                     vertex.color == COL_INV_PERM ? "Pc' " :
+                     "InvalidColor ")
+    print(io_buffer, "Neighbours={ ")
+    for (vertex1, inverse) in vertex.neighbours
+        print(io_buffer, vertex2index[vertex1], inverse ? "(Inverse) " : " ")
     end
-
-    push!(sorted, vertex)
-    for s in vertex.succs
-        DFS_reorder_graph!(sorted, s)
-    end
-    for p in vertex.preds
-        DFS_reorder_graph!(sorted, p)
+    print(io_buffer, "} ")
+    if typeof(vertex.array) <: Sym
+        println(io_buffer, "Array = ", vertex.array)
+    else
+        println(io_buffer, "Array = ")
+        show_structure(vertex.array, "    ", symbol_info, liveness)
     end
 end
 
-function show_reorder_graph(
-    liveness :: Liveness,
-    graph    :: ReorderGraph
+function show_inter_dependence_graph(
+    symbol_info :: Sym2TypeMap, 
+    liveness    :: Liveness,
+    graph       :: InterDependenceGraph
 )
-    graph_entry = nothing
-    for graph_entry in graph.vertices_in_region
-        if graph_entry.kind == RG_NODE_ENTRY
-            break
-        end
-    end
-    assert(graph_entry != nothing)
-
-    sorted_vertices = Vector{ReorderGraphVertex}()
-    DFS_reorder_graph!(sorted_vertices, graph_entry)
-
-    vertex2index = Dict{ReorderGraphVertex, Int}()
+    vertex2index = Dict{InterDependenceGraphVertex, Int}()
     i = 1
-    for vertex in sorted_vertices
+    for (symexpr, vertex) in graph.rows
         vertex2index[vertex] = i
-        i = i + 1
+        i                    = i + 1
     end
-    for vertex in sorted_vertices
-        print(io_buffer, "Vertex ", vertex2index[vertex])
-        print(io_buffer, ": (BB ", 
-                (vertex.bb_idx == PSEUDO_BLOCK_INDEX) ? "PSEUDO" : vertex.bb_idx,
-                ", Stmt ",
-                (vertex.stmt_idx == PSEUDO_STATEMENT_INDEX) ? "PSEUDO" : vertex.stmt_idx,
-                ")")
-        print(io_buffer, vertex.kind == RG_NODE_ENTRY ? " ENTRY" :
-                         vertex.kind == RG_NODE_EMPTY ? " EMPTY" :
-                         vertex.kind == RG_NODE_NORMAL ? " NORMAL" :
-                         vertex.kind == RG_NODE_OUTSIDE ? " OUTSIDE" : 
-                         "IllegalKind!")
-        print(io_buffer, " Preds(")
-        for p in vertex.preds
-            print(io_buffer, " ", vertex2index[p])
-        end
-        print(io_buffer, " )")
-        print(io_buffer, " Succs(")
-        for s in vertex.succs
-            print(io_buffer, " ", vertex2index[s])
-        end
-        print(io_buffer, " )")
-        print(io_buffer, " In(")
-        show_set(vertex.In)
-        print(io_buffer, " )")
-        print(io_buffer, " Out(")
-        show_set(vertex.Out)
-        print(io_buffer, " )")
-        if vertex.kind == RG_NODE_NORMAL
-            bb   = liveness.cfg.basic_blocks[vertex.bb_idx]
-            stmt = bb.statements[vertex.stmt_idx]
-            for cluster in graph.stmt_clusters[stmt]
-                print(io_buffer, " Cluster(LHS:");
-                show_set(cluster.LHS)
-                print(io_buffer, "; RHS:");
-                show_set(cluster.RHS)
-                print(io_buffer, " )")
-            end
-            print(io_buffer, "    ", stmt.expr)
-        end
-        println(io_buffer, "")
+    for (symexpr, vertex) in graph.columns
+        vertex2index[vertex] = i
+        i                    = i + 1
+    end
+
+    println(io_buffer, "Seed = Vertex ", vertex2index[graph.seed])
+    for (symexpr, vertex) in graph.rows
+        show_inter_dependence_graph_vertex(vertex, vertex2index, symbol_info, liveness)
+    end
+    for (symexpr, vertex) in graph.columns
+        show_inter_dependence_graph_vertex(vertex, vertex2index, symbol_info, liveness)
     end
 end
 
@@ -289,8 +258,8 @@ function show(
                 println(io_buffer, "Matrix ", ast)
                 println(io_buffer, "     ==> ", structure)
             end
-        elseif typeof(msg) <: ReorderGraph
-            show_reorder_graph(liveness, msg)
+        elseif typeof(msg) <: InterDependenceGraph
+            show_inter_dependence_graph(symbol_info, liveness, msg)
         else
             print(io_buffer, msg)
         end

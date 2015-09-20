@@ -376,6 +376,41 @@ function create_reorder_actions(
 end
 
 @doc """ 
+Perform analyses for reordering. Write the intended transformation into actions.
+"""
+function reordering(
+    actions     :: Vector{Action},
+    region      :: LoopRegion,
+    symbol_info :: Sym2TypeMap, 
+    liveness    :: Liveness, 
+    cfg         :: CFG,
+    call_sites  :: CallSites
+)
+    if call_sites.extra.reordering_decider == nothing
+        return actions
+    end
+    assert(!isempty(call_sites.extra.reordering_FAR))
+
+    decider = call_sites.extra.reordering_decider
+    FAR     = call_sites.extra.reordering_FAR
+    fknob   = call_sites.extra.function_knobs[decider]
+
+    distributive = check_distributivity(region, cfg, symbol_info)
+    if distributive
+        stmt_clusters = find_inter_dependent_arrays(region, cfg, symbol_info)
+        reorder_graph = discover_reorderable_arrays(region, stmt_clusters, liveness, cfg, decider, FAR, fknob)
+        create_reorder_actions(actions, reorder_graph, region, symbol_info, liveness, cfg, FAR)
+    end
+
+    dprintln(1, 0, "\nReordering actions to take:", actions)
+    
+    actions
+end
+
+# The functions below are obsolete, as we change to let the library to decide
+# reordering or not, permutation vectors, etc.
+
+@doc """ 
 Find the first arrays to reorder from the function's input parameters. So far,
  the first sparse matrix paramter is regarded as the only first array to reorder.
 """

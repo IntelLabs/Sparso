@@ -270,6 +270,9 @@ Reorder a sparse matrix A and store the result in new_A. A itself is not changed
 If get_permutation is true, then compute the permutation and inverse permutation
 vector P and inverse_P. Otherwise, P and inverse_P are given inputs.
 One_based_input/output tells if A and new_A are 1-based.
+ISSUE: We hard code a sparse matrix format to be SparseMatrixCSC{Cdouble, Cint},
+and a permutation and inverse permutation vector to be Vector{Cint}.
+Should make it general in future
 """
 function reorder_matrix(
     A                :: SparseMatrixCSC{Float64, Int32}, 
@@ -1005,6 +1008,7 @@ function cholfact_inverse_divide(
 end
 
 # Some symbolic names for each permutation vector.
+const NO_PERM      = 0
 const ROW_PERM     = 1
 const ROW_INV_PERM = 2
 const COL_PERM     = 3

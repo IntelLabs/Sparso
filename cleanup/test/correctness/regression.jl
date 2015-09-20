@@ -316,11 +316,11 @@ const call_replacement_test9 = Test(
     "call-replacement-test9",
     "call-replacement-test9.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.5773120434107304e-5",
+        TestPattern(r"sum of x=-1.57731204341073\d*e-5",
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.577312043410732e-5",
+        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
                      "Test accelerated sum"
         ),
         
@@ -336,7 +336,7 @@ const call_replacement_test10 = Test(
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.5773120434107307e-5",
+        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
                      "Test accelerated sum"
         ),
         exception_pattern
@@ -347,11 +347,11 @@ const call_replacement_test11 = Test(
     "call-replacement-test11",
     "call-replacement-test11.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.5773120434107328e-5",
+        TestPattern(r"sum of x=-1.57731204341073\d*e-5",
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.577312043410734e-5",
+        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
                      "Test accelerated sum"
         ),
         exception_pattern
