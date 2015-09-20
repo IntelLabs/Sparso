@@ -560,13 +560,13 @@ function match_replace(
     ast        :: Expr,
     call_sites :: CallSites
 )
-#    if pattern == CS_last_resort_pattern
-        # This is the only pattern we do special handling. When it is reached, 
-        # it means all other patterns have been tried and do not work, and this
-        # one will tell us to do something special
-#        return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
-#    end
-    
+    #if pattern == CS_last_resort_pattern
+    #    # This is the only pattern we do special handling. When it is reached, 
+    #    # it means all other patterns have been tried and do not work, and this
+    #    # one will tell us to do something special
+    #    return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+    #end
+
     symbol_info = call_sites.symbol_info
     if match_skeletons(skeleton, pattern.skeleton)
         # Check sub-expr_patterns

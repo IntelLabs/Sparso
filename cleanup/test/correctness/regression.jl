@@ -408,6 +408,26 @@ const single_def_test1 = Test(
     ]
 )
 
+const set_matrix_property_test1 = Test(
+    "set_matrix_property_test1",
+    "set_matrix_property_test1.jl",
+    [
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:A.*\]",
+                     "Test ipm-ref that A is recognized as constant in structure."
+        ),
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:D.*\]",
+                     "Test ipm-ref that D is recognized as constant in structure."
+        ),
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:B.*\]",
+                     "Test ipm-ref that B is recognized as constant in structure."
+        ),
+        TestPattern(r"Constant structures discovered:.*\n.*\[.*:R.*\]",
+                     "Test ipm-ref that R is recognized as constant in structure."
+        ),
+        exception_pattern
+    ]
+)
+
 const constant_structure_test1 = Test(
     "constant-structure-test1",
     "constant-structure-test1.jl",
@@ -479,6 +499,7 @@ const tests = [
     name_resolution_test1,
     constant_value_test1,
     single_def_test1,
+    set_matrix_property_test1,
     constant_structure_test1,
     value_symmetry_test1,
     structure_symmetry_test1

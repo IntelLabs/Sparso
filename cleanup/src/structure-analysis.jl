@@ -2,17 +2,16 @@
 
 @doc """
 """
-const SA_CONST_VALUED           = 1
-const SA_CONST_STUCTURED        = 2
-const SA_SYMMETRIC              = 4
-const SA_STRUCTURE_SYMMETRIC    = 8
-const SA_STRUCTURE_ONLY         = 16
+const SA_CONST_VALUED       = 1
+const SA_CONST_STRUCTURED   = 2
+const SA_SYMM_VALUED        = 4
+const SA_SYMM_STRUCTURED    = 8
+const SA_STRUCTURE_ONLY     = 16
 
 @doc """ interface to explicitly specify matrix property in source code"""
-function set_matrix_property(args...) 
-end
-
-function unset_matrix_property(args...) 
+function set_matrix_property(
+    pmap    :: Dict{Symbol, Int}
+) 
 end
 
 @doc """
@@ -36,49 +35,58 @@ abstract MatrixProperty
 
 include("property-constant-structure.jl")
 
+
 @doc """
+Collect predefined maxtric property accoding from set_matrix_property statements
+in a loop region.
 """
-function specify_properties(
-    properties  :: Dict,
+function find_predefined_properties(
     region      :: LoopRegion,
     cfg         :: CFG
 )
+    structure_proxies = Dict{Union{GenSym, Symbol}, StructureProxy}()
+
     for bb_idx in region.loop.members
         bb = cfg.basic_blocks[bb_idx]
         for stmt in bb.statements
             expr = stmt.expr
-            if typeof(expr) != Expr
+            if typeof(expr) != Expr || expr.head != :call
                 continue
             end
-
-            ast = expr 
-            if ast.head != :call 
-                continue
-            end
-
-            func = ast.args[1]
-            if func.name == :(set_matrix_property) || func.name == :(unset_matrix_property)
-                m = ast.args[2]
-                p = properties[m]
-                nv = (func.name == :(set_matrix_property))
-                for arg in ast.args[3:end] 
-                    if arg == SA_CONST_VALUED
-                        p.constant_valued = nv
-                    elseif arg == SA_CONST_STUCTURED
-                        p.constant_structured = nv
-                    elseif arg == SA_SYMMETRIC
-                        p.is_symmetric = nv
-                    elseif arg == SA_STRUCTURE_SYMMETRIC
-                        p.is_structure_symmetric = nv
-                    elseif arg == SA_STRUCTURE_ONLY
-                        p.is_structure_only = nv
-                    else
-                        error("Unhanled matrix property")
+            ast = expr
+            m, func_name = resolve_call_names(ast.args)
+            if func_name == "set_matrix_property"
+                pmap = eval(ast.args[2])
+                #dump(pmap)
+                for (sym, p) in pmap
+                    sp = StructureProxy()
+                    if (p & SA_CONST_VALUED) != 0
+                        sp.constant_valued = 3
                     end
+                    if (p & SA_CONST_STRUCTURED) != 0
+                        dprintln(1, 1, "Predef: constant_structured ", sym)
+                        sp.constant_structured = 3
+                    end
+                    if (p & SA_SYMM_VALUED) != 0
+                        sp.symmetric_valued = 3
+                    end
+                    if (p & SA_SYMM_STRUCTURED) != 0
+                        sp.symmetric_structured = 3
+                    end
+                    if (p & SA_STRUCTURE_ONLY) != 0
+                        # TODO: fill this property?
+                    end
+                    # add symbol to property map
+                    structure_proxies[sym] = sp
                 end
             end
+            
+            # replace the statement with nothing.
+            stmt.expr = :(nothing)
         end
     end
+
+    structure_proxies
 end
 
 @doc """ Find the properties of all the matrices in the region. 
@@ -90,11 +98,10 @@ function find_properties_of_matrices(
     liveness    :: Liveness,
     cfg         :: CFG
 )
-
     dprintln(1, 0, "\n---- Matrix Structure Property Analysis -----\n")
 
     # symbol does not have a constant structure?
-    structure_proxies = Dict{Union{GenSym, Symbol}, StructureProxy}()
+    structure_proxies = find_predefined_properties(region, cfg)
 
     all_structure_properties = [
         ConstantStructureProperty()
@@ -134,16 +141,14 @@ function find_properties_of_matrices(
             matrix_properties[s].is_single_def = true
         end
         
-        if haskey(structure_proxies, s)
-            matrix_properties[s].constant_structured = (structure_proxies[s].constant_structured>0)
-            #matrix_properties[s].is_symmetric = ?
-            #matrix_properties[s].is_structure_symmetric = ?
+        if haskey(structure_proxies, s) 
+            p = structure_proxies[s]
+            matrix_properties[s].constant_structured = (p.constant_structured>0)
+            matrix_properties[s].is_symmetric = (p.symmetric_valued>0)
+            matrix_properties[s].is_structure_symmetric = (p.symmetric_structured>0) 
             #matrix_properties[s].is_structure_only = structure_proxies[s].
         end
     end
-
-    # explicit specification overwrite compiler analysis
-    specify_properties(matrix_properties, region, cfg) 
 
     return matrix_properties
 end
