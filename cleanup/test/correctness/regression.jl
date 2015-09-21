@@ -69,7 +69,7 @@ const sanity_test3 = Test(
     "sanity-test3",
     "sanity-test3.jl",
     [
-        TestPattern(r"New AST:(.|\n)*return A::Base.SparseMatrix.SparseMatrixCSC.*x::Array",
+        TestPattern(r"New AST:(.|\n)*return A::[^\s\\]*SparseMatrixCSC.*x::Array",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
         ),
         exception_pattern
@@ -276,7 +276,7 @@ const call_replacement_test2 = Test(
     "call-replacement-test2",
     "call-replacement-test2.jl small-diag.mtx",
     [
-        TestPattern(r"AST:(.|\n)*A::Base.SparseMatrix.SparseMatrixCSC.*\* x::Array(.|\n)*New AST(.|\n)*SparseAccelerator,:SpMV.*A::Base.SparseMatrix.SparseMatrixCSC.*,x::Array",
+        TestPattern(r"AST:(.|\n)*A::[^\s\\]*SparseMatrixCSC.*\* x::Array(.|\n)*New AST(.|\n)*SparseAccelerator,:SpMV.*A::[^\s\\]*SparseMatrixCSC.*,x::Array",
                      "Test call replacement of * with SparseAccelerator.SpMV."
         ),
         exception_pattern
@@ -287,7 +287,7 @@ const call_replacement_test3 = Test(
     "call-replacement-test3",
     "call-replacement-test3.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
                      "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
         ),
         exception_pattern
@@ -298,7 +298,7 @@ const call_replacement_test4 = Test(
     "call-replacement-test4",
     "call-replacement-test4.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
                      "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
         ),
         exception_pattern
@@ -342,7 +342,7 @@ const call_replacement_test8 = Test(
     "call-replacement-test8",
     "call-replacement-test8.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::[^\s\\]*SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
                      "Test call replacement of SpMV! in simple page rank."
         ),
         exception_pattern
@@ -460,11 +460,11 @@ const set_matrix_property_test1 = Test(
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
