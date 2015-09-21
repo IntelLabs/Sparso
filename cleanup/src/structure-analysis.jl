@@ -81,10 +81,9 @@ function find_predefined_properties(
                     structure_proxies[sym] = sp
                     dprintln(1, 1, "Predef ", sym, ": ", sp)
                 end
+                # replace the statement with nothing.
+                stmt.expr = :(nothing)
             end
-            
-            # replace the statement with nothing.
-            stmt.expr = :(nothing)
         end
     end
 
