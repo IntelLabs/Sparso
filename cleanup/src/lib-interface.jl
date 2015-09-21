@@ -106,10 +106,22 @@ function set_derivative(
     ccall((:SetDerivative, LIB_PATH), Void, (Ptr{Void}, Cint, Ptr{Void}), mknob, derivative_type, derivative)
 end
 
+@doc """
+Derivative types between two matrix knobs.
+NOTE: when adding any new type, or changing any type' integer value,
+make sure to change int2derivative_map as well.
+"""
 const DERIVATIVE_TYPE_TRANSPOSE = 0
 const DERIVATIVE_TYPE_SYMMETRIC = 1
 const DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2
 const DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3
+
+const int2derivative_map = Dict(
+    0 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_TRANSPOSE),
+    1 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_SYMMETRIC),
+    2 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_LOWER_TRIANGULAR),
+    3 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_UPPER_TRIANGULAR)
+)
 
 @doc """ Delete a matrix knob. """
 function delete_matrix_knob(
@@ -270,6 +282,9 @@ Reorder a sparse matrix A and store the result in new_A. A itself is not changed
 If get_permutation is true, then compute the permutation and inverse permutation
 vector P and inverse_P. Otherwise, P and inverse_P are given inputs.
 One_based_input/output tells if A and new_A are 1-based.
+ISSUE: We hard code a sparse matrix format to be SparseMatrixCSC{Cdouble, Cint},
+and a permutation and inverse permutation vector to be Vector{Cint}.
+Should make it general in future
 """
 function reorder_matrix(
     A                :: SparseMatrixCSC{Float64, Int32}, 
@@ -1005,6 +1020,7 @@ function cholfact_inverse_divide(
 end
 
 # Some symbolic names for each permutation vector.
+const NO_PERM      = 0
 const ROW_PERM     = 1
 const ROW_INV_PERM = 2
 const COL_PERM     = 3

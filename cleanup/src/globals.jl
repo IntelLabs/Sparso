@@ -242,10 +242,10 @@ function look_for_function(
     return nothing
 end
 
-@doc """ Abstract type for a pattern. """
+@doc """ Abstract type for a pattern to match and/or replace AST nodes. """
 abstract Pattern
 
-@doc """ Abstract type for an action to take in code transformation"""
+@doc """ Abstract type for an action to take in transforming CFG. """
 abstract Action
 
 @doc """ 
@@ -276,6 +276,8 @@ is_symmetric          : The matrix is symmetric in value (and of course symmetri
 is_structure_symmetric: The matrix is symmetric in structure. 
 is_structure_only     : Only the structure of matrix is to be used.
 is_single_def         : The matrix is statically defined only once.
+
+TODO: get ride of is_structure_only. It seems to be internal to the library only.
 """
 type MatrixProperties
     constant_valued        :: Bool
@@ -284,6 +286,8 @@ type MatrixProperties
     is_structure_symmetric :: Bool
     is_structure_only      :: Bool
     is_single_def          :: Bool
+
+    MatrixProperties() = new(false, false, false, false, false, false)
 end
 typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 
@@ -330,25 +334,20 @@ type InsertOnEdge <: Action
 end
 
 @doc """ 
-All the analyses, including reordering, reusing, call replacement, etc.
+All the transformations on the AST, including reusing, reordering, etc.
+This phase may change the AST. It does not change the CFG, but records the
+actions for changing the CFG.
 """
-function analyses(
+function AST_transformation(
     func_ast    :: Expr, 
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
-
     regions = region_formation(cfg, loop_info)
     actions = Vector{Action}()
-    if reorder_enabled
-        actions = reordering(actions, regions, func_ast, symbol_info, liveness, cfg, loop_info)
-    end
-    if context_sensitive_opt_enabled
-        actions = context_info_discovery(actions, regions, func_ast, symbol_info, liveness, cfg)
-    end
-    actions
+    actions = AST_context_sensitive_transformation(actions, regions, func_ast, symbol_info, liveness, cfg)
 end
 
 @doc """ 
@@ -383,12 +382,12 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dprintln(1, 0, "\nFunction body showing structures:")
         dsprintln(1, 1, symbol_info, liveness, func_ast)
 
-        if reorder_enabled || context_sensitive_opt_enabled
+        if context_sensitive_opt_enabled
             # Reordering and context-sensitive optimization: Do all analyses, and 
             # put their intended transformation code sequence into a list. Then 
             # transform the code with the list on the CFG.
-            actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-            code_transformation(actions, cfg)
+            actions = AST_transformation(func_ast, symbol_info, liveness, cfg, loop_info)
+            CFG_transformation(actions, cfg)
         end
 
         # Do call replacement at the end, because it relies only on type info, 

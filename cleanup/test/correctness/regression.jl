@@ -80,16 +80,32 @@ const context_test1 = Test(
     "context-test1",
     "context-test1.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.5773120434107328e-5",
-                     "Test sum"
+        TestPattern(r"Original sum of x=-1.57731204341073\d*e-5",
+                     "Test sum of pcg_symgs"
         ),
-
-        TestPattern(r"rel_err=6.384002479368132e-13",
+        TestPattern(r"Original k=4",
+                     "Test iterations"
+        ),
+        TestPattern(r"Original rel_err=6.38\d*e-13",
                      "Test rel_err"
         ),
-
-        TestPattern(r"New AST:",
-                     "Test New AST"
+        TestPattern(r"New AST:(.|\n)*mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,false,false,false,false\)",
+                     "Test if mknobA is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
+                     "Test if mknobA is added to a function knob (for SpMV)"
+        ),
+        TestPattern(r"New AST:(.|\n)*Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+                     "Test if Ap = A * p has been replaced with SpMV with context info"
+        ),
+        TestPattern(r"Accelerated sum of x=-1.577312043\d*e-5",
+                     "Test sum of pcg_symgs"
+        ),
+        TestPattern(r"Accelerated k=4",
+                     "Test iterations"
+        ),
+        TestPattern(r"Accelerated rel_err=6.38\d*e-13",
+                     "Test rel_err"
         ),
         exception_pattern
     ]
@@ -97,16 +113,34 @@ const context_test1 = Test(
 
 const context_test2 = Test(
     "context-test2",
-    "context-test2.jl small-diag.mtx",
+    "context-test2.jl small-diag.mtx small-diag.mtx",
     [
-        TestPattern(r"Original:\s*\n.*\n\s*sum of x=-1.577312043411552e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453315942089819e-6",
-                     "Test original pcg_symgs"
+        TestPattern(r"Original sum of x=-1.577312043\d*e-5",
+                     "Test sum of pcg_symgs"
         ),
-        TestPattern(r"With manual context-sensitive optimization without reordering:\s*\n.*\n\s*sum of x=-1.5773120433545284e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278809182831e-6",
-                     "Test pcg_symgs with manual context-sensitive optimization without reordering"
+        TestPattern(r"Original k=4",
+                     "Test iterations"
         ),
-        TestPattern(r"With manual context-sensitive optimization:\s*\n.*\n\s*sum of x=-1.57731204.*e-5\s*\n\s*k=3\s*\n\s*rel_err=1.2453278596596245e-6",
-                     "Test pcg_symgs with manual context-sensitive optimization"
+        TestPattern(r"Original rel_err=6.38\d*e-13",
+                     "Test rel_err"
+        ),
+        TestPattern(r"Manual_context_no_reorder sum of x=-1.577312043\d*e-5",
+                     "Test sum of pcg_symgs"
+        ),
+        TestPattern(r"Manual_context_no_reorder k=4",
+                     "Test iterations"
+        ),
+        TestPattern(r"Manual_context_no_reorder rel_err=6.62\d*e-11",
+                     "Test rel_err"
+        ),
+        TestPattern(r"Manual_context sum of x=-1.577312043\d*e-5",
+                     "Test sum of pcg_symgs"
+        ),
+        TestPattern(r"Manual_context k=4",
+                     "Test iterations"
+        ),
+        TestPattern(r"Manual_context rel_err=6.62\d*e-11",
+                     "Test rel_err"
         ),
         exception_pattern
     ]
@@ -133,8 +167,6 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for AT"
         ),
-# TODO: enable this: so far, the liveness/def issue makes A and AT not constant
-#       and thus the name of __AT__ does not appear in new_matrix_knob
 #        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob\)\(__AT__",
 #                     "Test if accelerated ipm-ref generates matrix knob for AT"
 #        ),
@@ -153,23 +185,25 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*new_function_knob(.|\n)*new_function_knob(.|\n)*new_function_knob",
                      "Test if accelerated ipm-ref generates function knobs"
         ),
-        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\)\)\(__AT__,D.*,A.*,##fknob#",
+        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\)\)\(A.*,D.*,__AT__.*,##fknob#",
                      "Test if accelerated ipm-ref generates ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\).*\n.*PropagateMatrixInfo.*mknobB.*mknobExpr",
-                     "Test if accelerated ipm-ref generates PropagateMatrixInfo after B = ADB"
+        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\).*\n.*propagate_matrix_info.*mknobB.*mknobExpr",
+                     "Test if accelerated ipm-ref generates propagate_matrix_info after B = ADB"
         ),
         TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\)\)\(B.*,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_int32"
         ),
-        TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\).*\n.*PropagateMatrixInfo.*mknobR.*mknobExpr",
-                     "Test if accelerated ipm-ref generates PropagateMatrixInfo after R = cholfact_int32(B)"
+        TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
+                     "Test if accelerated ipm-ref generates cholfact_inverse_divide"
         ),
-        TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholmod_factor_inverse_divide\)\)\(R.*,t2,##fknob#",
-                     "Test if accelerated ipm-ref generates cholmod_factor_inverse_divide"
+        TestPattern(r"Original sum of x=715375.9885000014",
+                     "Test original ipm-ref"
+        ),
+        TestPattern(r"Accelerated sum of x=715375.9885000014",
+                     "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
-# TODO: once it runs, add the check for execution results
     ]
 )
 
@@ -177,8 +211,11 @@ const context_test4 = Test(
     "context-test4",
     "context-test4.jl ipm/mps/osa-14",
     [
-        TestPattern(r"TODO",
-                     "TODO"
+        TestPattern(r"Original sum of x=715375.988500001",
+                     "Test original ipm-ref"
+        ),
+        TestPattern(r"Manual_context sum of x=715375.988500001",
+                     "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
     ]
@@ -303,9 +340,9 @@ const call_replacement_test7 = Test(
 
 const call_replacement_test8 = Test(
     "call-replacement-test8",
-    "call-replacement-test8.jl tiny-diag.mtx",
+    "call-replacement-test8.jl small-diag.mtx",
     [
-        TestPattern(r"Original:(.|\n)*sum of p=5.921969247266187e71(.|\n)*New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)(.|\n)*end::Array\{Float64,1\}\)\)\)\n(\*)+(\s)+sum of p=1.7721860479424595e104",
+        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::Base.SparseMatrix.SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
                      "Test call replacement of SpMV! in simple page rank."
         ),
         exception_pattern
@@ -316,11 +353,11 @@ const call_replacement_test9 = Test(
     "call-replacement-test9",
     "call-replacement-test9.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.5773120434107304e-5",
+        TestPattern(r"sum of x=-1.57731204341073\d*e-5",
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.577312043410732e-5",
+        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
                      "Test accelerated sum"
         ),
         
@@ -336,7 +373,7 @@ const call_replacement_test10 = Test(
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.5773120434107307e-5",
+        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
                      "Test accelerated sum"
         ),
         exception_pattern
@@ -347,11 +384,11 @@ const call_replacement_test11 = Test(
     "call-replacement-test11",
     "call-replacement-test11.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.5773120434107328e-5",
+        TestPattern(r"sum of x=-1.57731204341073\d*e-5",
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.577312043410734e-5",
+        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
                      "Test accelerated sum"
         ),
         exception_pattern
@@ -449,11 +486,9 @@ const set_matrix_property_test2 = Test(
         TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
-
         exception_pattern
     ]
 )
-
 
 const constant_structure_test1 = Test(
     "constant-structure-test1",
@@ -484,7 +519,6 @@ const structure_symmetry_test1 = Test(
         TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A B are recognized as symmetric in structure."
         ),
-
         exception_pattern
     ]
 )
@@ -519,7 +553,7 @@ const tests = [
     set_matrix_property_test2,
     constant_structure_test1,
     value_symmetry_test1,
-    structure_symmetry_test1,
+    structure_symmetry_test1
 ]
 
 if length(ARGS) > 0

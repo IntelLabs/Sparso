@@ -64,7 +64,6 @@ function find_predefined_properties(
                         sp.constant_valued = 3
                     end
                     if (p & SA_CONST_STRUCTURED) != 0
-                        dprintln(1, 1, "Predef: constant_structured ", sym)
                         sp.constant_structured = 3
                     end
                     if (p & SA_SYMM_VALUED) != 0
@@ -80,6 +79,7 @@ function find_predefined_properties(
                     end
                     # add symbol to property map
                     structure_proxies[sym] = sp
+                    dprintln(1, 1, "Predef ", sym, ": ", sp)
                 end
             end
             
@@ -140,7 +140,7 @@ function find_properties_of_matrices(
         # some symbols may be of subtypes of Array, some other may be
         # not (like CHOLMOD.Factor, which is not a matrix, but is realted
         # with matrix). So we'd better not to filter out any symbol.
-        matrix_properties[s] = MatrixProperties(false, false, false, false, false, false)
+        matrix_properties[s] = MatrixProperties()
         if in(s, constants)
             matrix_properties[s].constant_valued = true
         end

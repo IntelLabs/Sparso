@@ -1,272 +1,67 @@
-Analyzing ...
-CFG:
-    
-    BasicBlock -1: Pred( ) Succ( 3 -3 ) fallthrough = -3 depth_first=1
-        1   # /media/sf_VBoxVMShared/SparseAccelerator/cleanup/test/correctness/./pcg-symgs.jl, line 2:
-        2  NewvarNode(:old_rz)
-        3  NewvarNode(:Ap)
-        4  NewvarNode(:alpha)
-        5  NewvarNode(:beta)
-        6  L = (Main.tril)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-        7   # line 3:
-        8  U = (Main.spdiagm)(1 ./ (Main.diag)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Array{Float64,1}::Array{Float64,1})::Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer} * (Main.triu)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-        9   # line 4:
-        10  M = L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * U
-        11   # line 5:
-        12  r = b::Array{Float64,1} - A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * x::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}
-        13   # line 6:
-        14  normr0 = (Main.norm)(r::Array{Float64,1})::Float64
-        15   # line 7:
-        16  rel_err = 1
-        17   # line 9:
-        18  z = (Main.copy)(r::Array{Float64,1})::Array{Float64,1}
-        19   # line 10:
-        20  ((top(getfield))(Base.SparseMatrix,:fwdTriSolve!)::F)(L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},z::Array{Float64,1})::Array{Float64,1}
-        21   # line 11:
-        22  ((top(getfield))(Base.SparseMatrix,:bwdTriSolve!)::F)(U,z::Array{Float64,1})::Array{Float64,1}
-        23   # line 13:
-        24  p = (Main.copy)(z::Array{Float64,1})::Array{Float64,1}
-        25   # line 14:
-        26  rz = (Main.dot)(r::Array{Float64,1},z::Array{Float64,1})::Float64
-        27   # line 15:
-        28  k = 1
-        29   # line 16:
-        30  time1 = (Main.time)()::Float64
-        31   # line 17:
-        32  NewvarNode(:old_rz)
-        33  NewvarNode(:Ap)
-        34  NewvarNode(:alpha)
-        35  NewvarNode(:beta)
-        36  unless k::Int64 <= maxiter::Int64::Bool goto 3
-     Defs( A rel_err k normr0 rz z M p U time1 L r ) Uses( maxiter A b x ) LiveIn( maxiter tol A b x ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b)
-        1   # /media/sf_VBoxVMShared/SparseAccelerator/cleanup/test/correctness/./pcg-symgs.jl, line 2:  Defs( ) Uses( ) LiveIn( maxiter tol A b x ) LiveOut( maxiter tol A b x )
-        2  NewvarNode(:old_rz)  Defs( ) Uses( ) LiveIn( maxiter tol A b x ) LiveOut( maxiter tol A b x )
-        3  NewvarNode(:Ap)  Defs( ) Uses( ) LiveIn( maxiter tol A b x ) LiveOut( maxiter tol A b x )
-        4  NewvarNode(:alpha)  Defs( ) Uses( ) LiveIn( maxiter tol A b x ) LiveOut( maxiter tol A b x )
-        5  NewvarNode(:beta)  Defs( ) Uses( ) LiveIn( maxiter tol A b x ) LiveOut( maxiter tol A b x )
-        6  L = (Main.tril)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}  Defs( L A ) Uses( A ) LiveIn( maxiter tol A b x ) LiveOut( L maxiter tol A b x )
-        7   # line 3:  Defs( ) Uses( ) LiveIn( L maxiter tol A b x ) LiveOut( L maxiter tol A b x )
-        8  U = (Main.spdiagm)(1 ./ (Main.diag)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Array{Float64,1}::Array{Float64,1})::Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer} * (Main.triu)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}  Defs( A U ) Uses( A ) LiveIn( L maxiter tol A b x ) LiveOut( L maxiter tol b A x U )
-        9   # line 4:  Defs( ) Uses( ) LiveIn( L maxiter tol b A x U ) LiveOut( L maxiter tol b A x U )
-        10  M = L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * U  Defs( L M U ) Uses( L U ) LiveIn( L maxiter tol b A x U ) LiveOut( L maxiter tol b A x U )
-        11   # line 5:  Defs( ) Uses( ) LiveIn( L maxiter tol b A x U ) LiveOut( L maxiter tol b A x U )
-        12  r = b::Array{Float64,1} - A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * x::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}  Defs( r ) Uses( b A x ) LiveIn( L maxiter tol b A x U ) LiveOut( r L maxiter tol A x b U )
-        13   # line 6:  Defs( ) Uses( ) LiveIn( r L maxiter tol A x b U ) LiveOut( r L maxiter tol A x b U )
-        14  normr0 = (Main.norm)(r::Array{Float64,1})::Float64  Defs( normr0 ) Uses( r ) LiveIn( r L maxiter tol A x b U ) LiveOut( normr0 r L maxiter tol A x b U )
-        15   # line 7:  Defs( ) Uses( ) LiveIn( normr0 r L maxiter tol A x b U ) LiveOut( normr0 r L maxiter tol A x b U )
-        16  rel_err = 1  Defs( rel_err ) Uses( ) LiveIn( normr0 r L maxiter tol A x b U ) LiveOut( normr0 r L maxiter tol rel_err A x b U )
-        17   # line 9:  Defs( ) Uses( ) LiveIn( normr0 r L maxiter tol rel_err A x b U ) LiveOut( normr0 r L maxiter tol rel_err A x b U )
-        18  z = (Main.copy)(r::Array{Float64,1})::Array{Float64,1}  Defs( z ) Uses( r ) LiveIn( normr0 r L maxiter tol rel_err A x b U ) LiveOut( tol rel_err A normr0 z U L r maxiter x b )
-        19   # line 10:  Defs( ) Uses( ) LiveIn( tol rel_err A normr0 z U L r maxiter x b ) LiveOut( tol rel_err A normr0 z U L r maxiter x b )
-        20  ((top(getfield))(Base.SparseMatrix,:fwdTriSolve!)::F)(L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},z::Array{Float64,1})::Array{Float64,1}  Defs( z ) Uses( L z ) LiveIn( tol rel_err A normr0 z U L r maxiter x b ) LiveOut( tol rel_err A normr0 z U r L maxiter x b )
-        21   # line 11:  Defs( ) Uses( ) LiveIn( tol rel_err A normr0 z U r L maxiter x b ) LiveOut( tol rel_err A normr0 z U r L maxiter x b )
-        22  ((top(getfield))(Base.SparseMatrix,:bwdTriSolve!)::F)(U,z::Array{Float64,1})::Array{Float64,1}  Defs( z U ) Uses( z U ) LiveIn( tol rel_err A normr0 z U r L maxiter x b ) LiveOut( tol rel_err A normr0 z U r L maxiter x b )
-        23   # line 13:  Defs( ) Uses( ) LiveIn( tol rel_err A normr0 z U r L maxiter x b ) LiveOut( tol rel_err A normr0 z U r L maxiter x b )
-        24  p = (Main.copy)(z::Array{Float64,1})::Array{Float64,1}  Defs( p ) Uses( z ) LiveIn( tol rel_err A normr0 z U r L maxiter x b ) LiveOut( tol rel_err A normr0 z p U r L maxiter x b )
-        25   # line 14:  Defs( ) Uses( ) LiveIn( tol rel_err A normr0 z p U r L maxiter x b ) LiveOut( tol rel_err A normr0 z p U r L maxiter x b )
-        26  rz = (Main.dot)(r::Array{Float64,1},z::Array{Float64,1})::Float64  Defs( rz ) Uses( r z ) LiveIn( tol rel_err A normr0 z p U r L maxiter x b ) LiveOut( tol rel_err A rz normr0 p U r L maxiter x b )
-        27   # line 15:  Defs( ) Uses( ) LiveIn( tol rel_err A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err A rz normr0 p U r L maxiter x b )
-        28  k = 1  Defs( k ) Uses( ) LiveIn( tol rel_err A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        29   # line 16:  Defs( ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        30  time1 = (Main.time)()::Float64  Defs( time1 ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        31   # line 17:  Defs( ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        32  NewvarNode(:old_rz)  Defs( ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        33  NewvarNode(:Ap)  Defs( ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        34  NewvarNode(:alpha)  Defs( ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        35  NewvarNode(:beta)  Defs( ) Uses( ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-        36  unless k::Int64 <= maxiter::Int64::Bool goto 3  Defs( ) Uses( maxiter k ) LiveIn( tol rel_err k A rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A rz normr0 p U r L maxiter x b )
-    
-    BasicBlock -3: Pred( -1 ) Succ( 0 ) fallthrough = 0 depth_first=2
-    Basic block without any statements.
-     Defs( ) Uses( ) LiveIn( tol A k rz normr0 p U r L maxiter x b ) LiveOut( tol A k rz normr0 p U r L maxiter x b)
-    Basic block without any statements.
-    
-    BasicBlock 0: Pred( -3 2 ) Succ( -4 1 ) fallthrough = -4 depth_first=3
-        38   # line 18:
-        39  old_rz = rz::Float64
-        40   # line 19:
-        41  Ap = A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * p::Array{Float64,1}::Array{Float64,1}
-        42   # line 20:
-        43  alpha = old_rz::Float64 / (Main.dot)(p::Array{Float64,1},Ap::Array{Float64,1})::Float64::Float64
-        44   # line 21:
-        45  x = x::Array{Float64,1} + alpha::Float64 * p::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}
-        46   # line 22:
-        47  r = r::Array{Float64,1} - alpha::Float64 * Ap::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}
-        48   # line 23:
-        49  rel_err = (Main.norm)(r::Array{Float64,1})::Float64 / normr0::Float64::Float64
-        50   # line 24:
-        51  unless rel_err::Float64 < tol::Float64::Bool goto 1
-     Defs( alpha old_rz r Ap x rel_err ) Uses( rz r normr0 tol A x p ) LiveIn( tol A k rz normr0 p U r L maxiter x b ) LiveOut( tol rel_err k A normr0 p U old_rz r L maxiter x b)
-        38   # line 18:  Defs( ) Uses( ) LiveIn( tol A k rz normr0 p U r L maxiter x b ) LiveOut( tol A k rz normr0 p U r L maxiter x b )
-        39  old_rz = rz::Float64  Defs( old_rz ) Uses( rz ) LiveIn( tol A k rz normr0 p U r L maxiter x b ) LiveOut( tol A k normr0 p U old_rz r L maxiter x b )
-        40   # line 19:  Defs( ) Uses( ) LiveIn( tol A k normr0 p U old_rz r L maxiter x b ) LiveOut( tol A k normr0 p U old_rz r L maxiter x b )
-        41  Ap = A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * p::Array{Float64,1}::Array{Float64,1}  Defs( Ap ) Uses( A p ) LiveIn( tol A k normr0 p U old_rz r L maxiter x b ) LiveOut( tol A k normr0 Ap p U old_rz r L maxiter x b )
-        42   # line 20:  Defs( ) Uses( ) LiveIn( tol A k normr0 Ap p U old_rz r L maxiter x b ) LiveOut( tol A k normr0 Ap p U old_rz r L maxiter x b )
-        43  alpha = old_rz::Float64 / (Main.dot)(p::Array{Float64,1},Ap::Array{Float64,1})::Float64::Float64  Defs( alpha ) Uses( old_rz Ap p ) LiveIn( tol A k normr0 Ap p U old_rz r L maxiter x b ) LiveOut( tol A k normr0 Ap p U alpha old_rz r L maxiter x b )
-        44   # line 21:  Defs( ) Uses( ) LiveIn( tol A k normr0 Ap p U alpha old_rz r L maxiter x b ) LiveOut( tol A k normr0 Ap p U alpha old_rz r L maxiter x b )
-        45  x = x::Array{Float64,1} + alpha::Float64 * p::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}  Defs( x ) Uses( alpha x p ) LiveIn( tol A k normr0 Ap p U alpha old_rz r L maxiter x b ) LiveOut( tol A k normr0 Ap p U alpha old_rz r L maxiter x b )
-        46   # line 22:  Defs( ) Uses( ) LiveIn( tol A k normr0 Ap p U alpha old_rz r L maxiter x b ) LiveOut( tol A k normr0 Ap p U alpha old_rz r L maxiter x b )
-        47  r = r::Array{Float64,1} - alpha::Float64 * Ap::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}  Defs( r ) Uses( alpha r Ap ) LiveIn( tol A k normr0 Ap p U alpha old_rz r L maxiter x b ) LiveOut( tol A k normr0 p U old_rz r L maxiter x b )
-        48   # line 23:  Defs( ) Uses( ) LiveIn( tol A k normr0 p U old_rz r L maxiter x b ) LiveOut( tol A k normr0 p U old_rz r L maxiter x b )
-        49  rel_err = (Main.norm)(r::Array{Float64,1})::Float64 / normr0::Float64::Float64  Defs( rel_err ) Uses( normr0 r ) LiveIn( tol A k normr0 p U old_rz r L maxiter x b ) LiveOut( tol rel_err k A normr0 p U old_rz r L maxiter x b )
-        50   # line 24:  Defs( ) Uses( ) LiveIn( tol rel_err k A normr0 p U old_rz r L maxiter x b ) LiveOut( tol rel_err k A normr0 p U old_rz r L maxiter x b )
-        51  unless rel_err::Float64 < tol::Float64::Bool goto 1  Defs( ) Uses( tol rel_err ) LiveIn( tol rel_err k A normr0 p U old_rz r L maxiter x b ) LiveOut( tol rel_err k A normr0 p U old_rz r L maxiter x b )
-    
-    BasicBlock -4: Pred( 0 ) Succ( 3 ) fallthrough = nothing depth_first=7
-        52   # line 25:
-        53  goto 3
-     Defs( ) Uses( ) LiveIn( x k rel_err A b ) LiveOut( x k rel_err A b)
-        52   # line 25:  Defs( ) Uses( ) LiveIn( x k rel_err A b ) LiveOut( x k rel_err A b )
-        53  goto 3  Defs( ) Uses( ) LiveIn( x k rel_err A b ) LiveOut( x k rel_err A b )
-    
-    BasicBlock 1: Pred( 0 ) Succ( 2 ) fallthrough = 2 depth_first=4
-        55   # line 28:
-        56  z = (Main.copy)(r::Array{Float64,1})::Array{Float64,1}
-        57   # line 29:
-        58  ((top(getfield))(Base.SparseMatrix,:fwdTriSolve!)::F)(L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},z::Array{Float64,1})::Array{Float64,1}
-        59   # line 31:
-        60  ((top(getfield))(Base.SparseMatrix,:bwdTriSolve!)::F)(U,z::Array{Float64,1})::Array{Float64,1}
-        61   # line 34:
-        62  rz = (Main.dot)(r::Array{Float64,1},z::Array{Float64,1})::Float64
-        63   # line 35:
-        64  beta = rz::Float64 / old_rz::Float64::Float64
-        65   # line 36:
-        66  p = z::Array{Float64,1} + beta::Float64 * p::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}
-        67   # line 37:
-        68  k = k::Int64 + 1::Int64
-     Defs( rz beta z k p U ) Uses( old_rz r L k p U ) LiveIn( tol A k rel_err normr0 p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 p U r L maxiter x b)
-        55   # line 28:  Defs( ) Uses( ) LiveIn( tol A k rel_err normr0 p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err normr0 p U old_rz r L maxiter x b )
-        56  z = (Main.copy)(r::Array{Float64,1})::Array{Float64,1}  Defs( z ) Uses( r ) LiveIn( tol A k rel_err normr0 p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err normr0 z p U old_rz L r maxiter x b )
-        57   # line 29:  Defs( ) Uses( ) LiveIn( tol A k rel_err normr0 z p U old_rz L r maxiter x b ) LiveOut( tol A k rel_err normr0 z p U old_rz L r maxiter x b )
-        58  ((top(getfield))(Base.SparseMatrix,:fwdTriSolve!)::F)(L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},z::Array{Float64,1})::Array{Float64,1}  Defs( z ) Uses( L z ) LiveIn( tol A k rel_err normr0 z p U old_rz L r maxiter x b ) LiveOut( tol A k rel_err normr0 z p U old_rz r L maxiter x b )
-        59   # line 31:  Defs( ) Uses( ) LiveIn( tol A k rel_err normr0 z p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err normr0 z p U old_rz r L maxiter x b )
-        60  ((top(getfield))(Base.SparseMatrix,:bwdTriSolve!)::F)(U,z::Array{Float64,1})::Array{Float64,1}  Defs( z U ) Uses( z U ) LiveIn( tol A k rel_err normr0 z p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err normr0 z p U old_rz r L maxiter x b )
-        61   # line 34:  Defs( ) Uses( ) LiveIn( tol A k rel_err normr0 z p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err normr0 z p U old_rz r L maxiter x b )
-        62  rz = (Main.dot)(r::Array{Float64,1},z::Array{Float64,1})::Float64  Defs( rz ) Uses( r z ) LiveIn( tol A k rel_err normr0 z p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 z p U old_rz r L maxiter x b )
-        63   # line 35:  Defs( ) Uses( ) LiveIn( tol A k rel_err rz normr0 z p U old_rz r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 z p U old_rz r L maxiter x b )
-        64  beta = rz::Float64 / old_rz::Float64::Float64  Defs( beta ) Uses( rz old_rz ) LiveIn( tol A k rel_err rz normr0 z p U old_rz r L maxiter x b ) LiveOut( beta tol A k rel_err rz normr0 z p U r L maxiter x b )
-        65   # line 36:  Defs( ) Uses( ) LiveIn( beta tol A k rel_err rz normr0 z p U r L maxiter x b ) LiveOut( beta tol A k rel_err rz normr0 z p U r L maxiter x b )
-        66  p = z::Array{Float64,1} + beta::Float64 * p::Array{Float64,1}::Array{Float64,1}::Array{Float64,1}  Defs( p ) Uses( beta z p ) LiveIn( beta tol A k rel_err rz normr0 z p U r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 p U r L maxiter x b )
-        67   # line 37:  Defs( ) Uses( ) LiveIn( tol A k rel_err rz normr0 p U r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 p U r L maxiter x b )
-        68  k = k::Int64 + 1::Int64  Defs( k ) Uses( k ) LiveIn( tol A k rel_err rz normr0 p U r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 p U r L maxiter x b )
-    
-    BasicBlock 2: Pred( 1 ) Succ( 0 -5 ) fallthrough = -5 depth_first=5
-        70  unless (top(!))(k::Int64 <= maxiter::Int64::Bool)::Bool goto 0
-     Defs( ) Uses( maxiter k ) LiveIn( tol A k rel_err rz normr0 p U r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 p U r L maxiter x b)
-        70  unless (top(!))(k::Int64 <= maxiter::Int64::Bool)::Bool goto 0  Defs( ) Uses( maxiter k ) LiveIn( tol A k rel_err rz normr0 p U r L maxiter x b ) LiveOut( tol A k rel_err rz normr0 p U r L maxiter x b )
-    
-    BasicBlock -5: Pred( 2 ) Succ( 3 ) fallthrough = 3 depth_first=6
-    Basic block without any statements.
-     Defs( ) Uses( ) LiveIn( x k rel_err A b ) LiveOut( x k rel_err A b)
-    Basic block without any statements.
-    
-    BasicBlock 3: Pred( -4 -1 -5 ) Succ( -2 ) fallthrough = nothing depth_first=8
-        72   # line 39:
-        73  return (top(tuple))(x::Array{Float64,1},k::Int64,rel_err::Union{Float64,Int64})::Tuple{Array{Float64,1},Int64,Union{Float64,Int64}}
-     Defs( x rel_err ) Uses( x k rel_err ) LiveIn( x k rel_err A b ) LiveOut( x A b)
-        72   # line 39:  Defs( ) Uses( ) LiveIn( x k rel_err A b ) LiveOut( x k rel_err A b )
-        73  return (top(tuple))(x::Array{Float64,1},k::Int64,rel_err::Union{Float64,Int64})::Tuple{Array{Float64,1},Int64,Union{Float64,Int64}}  Defs( x rel_err ) Uses( x k rel_err ) LiveIn( x k rel_err A b ) LiveOut( x A b )
-    
-    BasicBlock -2: Pred( 3 ) Succ( ) fallthrough = nothing depth_first=9
-    Basic block without any statements.
-     Defs( ) Uses( ) LiveIn( x A b ) LiveOut( x A b)
-    Basic block without any statements.
-    
-
-
 Matrix structures discovered:
-    Matrix U
-         ==> SparseAccelerator.StructureProxy(false,true,false,:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))
-    Matrix L
-         ==> SparseAccelerator.StructureProxy(true,false,false,:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))
-    Matrix (Main.triu)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-         ==> SparseAccelerator.StructureProxy(false,true,false,:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))
-    Matrix (Main.tril)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-         ==> SparseAccelerator.StructureProxy(true,false,false,:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))
-    Matrix (Main.spdiagm)(1 ./ (Main.diag)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Array{Float64,1}::Array{Float64,1})::Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer}
-         ==> SparseAccelerator.StructureProxy(false,false,true,nothing)
-    Matrix (Main.spdiagm)(1 ./ (Main.diag)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Array{Float64,1}::Array{Float64,1})::Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer} * (Main.triu)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-         ==> SparseAccelerator.StructureProxy(false,true,false,:(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}))
+    Union{GenSym,Symbol}[:L,:A]
+
+Constant structures discovered:
+    Union{GenSym,Symbol}[:L,:A]
+
+Value symmetry discovered:
+
+Structure symmetry discovered:
+
+Constants discovered:
+    Set(Union{GenSym,Symbol}[:tol,:A,:normr0,:L,:maxiter])
+
+Single-defs discovered:
+    Set(Union{GenSym,Symbol}[:beta,:rel_err,:k,:rz,:Ap,:z,:p,:U,:alpha,:old_rz,:r,:x])
 
 
-
-Replace
+According to pattern
+    CS_SpMV_pattern1
+    (:call,:(Main.*),Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer},Array{T,1})
+    (:NO_SUB_PATTERNS,)
+    do_nothing
+    (:call,:((top(getfield))(SparseAccelerator,:SpMV)),:arg2,:arg3)
+    gather_context_sensitive_info
+    NewFunctionKnob
+    DeleteFunctionKnob
+    (:arg2,)
+    40
+    (:arg2,:arg3)
+replace
     Expr call [Array{Float64,1}]
-        Expr call [Function]
-            top(getfield) [TopNode]
-            Base.SparseMatrix [GlobalRef]
-            :fwdTriSolve! [QuoteNode]
-        L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} [SymbolNode] [Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}]
-        z::Array{Float64,1} [SymbolNode] [Array{Float64,1}]
+        Main.* [GlobalRef]
+        A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} [SymbolNode] [Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}]
+        p::Array{Float64,1} [SymbolNode] [Array{Float64,1}]
 
 to
     Expr call [Array{Float64,1}]
         Expr call [Function]
             top(getfield) [TopNode]
             SparseAccelerator [Symbol] [Void]
-            :fwdTriSolve! [QuoteNode]
-        L::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} [SymbolNode] [Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}]
-        z::Array{Float64,1} [SymbolNode] [Array{Float64,1}]
+            :SpMV [QuoteNode]
+        A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} [SymbolNode] [Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}]
+        p::Array{Float64,1} [SymbolNode] [Array{Float64,1}]
 
-according to pattern
-    CS_fwdTriSolve!_pattern
-    (:call,:((top(getfield))(Base.SparseMatrix,:fwdTriSolve!)::F),Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer},Array{T,1})
-    (:NO_SUB_PATTERNS,)
-    CS_fwdBwdTriSolve!_check
-    (:call,:((top(getfield))(SparseAccelerator,:fwdTriSolve!)),:arg2,:arg3)
-    CS_fwdBwdTriSolve!_post_process
-    NewForwardTriangularSolveKnob
-    DeleteForwardTriangularSolveKnob
-
-
-Replace
-    Expr call [Array{Float64,1}]
-        Expr call [Function]
-            top(getfield) [TopNode]
-            Base.SparseMatrix [GlobalRef]
-            :bwdTriSolve! [QuoteNode]
-        U [Symbol] [Any]
-        z::Array{Float64,1} [SymbolNode] [Array{Float64,1}]
-
-to
-    Expr call [Array{Float64,1}]
-        Expr call [Function]
-            top(getfield) [TopNode]
-            SparseAccelerator [Symbol] [Void]
-            :bwdTriSolve! [QuoteNode]
-        U [Symbol] [Any]
-        z::Array{Float64,1} [SymbolNode] [Array{Float64,1}]
-
-according to pattern
-    CS_bwdTriSolve!_pattern
-    (:call,:((top(getfield))(Base.SparseMatrix,:bwdTriSolve!)::F),Any,Array{T,1})
-    (:NO_SUB_PATTERNS,)
-    CS_fwdBwdTriSolve!_check
-    (:call,:((top(getfield))(SparseAccelerator,:bwdTriSolve!)),:arg2,:arg3)
-    CS_fwdBwdTriSolve!_post_process
-    NewBackwardTriangularSolveKnob
-    DeleteBackwardTriangularSolveKnob
 
 Context-sensitive actions to take:
     Insert action:
-        ##mknobA#8199 = (SparseAccelerator.new_matrix_knob)()
-        ##fknob#8201 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8199,##fknob#8201)
-        ##fknob#8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8199,##fknob#8221)
+        ##mknobA#8208 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
+        ##fknob#8203 = (SparseAccelerator.new_function_knob)()
     outisde loop of BBs [0, 2, 1] before loop head BB 0
     
     Insert action:
-        (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",##fknob#8221)
-        (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",##fknob#8201)
-        (SparseAccelerator.delete_matrix_knob)(##mknobA#8199)
+        (SparseAccelerator.delete_matrix_knob)(##mknobA#8208)
+        (SparseAccelerator.delete_function_knob)(##fknob#8203)
     on the edge BB 2 --> BB -5
     
     Insert action:
-        (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",##fknob#8221)
-        (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",##fknob#8201)
-        (SparseAccelerator.delete_matrix_knob)(##mknobA#8199)
+        (SparseAccelerator.delete_matrix_knob)(##mknobA#8208)
+        (SparseAccelerator.delete_function_knob)(##fknob#8203)
     on the edge BB 0 --> BB -4
+    
+    Insert action:
+        (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8208,##fknob#8203)
+    outisde loop of BBs [0, 2, 1] before loop head BB 0
     
 
 
@@ -295,41 +90,34 @@ New AST:
             NewvarNode(:beta)
             unless k::Int64 <= maxiter::Int64::Bool goto 3
             4: 
-            ##mknobA#8199 = (SparseAccelerator.new_matrix_knob)()
-            ##fknob#8201 = (SparseAccelerator.new_function_knob)("NewForwardTriangularSolveKnob")
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8199,##fknob#8201)
-            ##fknob#8221 = (SparseAccelerator.new_function_knob)("NewBackwardTriangularSolveKnob")
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8199,##fknob#8221)
+            ##mknobA#8208 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
+            ##fknob#8203 = (SparseAccelerator.new_function_knob)()
+            (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8208,##fknob#8203)
             goto 0
             0:  # line 18:
             old_rz = rz::Float64 # line 19:
-            Ap = A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * p::Array{Float64,1}::Array{Float64,1} # line 20:
+            Ap = ((top(getfield))(SparseAccelerator,:SpMV))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},p::Array{Float64,1},##fknob#8203)::Array{Float64,1} # line 20:
             alpha = old_rz::Float64 / (Main.dot)(p::Array{Float64,1},Ap::Array{Float64,1})::Float64::Float64 # line 21:
             x = x::Array{Float64,1} + alpha::Float64 * p::Array{Float64,1}::Array{Float64,1}::Array{Float64,1} # line 22:
             r = r::Array{Float64,1} - alpha::Float64 * Ap::Array{Float64,1}::Array{Float64,1}::Array{Float64,1} # line 23:
             rel_err = (Main.norm)(r::Array{Float64,1})::Float64 / normr0::Float64::Float64 # line 24:
             unless rel_err::Float64 < tol::Float64::Bool goto 1
-            (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",##fknob#8221)
-            (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",##fknob#8201)
-            (SparseAccelerator.delete_matrix_knob)(##mknobA#8199) # line 25:
+            (SparseAccelerator.delete_matrix_knob)(##mknobA#8208)
+            (SparseAccelerator.delete_function_knob)(##fknob#8203) # line 25:
             goto 3
             1:  # line 28:
             z = (Main.copy)(r::Array{Float64,1})::Array{Float64,1} # line 29:
-            ((top(getfield))(SparseAccelerator,:fwdTriSolve!))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},z::Array{Float64,1},##fknob#8201)::Array{Float64,1} # line 31:
-            ((top(getfield))(SparseAccelerator,:bwdTriSolve!))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},z::Array{Float64,1},##fknob#8221)::Array{Float64,1} # line 34:
+            nothing # line 31:
+            nothing # line 34:
             rz = (Main.dot)(r::Array{Float64,1},z::Array{Float64,1})::Float64 # line 35:
             beta = rz::Float64 / old_rz::Float64::Float64 # line 36:
             p = z::Array{Float64,1} + beta::Float64 * p::Array{Float64,1}::Array{Float64,1}::Array{Float64,1} # line 37:
             k = k::Int64 + 1::Int64
             2: 
             unless (top(!))(k::Int64 <= maxiter::Int64::Bool)::Bool goto 0
-            (SparseAccelerator.delete_function_knob)("DeleteBackwardTriangularSolveKnob",##fknob#8221)
-            (SparseAccelerator.delete_function_knob)("DeleteForwardTriangularSolveKnob",##fknob#8201)
-            (SparseAccelerator.delete_matrix_knob)(##mknobA#8199)
+            (SparseAccelerator.delete_matrix_knob)(##mknobA#8208)
+            (SparseAccelerator.delete_function_knob)(##fknob#8203)
             3:  # line 39:
             return (top(tuple))(x::Array{Float64,1},k::Int64,rel_err::Union{Float64,Int64})::Tuple{Array{Float64,1},Int64,Union{Float64,Int64}}
         end::Tuple{Array{Float64,1},Int64,Union{Float64,Int64}})))
 ********************************************************************************
-    sum of x=1.382173191717822e11
-    k=1001
-    rel_err=0.009624603604176774

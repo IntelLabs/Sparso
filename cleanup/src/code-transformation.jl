@@ -98,7 +98,7 @@ end
 @doc """
 Perform all the actions. Return the transformed AST.
 """
-function code_transformation(
+function CFG_transformation(
     actions  :: Vector{Action},
     cfg      :: CFG
 )
