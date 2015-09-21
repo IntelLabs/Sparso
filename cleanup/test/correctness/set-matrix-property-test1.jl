@@ -3,7 +3,6 @@ using SparseAccelerator
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
-include("./pcg-symgs.jl")
 include("utils.jl")
 
 function foo()
@@ -12,8 +11,8 @@ function foo()
 
     for i = 1:2
         set_matrix_property(Dict(
-            :A => SA_CONST_VALUED|SA_SYMM_VALUED|SA_SYMM_STRUCTURED, 
-            :B => SA_CONST_STRUCTURED|SA_CONST_VALUED|SA_SYMM_VALUED
+            :A => SA_CONST_VALUED | SA_SYMM_VALUED | SA_SYMM_STRUCTURED, 
+            :B => SA_CONST_STRUCTURED | SA_CONST_VALUED | SA_SYMM_VALUED
             )
         )
 

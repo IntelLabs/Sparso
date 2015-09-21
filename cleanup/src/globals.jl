@@ -287,7 +287,7 @@ type MatrixProperties
     is_structure_only      :: Bool
     is_single_def          :: Bool
 
-    MatrixProperties() = new (false, false, false, false, false, false)
+    MatrixProperties() = new(false, false, false, false, false, false)
 end
 typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 
@@ -334,10 +334,11 @@ type InsertOnEdge <: Action
 end
 
 @doc """ 
-All the analyses, including reusing, reordering, etc. This phase may change
-the AST, but it will not change CFG.
+All the transformations on the AST, including reusing, reordering, etc.
+This phase may change the AST. It does not change the CFG, but records the
+actions for changing the CFG.
 """
-function analyses(
+function AST_transformation(
     func_ast    :: Expr, 
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
@@ -346,7 +347,7 @@ function analyses(
 )
     regions = region_formation(cfg, loop_info)
     actions = Vector{Action}()
-    actions = context_info_discovery(actions, regions, func_ast, symbol_info, liveness, cfg)
+    actions = AST_context_sensitive_transformation(actions, regions, func_ast, symbol_info, liveness, cfg)
 end
 
 @doc """ 
@@ -385,8 +386,8 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             # Reordering and context-sensitive optimization: Do all analyses, and 
             # put their intended transformation code sequence into a list. Then 
             # transform the code with the list on the CFG.
-            actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-            code_transformation(actions, cfg)
+            actions = AST_transformation(func_ast, symbol_info, liveness, cfg, loop_info)
+            CFG_transformation(actions, cfg)
         end
 
         # Do call replacement at the end, because it relies only on type info, 

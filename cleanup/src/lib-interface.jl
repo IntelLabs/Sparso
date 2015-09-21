@@ -106,10 +106,22 @@ function set_derivative(
     ccall((:SetDerivative, LIB_PATH), Void, (Ptr{Void}, Cint, Ptr{Void}), mknob, derivative_type, derivative)
 end
 
+@doc """
+Derivative types between two matrix knobs.
+NOTE: when adding any new type, or changing any type' integer value,
+make sure to change int2derivative_map as well.
+"""
 const DERIVATIVE_TYPE_TRANSPOSE = 0
 const DERIVATIVE_TYPE_SYMMETRIC = 1
 const DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2
 const DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3
+
+const int2derivative_map = Dict(
+    0 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_TRANSPOSE),
+    1 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_SYMMETRIC),
+    2 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_LOWER_TRIANGULAR),
+    3 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_UPPER_TRIANGULAR)
+)
 
 @doc """ Delete a matrix knob. """
 function delete_matrix_knob(

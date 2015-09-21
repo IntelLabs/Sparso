@@ -339,12 +339,17 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     return x, k, rel_err
 end
 
+print_sum = false
 if length(ARGS) == 0
     m = 1000
     A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-#    A = matrix_market_read("tiny-diag.mtx", true, true)
-else
+elseif length(ARGS) == 1
+    # This is for performance testing's purpose
     A = matrix_market_read(ARGS[1], true, true)
+else
+    # This is to for regression tests' purpose, which needs sum to be printed.
+    print_sum = true
+    A         = matrix_market_read(ARGS[2], true, true)
 end
 m       = size(A, 1)
 x       = zeros(Float64, m)
@@ -354,22 +359,28 @@ maxiter = 20000
 
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
-println("\tk=", k)
-println("\trel_err=", rel_err)
+if print_sum
+    println("\tOriginal sum of x=", sum(x))
+end
+println("\tOriginal k=", k)
+println("\tOriginal rel_err=", rel_err)
 
 println("\nWith manual context-sensitive optimization without reordering: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
 x, k, rel_err = pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
-println("\tk=", k)
-println("\trel_err=", rel_err)
+if print_sum
+    println("\tManual_context_no_reorder sum of x=", sum(x))
+end
+println("\tManual_context_no_reorder k=", k)
+println("\tManual_context_no_reorder rel_err=", rel_err)
 
 println("\nWith manual context-sensitive optimization: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
 x, k, rel_err = pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
-#println("\tsum of x=", sum(x))
-println("\tk=", k)
-println("\trel_err=", rel_err)
+if print_sum
+    println("\tManual_context sum of x=", sum(x))
+end
+println("\tManual_context k=", k)
+println("\tManual_context rel_err=", rel_err)

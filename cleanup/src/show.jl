@@ -260,6 +260,13 @@ function show(
             end
         elseif typeof(msg) <: InterDependenceGraph
             show_inter_dependence_graph(symbol_info, liveness, msg)
+        elseif typeof(msg) <: StructureProxy
+            print(io_buffer,
+                  msg.constant_valued == 3      ?  "constant_valued " : "",
+                  msg.constant_structured == 3  ?  "constant_structured " : "",
+                  msg.symmetric_valued == 3     ?  "symmetric_valued " : "",
+                  msg.symmetric_structured == 3 ?  "symmetric_structured " : ""
+            )
         else
             print(io_buffer, msg)
         end

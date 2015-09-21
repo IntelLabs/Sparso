@@ -4,64 +4,65 @@ Context-sensitive actions to take:
     outisde loop of BBs [0, 4, -4, 2, 3, 1] before loop head BB 0
     
     Insert action:
-        ##mknobD#8578 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-        ##mknobA#8575 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,true)
-        ##mknobB#8625 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-        ##mknobExpr#8572 = (SparseAccelerator.new_matrix_knob)(false,true,true,true,false,true)
-        ##mknob__AT__#8579 = (SparseAccelerator.new_matrix_knob)(__AT__,true,true,false,false,false,true)
-        ##mknobR#8633 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-        ##fknob#8624 = (SparseAccelerator.new_function_knob)()
-        ##fknob#8567 = (SparseAccelerator.new_function_knob)()
-        ##fknob#8632 = (SparseAccelerator.new_function_knob)()
+        ##mknobD#8619 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+        ##mknob__AT__#8620 = (SparseAccelerator.new_matrix_knob)(__AT__,true,true,false,false,false,false)
+        ##mknobB#8671 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+        ##mknobA#8616 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
+        ##mknobExpr#8591 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+        ##mknobR#8679 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+        ##fknob#8670 = (SparseAccelerator.new_function_knob)()
+        ##fknob#8678 = (SparseAccelerator.new_function_knob)()
+        ##fknob#8586 = (SparseAccelerator.new_function_knob)()
+        (SparseAccelerator.set_derivative)(##mknobA#8616,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,##mknob__AT__#8620)
     outisde loop of BBs [0, 4, -4, 2, 3, 1] before loop head BB 0
     
     Insert action:
-        (SparseAccelerator.delete_matrix_knob)(##mknobD#8578)
-        (SparseAccelerator.delete_matrix_knob)(##mknobA#8575)
-        (SparseAccelerator.delete_matrix_knob)(##mknobB#8625)
-        (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8572)
-        (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8579)
-        (SparseAccelerator.delete_matrix_knob)(##mknobR#8633)
-        (SparseAccelerator.delete_function_knob)(##fknob#8624)
-        (SparseAccelerator.delete_function_knob)(##fknob#8567)
-        (SparseAccelerator.delete_function_knob)(##fknob#8632)
+        (SparseAccelerator.delete_matrix_knob)(##mknobD#8619)
+        (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8620)
+        (SparseAccelerator.delete_matrix_knob)(##mknobB#8671)
+        (SparseAccelerator.delete_matrix_knob)(##mknobA#8616)
+        (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8591)
+        (SparseAccelerator.delete_matrix_knob)(##mknobR#8679)
+        (SparseAccelerator.delete_function_knob)(##fknob#8670)
+        (SparseAccelerator.delete_function_knob)(##fknob#8678)
+        (SparseAccelerator.delete_function_knob)(##fknob#8586)
     on the edge BB 2 --> BB -5
     
     Insert action:
-        (SparseAccelerator.delete_matrix_knob)(##mknobD#8578)
-        (SparseAccelerator.delete_matrix_knob)(##mknobA#8575)
-        (SparseAccelerator.delete_matrix_knob)(##mknobB#8625)
-        (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8572)
-        (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8579)
-        (SparseAccelerator.delete_matrix_knob)(##mknobR#8633)
-        (SparseAccelerator.delete_function_knob)(##fknob#8624)
-        (SparseAccelerator.delete_function_knob)(##fknob#8567)
-        (SparseAccelerator.delete_function_knob)(##fknob#8632)
+        (SparseAccelerator.delete_matrix_knob)(##mknobD#8619)
+        (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8620)
+        (SparseAccelerator.delete_matrix_knob)(##mknobB#8671)
+        (SparseAccelerator.delete_matrix_knob)(##mknobA#8616)
+        (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8591)
+        (SparseAccelerator.delete_matrix_knob)(##mknobR#8679)
+        (SparseAccelerator.delete_function_knob)(##fknob#8670)
+        (SparseAccelerator.delete_function_knob)(##fknob#8678)
+        (SparseAccelerator.delete_function_knob)(##fknob#8586)
     on the edge BB 4 --> BB -6
     
     Insert action:
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobB#8625,##fknob#8624)
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobExpr#8572,##fknob#8567)
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8575,##fknob#8567)
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobD#8578,##fknob#8567)
-        (SparseAccelerator.add_mknob_to_fknob)(##mknob__AT__#8579,##fknob#8567)
-        (SparseAccelerator.add_mknob_to_fknob)(##mknobR#8633,##fknob#8632)
+        (SparseAccelerator.add_mknob_to_fknob)(##mknobB#8671,##fknob#8670)
+        (SparseAccelerator.add_mknob_to_fknob)(##mknobR#8679,##fknob#8678)
+        (SparseAccelerator.add_mknob_to_fknob)(##mknobExpr#8591,##fknob#8586)
+        (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8616,##fknob#8586)
+        (SparseAccelerator.add_mknob_to_fknob)(##mknobD#8619,##fknob#8586)
+        (SparseAccelerator.add_mknob_to_fknob)(##mknob__AT__#8620,##fknob#8586)
     outisde loop of BBs [0, 4, -4, 2, 3, 1] before loop head BB 0
     
     Insert action:
-        (SparseAccelerator.propagate_matrix_info)(##mknobB#8625,##mknobExpr#8572)
+        (SparseAccelerator.propagate_matrix_info)(##mknobB#8671,##mknobExpr#8591)
     after BB 3 statement
-        B = ((top(getfield))(SparseAccelerator,:ADB))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},__AT__::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8567)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
+        B = ((top(getfield))(SparseAccelerator,:ADB))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},__AT__::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8586)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
     
 
 
 New AST:
-    $(Expr(:lambda, Any[:A,:b,:p], Any[Any[Any[:A,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},0],Any[:b,Array{Float64,1},0],Any[:p,Array{Float64,1},0],Any[:t0,Float64,18],Any[symbol("#s128"),Int64,2],Any[:m,Int64,18],Any[:n,Int64,18],Any[:bigM,Float64,2],Any[:x,Any,2],Any[:s,Any,2],Any[:y,Any,2],Any[:bc,Float64,18],Any[:relResidual,Any,2],Any[:iter,Int64,2],Any[:blas1_time,Float64,2],Any[:spgemm_time,Float64,2],Any[:fact_time,Float64,2],Any[:trslv_time,Float64,2],Any[:spmv_time,Float64,2],Any[:D,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},18],Any[symbol("#s127"),Int64,2],Any[:Rd,Any,18],Any[:Rp,Any,18],Any[:Rc,Any,2],Any[:mu,Any,18],Any[symbol("#s126"),Any,2],Any[:d,Any,18],Any[:B,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},18],Any[:R,Base.SparseMatrix.CHOLMOD.Factor{Float64},18],Any[:t1,Any,18],Any[:t2,Any,18],Any[:dy,Any,18],Any[:temp,Any,18],Any[:dx,Any,18],Any[:ds,Any,18],Any[:tau,Any,18],Any[:ap,Any,2],Any[:ad,Any,2],Any[:f,Any,18]],Any[],Any[Tuple{Int64,Int64},Tuple{Int64,Int64},Tuple{Int64,Int64},UnitRange{Int64},Tuple{Int64,Int64}],Any[]], :(begin  # /media/sf_VBoxVMShared/SparseAccelerator/cleanup/test/correctness/./ipm-ref.jl, line 19:
+    $(Expr(:lambda, Any[:A,:b,:p], Any[Any[Any[:A,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},0],Any[:b,Array{Float64,1},0],Any[:p,Array{Float64,1},0],Any[:t0,Float64,18],Any[symbol("#s134"),Int64,2],Any[:m,Int64,18],Any[:n,Int64,18],Any[:bigM,Float64,2],Any[:x,Any,2],Any[:s,Any,2],Any[:y,Any,2],Any[:bc,Float64,18],Any[:relResidual,Any,2],Any[:iter,Int64,2],Any[:blas1_time,Float64,2],Any[:spgemm_time,Float64,2],Any[:fact_time,Float64,2],Any[:trslv_time,Float64,2],Any[:spmv_time,Float64,2],Any[:D,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},18],Any[symbol("#s133"),Int64,2],Any[:Rd,Any,18],Any[:Rp,Any,18],Any[:Rc,Any,2],Any[:mu,Any,18],Any[symbol("#s132"),Any,2],Any[:d,Any,18],Any[:B,Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},18],Any[:R,Base.SparseMatrix.CHOLMOD.Factor{Float64},18],Any[:t1,Any,18],Any[:t2,Any,18],Any[:dy,Any,18],Any[:temp,Any,18],Any[:dx,Any,18],Any[:ds,Any,18],Any[:tau,Any,18],Any[:ap,Any,2],Any[:ad,Any,2],Any[:f,Any,18]],Any[],Any[Tuple{Int64,Int64},Tuple{Int64,Int64},Tuple{Int64,Int64},UnitRange{Int64},Tuple{Int64,Int64}],Any[]], :(begin  # /media/sf_VBoxVMShared/SparseAccelerator/cleanup/test/correctness/./ipm-ref.jl, line 19:
             NewvarNode(:Rd)
             NewvarNode(:Rp)
             NewvarNode(:Rc)
             NewvarNode(:mu)
-            NewvarNode(symbol("#s126"))
+            NewvarNode(symbol("#s132"))
             NewvarNode(:d)
             NewvarNode(:B)
             NewvarNode(:R)
@@ -77,13 +78,13 @@ New AST:
             NewvarNode(:f)
             t0 = (Main.time)()::Float64 # line 20:
             GenSym(0) = (Main.size)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Tuple{Int64,Int64}
-            #s128 = (top(start))(GenSym(0))::Int64
-            GenSym(1) = (top(indexed_next))(GenSym(0),1,#s128::Int64)::Tuple{Int64,Int64}
+            #s134 = (top(start))(GenSym(0))::Int64
+            GenSym(1) = (top(indexed_next))(GenSym(0),1,#s134::Int64)::Tuple{Int64,Int64}
             m = (top(getfield))(GenSym(1),1)::Int64
-            #s128 = (top(getfield))(GenSym(1),2)::Int64
-            GenSym(2) = (top(indexed_next))(GenSym(0),2,#s128::Int64)::Tuple{Int64,Int64}
+            #s134 = (top(getfield))(GenSym(1),2)::Int64
+            GenSym(2) = (top(indexed_next))(GenSym(0),2,#s134::Int64)::Tuple{Int64,Int64}
             n = (top(getfield))(GenSym(2),1)::Int64
-            #s128 = (top(getfield))(GenSym(2),2)::Int64 # line 23:
+            #s134 = (top(getfield))(GenSym(2),2)::Int64 # line 23:
             bigM = (Main.maximum)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Float64 # line 24:
             bigM = (Main.maximum)((Main.hcat)((Main.norm)(b::Array{Float64,1},Main.Inf)::Float64,(Main.norm)(p::Array{Float64,1},Main.Inf)::Float64,bigM::Float64)::Array{Float64,2})::Float64 # line 25:
             x = 100 * bigM::Float64 * (Main.ones)(n::Int64)::Array{Float64,1}::Array{Float64,1} # line 26:
@@ -99,28 +100,29 @@ New AST:
             spmv_time = 0.0 # line 40:
             D = (Main.speye_int32)(n::Int64)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} # line 42:
             GenSym(3) = (Main.colon)(1,200)::UnitRange{Int64}
-            #s127 = (top(start))(GenSym(3))::Int64
-            unless (top(!))((top(done))(GenSym(3),#s127::Int64)::Bool)::Bool goto 5
+            #s133 = (top(start))(GenSym(3))::Int64
+            unless (top(!))((top(done))(GenSym(3),#s133::Int64)::Bool)::Bool goto 5
             6: 
             __AT__ = (Main.ctranspose)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})
-            ##mknobD#8578 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##mknobA#8575 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,true)
-            ##mknobB#8625 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##mknobExpr#8572 = (SparseAccelerator.new_matrix_knob)(false,true,true,true,false,true)
-            ##mknob__AT__#8579 = (SparseAccelerator.new_matrix_knob)(__AT__,true,true,false,false,false,true)
-            ##mknobR#8633 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##fknob#8624 = (SparseAccelerator.new_function_knob)()
-            ##fknob#8567 = (SparseAccelerator.new_function_knob)()
-            ##fknob#8632 = (SparseAccelerator.new_function_knob)()
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobB#8625,##fknob#8624)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobExpr#8572,##fknob#8567)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8575,##fknob#8567)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobD#8578,##fknob#8567)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknob__AT__#8579,##fknob#8567)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobR#8633,##fknob#8632)
+            ##mknobD#8619 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+            ##mknob__AT__#8620 = (SparseAccelerator.new_matrix_knob)(__AT__,true,true,false,false,false,false)
+            ##mknobB#8671 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+            ##mknobA#8616 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
+            ##mknobExpr#8591 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+            ##mknobR#8679 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
+            ##fknob#8670 = (SparseAccelerator.new_function_knob)()
+            ##fknob#8678 = (SparseAccelerator.new_function_knob)()
+            ##fknob#8586 = (SparseAccelerator.new_function_knob)()
+            (SparseAccelerator.set_derivative)(##mknobA#8616,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,##mknob__AT__#8620)
+            (SparseAccelerator.add_mknob_to_fknob)(##mknobB#8671,##fknob#8670)
+            (SparseAccelerator.add_mknob_to_fknob)(##mknobR#8679,##fknob#8678)
+            (SparseAccelerator.add_mknob_to_fknob)(##mknobExpr#8591,##fknob#8586)
+            (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8616,##fknob#8586)
+            (SparseAccelerator.add_mknob_to_fknob)(##mknobD#8619,##fknob#8586)
+            (SparseAccelerator.add_mknob_to_fknob)(##mknob__AT__#8620,##fknob#8586)
             goto 0
             0: 
-            NewvarNode(symbol("#s126"))
+            NewvarNode(symbol("#s132"))
             NewvarNode(:d)
             NewvarNode(:B)
             NewvarNode(:R)
@@ -133,9 +135,9 @@ New AST:
             NewvarNode(:tau)
             NewvarNode(:ap)
             NewvarNode(:ad)
-            GenSym(4) = (top(next))(GenSym(3),#s127::Int64)::Tuple{Int64,Int64}
+            GenSym(4) = (top(next))(GenSym(3),#s133::Int64)::Tuple{Int64,Int64}
             iter = (top(getfield))(GenSym(4),1)::Int64
-            #s127 = (top(getfield))(GenSym(4),2)::Int64 # line 45:
+            #s133 = (top(getfield))(GenSym(4),2)::Int64 # line 45:
             spmv_time = spmv_time::Float64 - (Main.time)()::Float64::Float64 # line 46:
             Rd = ((Main.Ac_mul_B)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},y) + s) - p::Array{Float64,1} # line 47:
             Rp = A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * x - b::Array{Float64,1} # line 48:
@@ -146,21 +148,21 @@ New AST:
             relResidual = (Main.norm)((Main.vcat)(Rd,Rp,Rc)) / bc::Float64 # line 54:
             blas1_time = blas1_time::Float64 + (Main.time)()::Float64::Float64 # line 56:
             unless relResidual <= 1.0e-7 goto 1
-            #s126 = mu <= 1.0e-7
+            #s132 = mu <= 1.0e-7
             goto 2
             1: 
-            #s126 = false
+            #s132 = false
             2: 
-            unless #s126 goto 3
-            (SparseAccelerator.delete_matrix_knob)(##mknobD#8578)
-            (SparseAccelerator.delete_matrix_knob)(##mknobA#8575)
-            (SparseAccelerator.delete_matrix_knob)(##mknobB#8625)
-            (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8572)
-            (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8579)
-            (SparseAccelerator.delete_matrix_knob)(##mknobR#8633)
-            (SparseAccelerator.delete_function_knob)(##fknob#8624)
-            (SparseAccelerator.delete_function_knob)(##fknob#8567)
-            (SparseAccelerator.delete_function_knob)(##fknob#8632) # line 56:
+            unless #s132 goto 3
+            (SparseAccelerator.delete_matrix_knob)(##mknobD#8619)
+            (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8620)
+            (SparseAccelerator.delete_matrix_knob)(##mknobB#8671)
+            (SparseAccelerator.delete_matrix_knob)(##mknobA#8616)
+            (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8591)
+            (SparseAccelerator.delete_matrix_knob)(##mknobR#8679)
+            (SparseAccelerator.delete_function_knob)(##fknob#8670)
+            (SparseAccelerator.delete_function_knob)(##fknob#8678)
+            (SparseAccelerator.delete_function_knob)(##fknob#8586) # line 56:
             goto 5
             3:  # line 58:
             blas1_time = blas1_time::Float64 - (Main.time)()::Float64::Float64 # line 59:
@@ -168,12 +170,12 @@ New AST:
             d = (Main.min)(5.0e15,x ./ s) # line 64:
             blas1_time = blas1_time::Float64 + (Main.time)()::Float64::Float64 # line 66:
             spgemm_time = spgemm_time::Float64 - (Main.time)()::Float64::Float64 # line 67:
-            (top(setfield!))(D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},:nzval,(top(convert))((top(fieldtype))((top(typeof))(D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})::Type{Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}},:nzval)::Type{Array{Float64,1}},d)) # line 68:
-            B = ((top(getfield))(SparseAccelerator,:ADB))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},__AT__::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8567)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-            (SparseAccelerator.propagate_matrix_info)(##mknobB#8625,##mknobExpr#8572) # line 69:
+            nothing # line 68:
+            B = ((top(getfield))(SparseAccelerator,:ADB))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},__AT__::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8586)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
+            (SparseAccelerator.propagate_matrix_info)(##mknobB#8671,##mknobExpr#8591) # line 69:
             spgemm_time = spgemm_time::Float64 + (Main.time)()::Float64::Float64 # line 73:
             fact_time = fact_time::Float64 - (Main.time)()::Float64::Float64 # line 74:
-            R = ((top(getfield))(SparseAccelerator,:cholfact_int32))(B::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8624)::Base.SparseMatrix.CHOLMOD.Factor{Float64} # line 75:
+            R = ((top(getfield))(SparseAccelerator,:cholfact_int32))(B::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8670)::Base.SparseMatrix.CHOLMOD.Factor{Float64} # line 75:
             fact_time = fact_time::Float64 + (Main.time)()::Float64::Float64 # line 78:
             blas1_time = blas1_time::Float64 - (Main.time)()::Float64::Float64 # line 79:
             t1 = x .* Rd - Rc # line 80:
@@ -182,7 +184,7 @@ New AST:
             t2 = -((Rp + A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32} * (t1 ./ s))) # line 84:
             spmv_time = spmv_time::Float64 + (Main.time)()::Float64::Float64 # line 87:
             trslv_time = trslv_time::Float64 - (Main.time)()::Float64::Float64 # line 88:
-            dy = ((top(getfield))(SparseAccelerator,:cholfact_inverse_divide))(R::Base.SparseMatrix.CHOLMOD.Factor{Float64},t2,##fknob#8632) # line 89:
+            dy = ((top(getfield))(SparseAccelerator,:cholfact_inverse_divide))(R::Base.SparseMatrix.CHOLMOD.Factor{Float64},t2,##fknob#8678) # line 89:
             trslv_time = trslv_time::Float64 + (Main.time)()::Float64::Float64 # line 91:
             spmv_time = spmv_time::Float64 - (Main.time)()::Float64::Float64 # line 92:
             temp = (Main.Ac_mul_B)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},dy) # line 93:
@@ -200,16 +202,16 @@ New AST:
             y = y + ad * dy # line 107:
             blas1_time = blas1_time::Float64 + (Main.time)()::Float64::Float64
             4: 
-            unless (top(!))((top(!))((top(done))(GenSym(3),#s127::Int64)::Bool)::Bool)::Bool goto 0
-            (SparseAccelerator.delete_matrix_knob)(##mknobD#8578)
-            (SparseAccelerator.delete_matrix_knob)(##mknobA#8575)
-            (SparseAccelerator.delete_matrix_knob)(##mknobB#8625)
-            (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8572)
-            (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8579)
-            (SparseAccelerator.delete_matrix_knob)(##mknobR#8633)
-            (SparseAccelerator.delete_function_knob)(##fknob#8624)
-            (SparseAccelerator.delete_function_knob)(##fknob#8567)
-            (SparseAccelerator.delete_function_knob)(##fknob#8632)
+            unless (top(!))((top(!))((top(done))(GenSym(3),#s133::Int64)::Bool)::Bool)::Bool goto 0
+            (SparseAccelerator.delete_matrix_knob)(##mknobD#8619)
+            (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8620)
+            (SparseAccelerator.delete_matrix_knob)(##mknobB#8671)
+            (SparseAccelerator.delete_matrix_knob)(##mknobA#8616)
+            (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8591)
+            (SparseAccelerator.delete_matrix_knob)(##mknobR#8679)
+            (SparseAccelerator.delete_function_knob)(##fknob#8670)
+            (SparseAccelerator.delete_function_knob)(##fknob#8678)
+            (SparseAccelerator.delete_function_knob)(##fknob#8586)
             5:  # line 110:
             blas1_time = blas1_time::Float64 - (Main.time)()::Float64::Float64 # line 111:
             f = (Main.Ac_mul_B)(p::Array{Float64,1},x) # line 112:
@@ -217,3 +219,10 @@ New AST:
             return (top(tuple))(x,(Main.time)()::Float64 - t0::Float64::Float64,spgemm_time::Float64,fact_time::Float64,blas1_time::Float64,trslv_time::Float64,spmv_time::Float64,iter::Int64,relResidual,(Main.getindex)((Main.getindex)(f,1),1))::Tuple{Any,Float64,Float64,Float64,Float64,Float64,Float64,Int64,Any,Any}
         end::Tuple{Any,Float64,Float64,Float64,Float64,Float64,Float64,Int64,Any,Any})))
 ********************************************************************************
+elapsed time: 58.991319002 seconds
+
+Accelerated sum of x=1.071130175439502e10
+
+ref_total_time = 21.942028
+spgemm = 6.514003 fact = 5.055361 blas1 = 3.710902 trslv = 3.850184 spmv = 1.465878
+iter 200, resid =  1.58e+08, objval = 2.465688e+13

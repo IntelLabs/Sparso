@@ -20,6 +20,7 @@ type ContextExtra
     fknob2ctor_dtor          :: Dict{Symbol, Tuple}  # Tuple(fknob_creator, fknob_deletor)
     matrix2mknob             :: Dict{Symexpr, Symbol}
     mknob2matrix             :: Dict{Symbol, Symexpr}
+    derivatives              :: Set{Tuple} # Tuple(matrixA, derivative relation, matrixB)
 
     # The knobs gathered when AST is walked the second time.
     matrix_knobs             :: Set{Symbol}
@@ -33,7 +34,7 @@ type ContextExtra
             _matrix_properties, _ast_may_change, nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
-            Dict{Symbol, Symexpr}(),
+            Dict{Symbol, Symexpr}(), Set{Tuple}(),
             Set{Symbol}(), Set{Symbol}(), nothing, 0)
 end
 
@@ -188,9 +189,11 @@ function CS_ADAT_post_replacement(
 
     ast.args[4] = SymbolNode(AT, A.typ)
 
-    # AT has the same properties as A. But AT has only a single static definition.
+    # AT has the same properties as A.
     call_sites.extra.matrix_properties[AT]               = properties
-    call_sites.extra.matrix_properties[AT].is_single_def = true
+    call_sites.extra.matrix_properties[AT].is_single_def = false # AT definition is out of the region, and not counted as def.
+
+    push!(call_sites.extra.derivatives, (A.name, DERIVATIVE_TYPE_TRANSPOSE, AT))
 
     # The result is a symmetric matrix.
     # ISSUE: in analysis like constant value/structure analysis, should we 
@@ -199,10 +202,10 @@ function CS_ADAT_post_replacement(
     call_sites.extra.matrix_properties[ast]                        = MatrixProperties()
     call_sites.extra.matrix_properties[ast].constant_valued        = false #TODO: should determined by if A and D are constant valued
     call_sites.extra.matrix_properties[ast].constant_structured    = true
-    call_sites.extra.matrix_properties[ast].is_symmetric           = true
-    call_sites.extra.matrix_properties[ast].is_structure_symmetric = true
+    call_sites.extra.matrix_properties[ast].is_symmetric           = false #true
+    call_sites.extra.matrix_properties[ast].is_structure_symmetric = false #true
     call_sites.extra.matrix_properties[ast].is_structure_only      = false
-    call_sites.extra.matrix_properties[ast].is_single_def          = true
+    call_sites.extra.matrix_properties[ast].is_single_def          = true 
 
     return gather_context_sensitive_info(ast, call_sites, fknob_creator, 
                                          fknob_deletor, matrices_to_track,
@@ -664,6 +667,20 @@ function create_delete_matrix_knob(
 end
 
 @doc """
+Create statements that set mknob2 as a derivative of mknob1.
+"""
+function create_set_derivative(
+    new_stmts :: Vector{Statement},
+    mknob1    :: Symbol,
+    relation  :: Int,
+    mknob2    :: Symbol
+)
+    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :set_derivative),
+                     mknob1, int2derivative_map[relation], mknob2)
+    push!(new_stmts, Statement(0, new_stmt))
+end
+
+@doc """
 Visit each expression the loop region. If recursive is true, visit each AST node
 of the expression and handle each with the handler. Otherwise, handle the
 expression with the handler.
@@ -745,6 +762,7 @@ function generate_and_delete_knobs(
     L              = region.loop
     matrix_knobs   = call_sites.extra.matrix_knobs
     function_knobs = call_sites.extra.function_knobs
+    derivatives    = call_sites.extra.derivatives
     symbol_info    = call_sites.symbol_info
 
     action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
@@ -759,6 +777,13 @@ function generate_and_delete_knobs(
     for fknob in function_knobs
         fknob_creator, fknob_deletor = call_sites.extra.fknob2ctor_dtor[fknob]
         create_new_function_knob(action_before_region.new_stmts, fknob, fknob_creator)
+    end
+
+    # Add statements that define the relationship between matrix knobs
+    for (M1, relation, M2) in derivatives
+        mknob1 = call_sites.extra.matrix2mknob[M1]
+        mknob2 = call_sites.extra.matrix2mknob[M2]
+        create_set_derivative(action_before_region.new_stmts, mknob1, relation, mknob2)
     end
 
     # Create statements that will delete the knobs at region exits
@@ -846,9 +871,9 @@ propagate_matrix_info(ast, call_sites :: CallSites, top_level_number, is_top_lev
 
 @doc """ 
 Discover context-sensitive function calls in the loop region. Insert matrix and 
-function-specific context info (mknobs and fknobs) into actions.
+function-specific context info (mknobs and fknobs).
 """
-function context_info_discovery(
+function context_sensitive_transformation(
     actions     :: Vector{Action},
     region      :: LoopRegion,
     func_ast    :: Expr,
@@ -890,12 +915,15 @@ function context_info_discovery(
     # matrix knobs.
     add_matrix_knobs_to_function_knobs(call_sites)
 
-    # Add fknobs to function calls in the AST
-    add_function_knobs_to_calls(call_sites)
-
     # Propagate matrix info from one matrix knob to another for assignment statements
     recursive  = false
     vist_expressions(region, cfg, call_sites, recursive, propagate_matrix_info)
+
+    # Add fknobs to function calls in the AST. This changes AST, and thus should 
+    # be put at the last, because otherwise, the maps in the extra including
+    # matrix2mknobs and expr2fknob whose keys are AST nodes, might become
+    # out of date.
+    add_function_knobs_to_calls(call_sites)
 
     # Reordering is now part of context-sensitive optimization.
     if reorder_enabled
@@ -907,7 +935,7 @@ end
 Discover context-sensitive function calls in the loop regions. Insert matrix and 
 function-specific context info (mknobs and fknobs) into actions.
 """
-function context_info_discovery(
+function AST_context_sensitive_transformation(
     actions     :: Vector{Action},
     regions     :: Vector{LoopRegion},
     func_ast    :: Expr, 
@@ -917,7 +945,7 @@ function context_info_discovery(
 )
     # Discover context info for each loop region
     for region in regions
-        context_info_discovery(actions, region, func_ast, symbol_info, liveness, cfg)
+        context_sensitive_transformation(actions, region, func_ast, symbol_info, liveness, cfg)
     end
 
     dprintln(1, 0, "\nContext-sensitive actions to take:")
