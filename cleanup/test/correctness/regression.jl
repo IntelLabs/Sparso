@@ -76,6 +76,20 @@ const sanity_test3 = Test(
     ]
 )
 
+const spmv_sanity_test1 = Test(
+    "spmv-sanity-test1",
+    "spmv-sanity-test1.jl tiny-diag.mtx",
+    [
+        TestPattern(r"Original sum of p=20.169999999999995",
+                     "Test original code"
+        ),
+        TestPattern(r"Manual sum of p=20.169999999999995",
+                     "Test code manually replaced with SpMV!"
+        ),
+        exception_pattern
+    ]
+)
+
 const context_test1 = Test(
     "context-test1",
     "context-test1.jl small-diag.mtx",
@@ -527,6 +541,7 @@ const tests = [
     sanity_test1,
     sanity_test2,
     sanity_test3,
+    spmv_sanity_test1,
     context_test1,
     context_test2,
     context_test2_without_reordering,
