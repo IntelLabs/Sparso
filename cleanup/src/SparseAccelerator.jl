@@ -22,7 +22,7 @@ export FunctionDescription
 
 # Explicitly specify matrix property
 export  SA_CONST_VALUED, SA_CONST_STRUCTURED, 
-        SA_SYMM_STRUCTURED, SA_SYMM_VALUED, SA_STRUCTURE_ONLY
+        SA_SYMM_VALUED, SA_SYMM_STRUCTURED, SA_STRUCTURE_ONLY
 
 export set_matrix_property
 

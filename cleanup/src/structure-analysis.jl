@@ -68,9 +68,11 @@ function find_predefined_properties(
                         sp.constant_structured = 3
                     end
                     if (p & SA_SYMM_VALUED) != 0
+                        dprintln(1, 1, "Predef: symmetric_valued ", sym)
                         sp.symmetric_valued = 3
                     end
                     if (p & SA_SYMM_STRUCTURED) != 0
+                        dprintln(1, 1, "Predef: symmetric_structured ", sym)
                         sp.symmetric_structured = 3
                     end
                     if (p & SA_STRUCTURE_ONLY) != 0
@@ -111,16 +113,21 @@ function find_properties_of_matrices(
         one_property.set_property_for(structure_proxies, region, liveness, symbol_info, cfg)
     end
 
+    # sort by keys 
+    sorter = (x)->sort(collect(keys(x)))
+
     dprintln(1, 0, "\nMatrix structures discovered:")
-    dprintln(1, 1, keys(structure_proxies))
+    dprintln(1, 1, sorter(structure_proxies))
 
     # These are only to cause  structure-related tests fail until structure analysis succeeds.
     dprintln(1, 0, "\nConstant structures discovered:")
-    res = keys(filter((k, v) -> v.constant_structured>0, structure_proxies))
-    dprintln(1, 1, res)
-     
+    dprintln(1, 1, sorter(filter((k, v) -> v.constant_structured>0, structure_proxies)))
+
     dprintln(1, 0, "\nValue symmetry discovered:")
+    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
+
     dprintln(1, 0, "\nStructure symmetry discovered:")
+    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
 
     # Merge with structure info
     constants   = find_constant_values(region, liveness, cfg)
@@ -150,5 +157,5 @@ function find_properties_of_matrices(
         end
     end
 
-    return matrix_properties
+    matrix_properties
 end

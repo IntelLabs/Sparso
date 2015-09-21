@@ -39,7 +39,7 @@ function set_to_str(
     s :: Set
 )
     str = string("[ ")
-    for x in s
+    for x in sort(collect(s), by = e -> string(e))
         str = str * string(x) * ", "
     end
     str = str * "]"
