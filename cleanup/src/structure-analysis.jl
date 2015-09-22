@@ -92,12 +92,13 @@ function find_predefined_properties(
                     dprintln(1, 1, "Predef: symmetric_structured ", sym)
                     sp.symmetric_structured = 3
                 end
+
                 if (p & SA_STRUCTURE_ONLY) != 0
                     # TODO: fill this property?
                 end
                 # add symbol to property map
                 structure_proxies[sym] = sp
-                dprintln(1, 1, "Predef ", sym, ": ", sp)
+                #dprintln(1, 1, "Predef ", sym, ": ", sp)
             end
             # replace the statement with nothing.
             stmt.expr = :(nothing)
