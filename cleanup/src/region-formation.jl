@@ -17,9 +17,10 @@ A region that is composed of a loop. Speeding up loops is the focus of
 Sparse Accelerator.
 """
 type LoopRegion <: Region
-    parent:: Region
-    loop  :: Loop
-    exits :: Set{LoopExit}
+    parent          :: Region
+    loop            :: Loop
+    exits           :: Set{LoopExit}
+    symbol_property :: Symexpr2PropertiesMap
 end
 
 @doc """ 
@@ -30,7 +31,7 @@ function loop_region_formation(
     L       :: Loop,
     cfg     :: CFG
 )
-    region = LoopRegion(parent, L, Set{LoopExit}())
+    region = LoopRegion(parent, L, Set{LoopExit}(), Symexpr2PropertiesMap())
     blocks = cfg.basic_blocks
     for bb_index in L.members
         bb = blocks[bb_index]

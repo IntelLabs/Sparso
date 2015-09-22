@@ -133,11 +133,40 @@ function find_properties_of_matrices(
     # symbol does not have a constant structure?
     structure_proxies = find_predefined_properties(region, cfg)
 
+    # inherite properties from parent
     if isa(region, LoopRegion)
-        # only inherit positive properties from parent function region
-        pmap = region.parent.symbol_property
-        for (sym, prop) in pmap 
-            
+        for (sym, p) in region.parent.symbol_property
+            if p.constant_valued || 
+                p.constant_structured || 
+                p.is_structure_symmetric ||
+                p.is_symmetric
+                if !haskey(structure_proxies, sym)
+                    structure_proxies[sym] = StructureProxy()
+                end
+                sp = structure_proxies[sym]
+            end
+            if p.constant_valued && sp.constant_valued == 0 
+                sp.constant_valued = 4 
+            end
+            if p.constant_structured && sp.constant_structured == 0
+                sp.constant_structured = 4 
+            end
+            if p.is_symmetric && sp.symmetric_valued == 0
+                sp.symmetric_valued = 4
+            end
+            if p.is_structure_symmetric && sp.symmetric_structured == 0
+                sp.symmetric_structured = 4 
+            end
+        end
+    else
+        constants = find_constant_values(region, liveness, cfg)
+        for c in constants
+            if !haskey(structure_proxies, c)
+                structure_proxies[c] = StructureProxy()
+            end
+            if structure_proxies[c] == 0
+                structure_proxies[c].constant_valued = 1 
+            end
         end
     end
 
@@ -155,7 +184,6 @@ function find_properties_of_matrices(
     dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, sorter(structure_proxies))
 
-    # These are only to cause  structure-related tests fail until structure analysis succeeds.
     dprintln(1, 0, "\n" * region_name * " Constant structures discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.constant_structured>0, structure_proxies)))
 
@@ -166,31 +194,30 @@ function find_properties_of_matrices(
     dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_structured>0, structure_proxies)))
 
     # Merge with structure info
-    constants   = find_constant_values(region, liveness, cfg)
     single_defs = find_single_defs(region, liveness, cfg)
+    symbols = union(single_defs, collect(keys(structure_proxies)))
 
-    symbols = union(constants, single_defs, collect(keys(structure_proxies)))
     for s in symbols
         # These symbols are not necessary related with matrices. But
         # some symbols may be of subtypes of Array, some other may be
         # not (like CHOLMOD.Factor, which is not a matrix, but is realted
         # with matrix). So we'd better not to filter out any symbol.
         matrix_properties[s] = MatrixProperties()
-        if in(s, constants)
-            matrix_properties[s].constant_valued = true
-        end
         if in(s, single_defs)
             matrix_properties[s].is_single_def = true
         end
         
         if haskey(structure_proxies, s) 
             p = structure_proxies[s]
+            matrix_properties[s].constant_valued = (p.constant_valued>0)
             matrix_properties[s].constant_structured = (p.constant_structured>0)
             matrix_properties[s].is_symmetric = (p.symmetric_valued>0)
             matrix_properties[s].is_structure_symmetric = (p.symmetric_structured>0) 
             #matrix_properties[s].is_structure_only = structure_proxies[s].
         end
     end
+
+    region.symbol_property = matrix_properties
 
     matrix_properties
 end

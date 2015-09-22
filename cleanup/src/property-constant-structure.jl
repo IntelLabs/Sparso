@@ -156,6 +156,7 @@ type ConstantStructureProperty <: MatrixProperty
                             [],
                             Vector{Action}(), depend_map)
 
+
         # fill the dependence map by walking through all statements in the region
         for bb_idx in bb_idxs
             bb = cfg.basic_blocks[bb_idx]
@@ -187,6 +188,7 @@ type ConstantStructureProperty <: MatrixProperty
         #  1: constant 
         #  2: external(constant)
         #  3: specified by set_matrix_property statement
+        #  4: inherited from parent region (constant)
         property_map = Dict{Union{GenSym,Symbol}, Int}()
         property_map[sym_non_constant] = -1
 
@@ -229,8 +231,16 @@ type ConstantStructureProperty <: MatrixProperty
             end
             for d in reverse_depend_map[s]
                 if property_map[d] >= 0
-                    property_map[d] = -1
-                    push!(working_set, d)
+                    if property_map[d] == 3
+                        # always favor annotation
+                        dprintln(1, 1, "WW annotation overwrites non_constant ", d)
+                    elseif property_map[d] == 4
+                        # always favor inherit result
+                        dprintln(1, 1, "WW inherit overwrites non_constant ", d)
+                    else
+                        property_map[d] = -1
+                        push!(working_set, d)
+                    end
                 end
             end
         end
