@@ -874,12 +874,11 @@ Discover context-sensitive function calls in the loop region. Insert matrix and
 function-specific context info (mknobs and fknobs).
 """
 function context_sensitive_transformation(
-    actions     :: Vector{Action},
-    region      :: LoopRegion,
-    func_ast    :: Expr,
-    symbol_info :: Sym2TypeMap,
-    liveness    :: Liveness,
-    cfg         :: CFG
+    actions         :: Vector{Action},
+    region          :: LoopRegion,
+    symbol_info     :: Sym2TypeMap,
+    liveness        :: Liveness,
+    cfg             :: CFG
 )
     matrix_properties = find_properties_of_matrices(region, symbol_info, liveness, cfg)
 
@@ -937,15 +936,18 @@ function-specific context info (mknobs and fknobs) into actions.
 """
 function AST_context_sensitive_transformation(
     actions     :: Vector{Action},
+    func_region :: FunctionRegion,
     regions     :: Vector{LoopRegion},
-    func_ast    :: Expr, 
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG
 )
+    # 
+    func_region.symbol_property = find_properties_of_matrices(func_region, symbol_info, liveness, cfg)
+
     # Discover context info for each loop region
     for region in regions
-        context_sensitive_transformation(actions, region, func_ast, symbol_info, liveness, cfg)
+        context_sensitive_transformation(actions, region, symbol_info, liveness, cfg)
     end
 
     dprintln(1, 0, "\nContext-sensitive actions to take:")

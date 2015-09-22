@@ -176,7 +176,12 @@ type ConstantStructureProperty <: MatrixProperty
             end
         end
 
-        # property: 0: unknow, -1: not constant, 1: constant, 2: external(constant)
+        # property value: 
+        #  -1: not constant 
+        #  0: unknow 
+        #  1: constant 
+        #  2: external(constant)
+        #  3: specified by set_matrix_property statement
         property_map = Dict{Union{GenSym,Symbol}, Int}()
         property_map[sym_non_constant] = -1
 
