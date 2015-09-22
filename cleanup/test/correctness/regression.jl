@@ -470,15 +470,15 @@ const set_matrix_property_test1 = Test(
     "set-matrix-property-test1",
     "set-matrix-property-test1.jl",
     [
-        TestPattern(Regex("Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Loop0 Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
@@ -489,26 +489,63 @@ const set_matrix_property_test2 = Test(
     "set-matrix-property-test2",
     "set-matrix-property-test2.jl",
     [
-        TestPattern(Regex("Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :L, :U])),
+
+        TestPattern(Regex("Loop0 Matrix structures discovered:.*\\n.*" * gen_set_regex_string([:A, :L, :U])),
+                     "Test ipm-ref that A L U are recognized as matrics in structure."
+        ),
+
+        TestPattern(Regex("Loop0 Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :L, :U])),
                      "Test ipm-ref that A L U are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
     ]
 )
 
+const set_matrix_property_test3 = Test(
+    "set-matrix-property-test3",
+    "set-matrix-property-test3.jl",
+    [
+        TestPattern(Regex("Func Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A B are recognized as constant in structure."
+        ),
+
+        TestPattern(Regex("Func Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A is recognized as constant in structure."
+        ),
+
+        TestPattern(Regex("Func Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+                     "Test ipm-ref that R is recognized as constant in structure."
+        ),
+
+        TestPattern(Regex("Loop0 Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A B are recognized as constant in structure."
+        ),
+
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A is recognized as constant in structure."
+        ),
+
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+                     "Test ipm-ref that R is recognized as constant in structure."
+        ),
+        exception_pattern
+    ]
+)
+
+
 const constant_structure_test1 = Test(
     "constant-structure-test1",
     "constant-structure-test1.jl",
     [
-        TestPattern(Regex("Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B, :D, :R])),
+        TestPattern(Regex("Loop-4 Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B, :D, :R])),
                      "Test ipm-ref that A B D R are recognized as constant in structure."
         ),
         exception_pattern
@@ -566,6 +603,7 @@ const tests = [
     single_def_test1,
     set_matrix_property_test1,
     set_matrix_property_test2,
+    set_matrix_property_test3,
     constant_structure_test1,
     value_symmetry_test1,
     structure_symmetry_test1

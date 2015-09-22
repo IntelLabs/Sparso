@@ -79,9 +79,11 @@ function find_predefined_properties(
             for (sym, p) in pmap
                 sp = StructureProxy()
                 if (p & SA_CONST_VALUED) != 0
+                    dprintln(1, 1, "Predef: const_valued ", sym)
                     sp.constant_valued = 3
                 end
                 if (p & SA_CONST_STRUCTURED) != 0
+                    dprintln(1, 1, "Predef: const_structured ", sym)
                     sp.constant_structured = 3
                 end
                 if (p & SA_SYMM_VALUED) != 0
@@ -117,41 +119,51 @@ function find_properties_of_matrices(
     liveness        :: Liveness,
     cfg             :: CFG,
 )
-    dprintln(1, 0, "\n---- Matrix Structure Property Analysis -----\n")
+    if isa(region, LoopRegion)
+        first_bb_idx = sort(collect(region.loop.members))[1]
+        region_name = "Loop" * string(first_bb_idx)
+    else
+        region_name = "Func"
+    end
+
+    dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_name * " -----\n")
 
     matrix_properties = Symexpr2PropertiesMap()
 
     # symbol does not have a constant structure?
     structure_proxies = find_predefined_properties(region, cfg)
 
+    if isa(region, LoopRegion)
+        # only inherit positive properties from parent function region
+        pmap = region.parent.symbol_property
+        for (sym, prop) in pmap 
+            
+        end
+    end
 
     all_structure_properties = [
         ConstantStructureProperty()
     ]
 
-    if isa(region, LoopRegion)
-        for one_property in all_structure_properties
-            one_property.set_property_for(structure_proxies, region, liveness, symbol_info, cfg)
-        end
-    else
-        return matrix_properties
+    for one_property in all_structure_properties
+        one_property.set_property_for(structure_proxies, region, liveness, symbol_info, cfg)
     end
 
     # sort by keys 
     sorter = (x)->sort(collect(keys(x)))
 
-    dprintln(1, 0, "\nMatrix structures discovered:")
+    dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, sorter(structure_proxies))
 
     # These are only to cause  structure-related tests fail until structure analysis succeeds.
-    dprintln(1, 0, "\nConstant structures discovered:")
+    dprintln(1, 0, "\n" * region_name * " Constant structures discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.constant_structured>0, structure_proxies)))
 
-    dprintln(1, 0, "\nValue symmetry discovered:")
+    dprintln(1, 0, "\n" * region_name * " Value symmetry discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
 
-    dprintln(1, 0, "\nStructure symmetry discovered:")
-    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
+    dprintln(1, 0, "\n" * region_name * " Structure symmetry discovered:")
+    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_structured>0, structure_proxies)))
 
     # Merge with structure info
     constants   = find_constant_values(region, liveness, cfg)

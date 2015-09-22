@@ -12,7 +12,7 @@ type ConstantStructureProperty <: MatrixProperty
         call_sites :: CallSites,
         level      :: Int
     )
-        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode]
+        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode, ASCIIString]
 
         symbol_info = call_sites.symbol_info
         patterns    = call_sites.patterns
@@ -131,14 +131,19 @@ type ConstantStructureProperty <: MatrixProperty
     """
     function set_property_for(
         mat_property:: Dict,
-        region      :: LoopRegion,
+        region      :: Region,
         liveness    :: Liveness,
         symbol_info :: Sym2TypeMap,
         cfg         :: CFG
     )
-        L           = region.loop
         constants   = find_constant_values(region, liveness, cfg)
         single_defs = find_single_defs(region, liveness, cfg)
+
+        if isa(region, LoopRegion)
+            bb_idxs = region.loop.members
+        else
+            bb_idxs = keys(cfg.basic_blocks)
+        end
 
         #sym_non_constant = gensym("SYMBOL_NON_CONSTANT")
         const sym_non_constant = Symbol(:NON_CONSTANT)
@@ -152,7 +157,7 @@ type ConstantStructureProperty <: MatrixProperty
                             Vector{Action}(), depend_map)
 
         # fill the dependence map by walking through all statements in the region
-        for bb_idx in L.members
+        for bb_idx in bb_idxs
             bb = cfg.basic_blocks[bb_idx]
             for stmt in bb.statements
                 expr = stmt.expr
