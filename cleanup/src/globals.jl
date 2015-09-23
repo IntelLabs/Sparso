@@ -69,7 +69,8 @@ function set_options(args...)
             if !sparse_acc_enabled
                 # Insert sparse accelerator as 1 pass into the optimization framework
                 sparse_accelerator_pass = OptFramework.optPass(SparseAccelerator.entry, true)
-                OptFramework.setOptPasses([sparse_accelerator_pass])
+                #OptFramework.setOptPasses([sparse_accelerator_pass])
+                CompilerTools.OptFramework.addOptPass(sparse_accelerator_pass)
             end
             global sparse_acc_enabled = true
         elseif arg == SA_VERBOSE 

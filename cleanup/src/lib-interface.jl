@@ -369,8 +369,8 @@ format, in CSR format.
 """
 function create_CSR(A :: SparseMatrixCSC)
     ccall((:CSR_Create, LIB_PATH), Ptr{Void},
-        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-        A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+        A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval))
 end
 
 @doc """ Destroy the CSR representation of the sparse matrix. """
