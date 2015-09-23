@@ -45,7 +45,7 @@ const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
 abstract MatrixProperty
 
 include("property-constant-structure.jl")
-include("property-symmetric-value.jl")
+#include("property-symmetric-value.jl")
 
 @doc """
 Collect predefined maxtric property accoding from set_matrix_property statements
