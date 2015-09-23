@@ -1,5 +1,7 @@
 @doc """ The whole function region. Not really used so far. """
-type WholeFunction <: Region
+type FunctionRegion <: Region
+    func_ast        :: Expr
+    symbol_property :: Symexpr2PropertiesMap
 end
 
 @doc """ 
@@ -15,18 +17,21 @@ A region that is composed of a loop. Speeding up loops is the focus of
 Sparse Accelerator.
 """
 type LoopRegion <: Region
-    loop  :: Loop
-    exits :: Set{LoopExit}
+    parent          :: Region
+    loop            :: Loop
+    exits           :: Set{LoopExit}
+    symbol_property :: Symexpr2PropertiesMap
 end
 
 @doc """ 
 Form a region with the loop.
 """
 function loop_region_formation(
-    L   :: Loop,
-    cfg :: CFG
+    parent  :: Region,
+    L       :: Loop,
+    cfg     :: CFG
 )
-    region = LoopRegion(L, Set{LoopExit}())
+    region = LoopRegion(parent, L, Set{LoopExit}(), Symexpr2PropertiesMap())
     blocks = cfg.basic_blocks
     for bb_index in L.members
         bb = blocks[bb_index]
@@ -44,6 +49,7 @@ end
 Form regions for all the outermost loops in the control flow graph.
 """
 function loop_region_formation(
+    parent    :: Region,
     cfg       :: CFG, 
     loop_info :: DomLoops
 )
@@ -59,7 +65,7 @@ function loop_region_formation(
         end
         
         if is_outermost
-            region = loop_region_formation(L, cfg)
+            region = loop_region_formation(parent , L, cfg)
             push!(regions, region)
         end
     end
@@ -70,11 +76,12 @@ end
 Form regions.
 """
 function region_formation(
+    parent    :: Region,
     cfg       :: CFG, 
     loop_info :: DomLoops
 )
     # So far, form only loop regions.
     # TODO: (1) Connect multiple loop regions together into a bigger region 
     #       (2) Extend a region to include non-loop code
-    return loop_region_formation(cfg, loop_info)
+    return loop_region_formation(parent, cfg, loop_info)
 end

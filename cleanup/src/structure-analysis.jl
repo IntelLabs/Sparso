@@ -41,48 +41,67 @@ Collect predefined maxtric property accoding from set_matrix_property statements
 in a loop region.
 """
 function find_predefined_properties(
-    region      :: LoopRegion,
+    region      :: Region,
     cfg         :: CFG
 )
     structure_proxies = Dict{Union{GenSym, Symbol}, StructureProxy}()
 
-    for bb_idx in region.loop.members
-        bb = cfg.basic_blocks[bb_idx]
-        for stmt in bb.statements
-            expr = stmt.expr
-            if typeof(expr) != Expr || expr.head != :call
-                continue
+    stmts = []
+
+    if isa(region, LoopRegion)
+        for bb_idx in region.loop.members
+            bb = cfg.basic_blocks[bb_idx]
+            append!(stmts, bb.statements)
+        end
+    elseif isa(region, FunctionRegion)
+        # only check the entry block
+        for (bb_idx, bb) in cfg.basic_blocks
+            if bb.label == -1
+                stmts = bb.statements
+                break
             end
-            ast = expr
-            m, func_name = resolve_call_names(ast.args)
-            if func_name == "set_matrix_property"
-                pmap = eval(ast.args[2])
-                #dump(pmap)
-                for (sym, p) in pmap
-                    sp = StructureProxy()
-                    if (p & SA_CONST_VALUED) != 0
-                        sp.constant_valued = 3
-                    end
-                    if (p & SA_CONST_STRUCTURED) != 0
-                        sp.constant_structured = 3
-                    end
-                    if (p & SA_SYMM_VALUED) != 0
-                        dprintln(1, 1, "Predef: symmetric_valued ", sym)
-                        sp.symmetric_valued = 3
-                    end
-                    if (p & SA_SYMM_STRUCTURED) != 0
-                        dprintln(1, 1, "Predef: symmetric_structured ", sym)
-                        sp.symmetric_structured = 3
-                    end
-                    if (p & SA_STRUCTURE_ONLY) != 0
-                        # TODO: fill this property?
-                    end
-                    # add symbol to property map
-                    structure_proxies[sym] = sp
-                    dprintln(1, 1, "Predef ", sym, ": ", sp)
+        end
+    else
+        error("Unknown region type")
+    end 
+
+    for stmt in stmts
+        expr = stmt.expr
+        if typeof(expr) != Expr || expr.head != :call
+            continue
+        end
+
+        ast = expr
+        m, func_name = resolve_call_names(ast.args)
+        if func_name == "set_matrix_property"
+            pmap = eval(ast.args[2])
+            #dump(pmap)
+            for (sym, p) in pmap
+                sp = StructureProxy()
+                if (p & SA_CONST_VALUED) != 0
+                    dprintln(1, 1, "Predef: const_valued ", sym)
+                    sp.constant_valued = 3
                 end
+                if (p & SA_CONST_STRUCTURED) != 0
+                    dprintln(1, 1, "Predef: const_structured ", sym)
+                    sp.constant_structured = 3
+                end
+                if (p & SA_SYMM_VALUED) != 0
+                    dprintln(1, 1, "Predef: symmetric_valued ", sym)
+                    sp.symmetric_valued = 3
+                end
+                if (p & SA_SYMM_STRUCTURED) != 0
+                    dprintln(1, 1, "Predef: symmetric_structured ", sym)
+                    sp.symmetric_structured = 3
+                end
+
+                if (p & SA_STRUCTURE_ONLY) != 0
+                    # TODO: fill this property?
+                end
+                # add symbol to property map
+                structure_proxies[sym] = sp
+                #dprintln(1, 1, "Predef ", sym, ": ", sp)
             end
-            
             # replace the statement with nothing.
             stmt.expr = :(nothing)
         end
@@ -95,15 +114,61 @@ end
 A region is currently defined as a loop region. 
 """
 function find_properties_of_matrices(
-    region      :: LoopRegion,
-    symbol_info :: Sym2TypeMap,
-    liveness    :: Liveness,
-    cfg         :: CFG
+    region          :: Region,
+    symbol_info     :: Sym2TypeMap,
+    liveness        :: Liveness,
+    cfg             :: CFG,
 )
-    dprintln(1, 0, "\n---- Matrix Structure Property Analysis -----\n")
+    if isa(region, LoopRegion)
+        first_bb_idx = sort(collect(region.loop.members))[1]
+        region_name = "Loop" * string(first_bb_idx)
+    else
+        region_name = "Func"
+    end
+
+    dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_name * " -----\n")
+
+    matrix_properties = Symexpr2PropertiesMap()
 
     # symbol does not have a constant structure?
     structure_proxies = find_predefined_properties(region, cfg)
+
+    # inherite properties from parent
+    if isa(region, LoopRegion)
+        for (sym, p) in region.parent.symbol_property
+            if p.constant_valued || 
+                p.constant_structured || 
+                p.is_structure_symmetric ||
+                p.is_symmetric
+                if !haskey(structure_proxies, sym)
+                    structure_proxies[sym] = StructureProxy()
+                end
+                sp = structure_proxies[sym]
+            end
+            if p.constant_valued && sp.constant_valued == 0 
+                sp.constant_valued = 4 
+            end
+            if p.constant_structured && sp.constant_structured == 0
+                sp.constant_structured = 4 
+            end
+            if p.is_symmetric && sp.symmetric_valued == 0
+                sp.symmetric_valued = 4
+            end
+            if p.is_structure_symmetric && sp.symmetric_structured == 0
+                sp.symmetric_structured = 4 
+            end
+        end
+    else
+        constants = find_constant_values(region, liveness, cfg)
+        for c in constants
+            if !haskey(structure_proxies, c)
+                structure_proxies[c] = StructureProxy()
+            end
+            if structure_proxies[c] == 0
+                structure_proxies[c].constant_valued = 1 
+            end
+        end
+    end
 
     all_structure_properties = [
         ConstantStructureProperty()
@@ -116,46 +181,43 @@ function find_properties_of_matrices(
     # sort by keys 
     sorter = (x)->sort(collect(keys(x)))
 
-    dprintln(1, 0, "\nMatrix structures discovered:")
+    dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, sorter(structure_proxies))
 
-    # These are only to cause  structure-related tests fail until structure analysis succeeds.
-    dprintln(1, 0, "\nConstant structures discovered:")
+    dprintln(1, 0, "\n" * region_name * " Constant structures discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.constant_structured>0, structure_proxies)))
 
-    dprintln(1, 0, "\nValue symmetry discovered:")
+    dprintln(1, 0, "\n" * region_name * " Value symmetry discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
 
-    dprintln(1, 0, "\nStructure symmetry discovered:")
-    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
+    dprintln(1, 0, "\n" * region_name * " Structure symmetry discovered:")
+    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_structured>0, structure_proxies)))
 
     # Merge with structure info
-    constants   = find_constant_values(region, liveness, cfg)
     single_defs = find_single_defs(region, liveness, cfg)
+    symbols = union(single_defs, collect(keys(structure_proxies)))
 
-    symbols = union(constants, single_defs, collect(keys(structure_proxies)))
-    matrix_properties = Symexpr2PropertiesMap()
     for s in symbols
         # These symbols are not necessary related with matrices. But
         # some symbols may be of subtypes of Array, some other may be
         # not (like CHOLMOD.Factor, which is not a matrix, but is realted
         # with matrix). So we'd better not to filter out any symbol.
         matrix_properties[s] = MatrixProperties()
-        if in(s, constants)
-            matrix_properties[s].constant_valued = true
-        end
         if in(s, single_defs)
             matrix_properties[s].is_single_def = true
         end
         
         if haskey(structure_proxies, s) 
             p = structure_proxies[s]
+            matrix_properties[s].constant_valued = (p.constant_valued>0)
             matrix_properties[s].constant_structured = (p.constant_structured>0)
             matrix_properties[s].is_symmetric = (p.symmetric_valued>0)
             matrix_properties[s].is_structure_symmetric = (p.symmetric_structured>0) 
             #matrix_properties[s].is_structure_only = structure_proxies[s].
         end
     end
+
+    region.symbol_property = matrix_properties
 
     matrix_properties
 end

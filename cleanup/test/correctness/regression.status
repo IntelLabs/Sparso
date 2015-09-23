@@ -1,6 +1,7 @@
 Testing sanity-test1: Pass
 Testing sanity-test2: Pass
 Testing sanity-test3: Pass
+Testing spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
 Testing context-test1: FAIL. See context-test1.log
     There only change in the AST is replacing A*p with SpMV with a fknob. It runs
     and gives the correct sum. However, it takes 71 iterations, instead of 4
@@ -31,83 +32,12 @@ Testing context-test1: FAIL. See context-test1.log
         Accelerated sum of x=-1.577312043352408e-5
         Accelerated k=71
         Accelerated rel_err=6.597433591294558e-11
+
 Testing context-test2: Pass
 Testing context-test2-without-reordering: Pass
-Testing context-test3: FAIL. See context-test3.log
-    We have generated all knobs with correct values, and were able to run. However,
-    the sum of x is wrong. I am going to further debug it. Some details:
-
-    Context-sensitive actions to take:
-        Insert action:
-            __AT__ = (Main.ctranspose)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})
-        outisde loop of BBs [0, 4, -4, 2, 3, 1] before loop head BB 0
-        
-        Insert action:
-            ##mknobExpr#8691 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##mknobD#8697 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##mknob__AT__#8698 = (SparseAccelerator.new_matrix_knob)(__AT__,true,true,false,false,false,false)
-            ##mknobR#8755 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##mknobB#8747 = (SparseAccelerator.new_matrix_knob)(false,true,false,false,false,true)
-            ##mknobA#8694 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
-            ##fknob#8686 = (SparseAccelerator.new_function_knob)()
-            ##fknob#8746 = (SparseAccelerator.new_function_knob)()
-            ##fknob#8754 = (SparseAccelerator.new_function_knob)()
-            (SparseAccelerator.set_derivative)(##mknobA#8694,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,##mknob__AT__#8698)
-        outisde loop of BBs [0, 4, -4, 2, 3, 1] before loop head BB 0
-        
-        Insert action:
-            (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8691)
-            (SparseAccelerator.delete_matrix_knob)(##mknobD#8697)
-            (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8698)
-            (SparseAccelerator.delete_matrix_knob)(##mknobR#8755)
-            (SparseAccelerator.delete_matrix_knob)(##mknobB#8747)
-            (SparseAccelerator.delete_matrix_knob)(##mknobA#8694)
-            (SparseAccelerator.delete_function_knob)(##fknob#8686)
-            (SparseAccelerator.delete_function_knob)(##fknob#8746)
-            (SparseAccelerator.delete_function_knob)(##fknob#8754)
-        on the edge BB 4 --> BB -6
-        
-        Insert action:
-            (SparseAccelerator.delete_matrix_knob)(##mknobExpr#8691)
-            (SparseAccelerator.delete_matrix_knob)(##mknobD#8697)
-            (SparseAccelerator.delete_matrix_knob)(##mknob__AT__#8698)
-            (SparseAccelerator.delete_matrix_knob)(##mknobR#8755)
-            (SparseAccelerator.delete_matrix_knob)(##mknobB#8747)
-            (SparseAccelerator.delete_matrix_knob)(##mknobA#8694)
-            (SparseAccelerator.delete_function_knob)(##fknob#8686)
-            (SparseAccelerator.delete_function_knob)(##fknob#8746)
-            (SparseAccelerator.delete_function_knob)(##fknob#8754)
-        on the edge BB 2 --> BB -5
-        
-        Insert action:
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobExpr#8691,##fknob#8686)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8694,##fknob#8686)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobD#8697,##fknob#8686)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknob__AT__#8698,##fknob#8686)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobB#8747,##fknob#8746)
-            (SparseAccelerator.add_mknob_to_fknob)(##mknobR#8755,##fknob#8754)
-        outisde loop of BBs [0, 4, -4, 2, 3, 1] before loop head BB 0
-        
-        Insert action:
-            (SparseAccelerator.propagate_matrix_info)(##mknobB#8747,##mknobExpr#8691)
-        after BB 3 statement
-            B = ((top(getfield))(SparseAccelerator,:ADB))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},__AT__::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8686)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-        
-    
-    
-        New AST:
-                B = ((top(getfield))(SparseAccelerator,:ADB))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},D::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},__AT__::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8686)::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32}
-                (SparseAccelerator.propagate_matrix_info)(##mknobB#8747,##mknobExpr#8691) # line 69:
-                ...
-                R = ((top(getfield))(SparseAccelerator,:cholfact_int32))(B::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},##fknob#8746)::Base.SparseMatrix.CHOLMOD.Factor{Float64} # line 75:
-                ...
-                dy = ((top(getfield))(SparseAccelerator,:cholfact_inverse_divide))(R::Base.SparseMatrix.CHOLMOD.Factor{Float64},t2,##fknob#8754) # line 89:
-    
-        Accelerated sum of x=1.071130175439502e10
-
+Testing context-test3: Pass
 Testing context-test4: Pass
 Testing liveness-test1: Pass
-    Todd: please add some test patterns.
 Testing liveness-test2: Pass
 Testing call-replacement-test1: Pass
 Testing call-replacement-test2: Pass
@@ -123,12 +53,12 @@ Testing call-replacement-test11: Pass
 Testing call-replacement-test12: Pass
 Testing name-resolution-test1: Pass
 Testing constant-value-test1: Pass
-Testing single-def-test1: Pass
-Testing set_matrix_property_test1: Pass
+Testing single-def-test1: FAIL. See single-def-test1.log
+Testing set-matrix-property-test1: Pass
+Testing set-matrix-property-test2: FAIL. See set-matrix-property-test2.log
 Testing constant-structure-test1: Pass
 Testing value-symmetry-test1: FAIL. See value-symmetry-test1.log
 Testing structure-symmetry-test1: FAIL. See structure-symmetry-test1.log
-Total: 29
+Total: 31
 Pass : 25
-Fail : 4
-
+Fail : 6

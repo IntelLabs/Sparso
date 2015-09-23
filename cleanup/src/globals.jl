@@ -345,9 +345,10 @@ function AST_transformation(
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
-    regions = region_formation(cfg, loop_info)
+    func_region = FunctionRegion(func_ast, Dict()) 
+    regions = region_formation(func_region, cfg, loop_info)
     actions = Vector{Action}()
-    actions = AST_context_sensitive_transformation(actions, regions, func_ast, symbol_info, liveness, cfg)
+    actions = AST_context_sensitive_transformation(actions, func_region, regions, symbol_info, liveness, cfg)
 end
 
 @doc """ 

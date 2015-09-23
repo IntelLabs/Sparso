@@ -6,16 +6,21 @@
 
 @doc """ Find symbols/GenSyms whose values are constant in the region. """
 function find_constant_values(
-    region   :: LoopRegion,
+    region   :: Region,
     liveness :: Liveness, 
     cfg      :: CFG
 )
     constants = Set{Sym}()
-    L         = region.loop
     blocks    = cfg.basic_blocks
+
+    if isa(region, LoopRegion)
+        bb_idxs = region.loop.members
+    else
+        bb_idxs = keys(blocks)
+    end
     
     # Add all the variables that are read in the region
-    for bb_idx in L.members
+    for bb_idx in bb_idxs
         bb = blocks[bb_idx]
         for stmt in bb.statements
             use = LivenessAnalysis.use(stmt, liveness)
@@ -24,7 +29,7 @@ function find_constant_values(
     end
 
     # Remove all the variables that are written in the region
-    for bb_idx in L.members
+    for bb_idx in bb_idxs
         bb = blocks[bb_idx]
         for stmt in bb.statements
             def = LivenessAnalysis.def(stmt, liveness)
@@ -43,15 +48,20 @@ Find symbols/GenSyms that are statically defined exactly once in the region.
 They are not constants, but finding them is similar to finding constants.
 """
 function find_single_defs(
-    region   :: LoopRegion,
+    region   :: Region,
     liveness :: Liveness, 
     cfg      :: CFG
 )
     single_defs = Set{Sym}()
-    L           = region.loop
     blocks      = cfg.basic_blocks
 
-    for bb_idx in L.members
+    if isa(region, LoopRegion)
+        bb_idxs = region.loop.members
+    else
+        bb_idxs = keys(blocks)
+    end
+
+    for bb_idx in bb_idxs
         bb = blocks[bb_idx]
         for stmt in bb.statements
             def            = LivenessAnalysis.def(stmt, liveness)
