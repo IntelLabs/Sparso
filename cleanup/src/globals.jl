@@ -286,8 +286,10 @@ type MatrixProperties
     is_structure_symmetric :: Bool
     is_structure_only      :: Bool
     is_single_def          :: Bool
+    lower_of               :: Any
+    upper_of               :: Any
 
-    MatrixProperties() = new(false, false, false, false, false, false)
+    MatrixProperties() = new(false, false, false, false, false, false, nothing, nothing)
 end
 typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 

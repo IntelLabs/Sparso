@@ -562,6 +562,23 @@ const set_matrix_property_test4 = Test(
     ]
 )
 
+const set_matrix_property_test5 = Test(
+    "set-matrix-property-test5",
+    "set-matrix-property-test5.jl",
+    [
+        TestPattern(r"Func Upper/Lower matrix discovered:.*\n[\s]*A is lower of B",
+                     "Test ipm-ref that A is recognized as matrics in structure."
+        ),
+        TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B",
+                     "Test ipm-ref that A is recognized as matrics in structure."
+        ),
+        TestPattern(r"Loop3 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B\n[\s]*B is upper of C",
+                     "Test ipm-ref that A is recognized as matrics in structure."
+        ),
+        exception_pattern
+    ]
+)
+
 
 const constant_structure_test1 = Test(
     "constant-structure-test1",
@@ -596,7 +613,7 @@ const structure_symmetry_test1 = Test(
     ]
 )
 
-const tests = [
+const all_tests = [
     sanity_test1,
     sanity_test2,
     sanity_test3,
@@ -627,10 +644,18 @@ const tests = [
     set_matrix_property_test2,
     set_matrix_property_test3,
     set_matrix_property_test4,
+    set_matrix_property_test5,
     constant_structure_test1,
     value_symmetry_test1,
     structure_symmetry_test1
 ]
+
+if isreadable("regression.conf")
+    include("regression.conf")
+    tests = local_tests
+else
+    tests = all_tests
+end
 
 if length(ARGS) > 0
   julia_command = ARGS[1]

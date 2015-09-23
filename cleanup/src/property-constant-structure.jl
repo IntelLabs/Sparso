@@ -5,7 +5,7 @@ type ConstantStructureProperty <: MatrixProperty
     set_property_for    :: Function
 
     @doc """
-    Match an expression pattern and do replacement.
+    Build dependence map for all symbols
     """
     function build_dependence(
         ast        :: Any,
