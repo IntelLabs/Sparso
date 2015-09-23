@@ -1,13 +1,44 @@
 Testing sanity-test1: Pass
 Testing sanity-test2: Pass
 Testing sanity-test3: Pass
+Testing spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
 Testing context-test1: FAIL. See context-test1.log
-Testing context-test2: FAIL. See context-test2.log
+    There only change in the AST is replacing A*p with SpMV with a fknob. It runs
+    and gives the correct sum. However, it takes 71 iterations, instead of 4
+    iterations like the original code. Some details:
+        Context-sensitive actions to take:
+            Insert action:
+                ##mknobA#8217 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
+                ##fknob#8212 = (SparseAccelerator.new_function_knob)()
+            outisde loop of BBs [0, 2, 1] before loop head BB 0
+            
+            Insert action:
+                (SparseAccelerator.delete_matrix_knob)(##mknobA#8217)
+                (SparseAccelerator.delete_function_knob)(##fknob#8212)
+            on the edge BB 0 --> BB -4
+            
+            Insert action:
+                (SparseAccelerator.delete_matrix_knob)(##mknobA#8217)
+                (SparseAccelerator.delete_function_knob)(##fknob#8212)
+            on the edge BB 2 --> BB -5
+            
+            Insert action:
+                (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8217,##fknob#8212)
+            outisde loop of BBs [0, 2, 1] before loop head BB 0
+
+        New AST:
+            Ap = ((top(getfield))(SparseAccelerator,:SpMV))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},p::Array{Float64,1},##fknob#8212)::Array{Float64,1} # line 20:
+        
+        Accelerated sum of x=-1.577312043352408e-5
+        Accelerated k=71
+        Accelerated rel_err=6.597433591294558e-11
+
+Testing context-test2: Pass
 Testing context-test2-without-reordering: Pass
 Testing context-test3: Pass
-Testing context-test4: FAIL. See context-test4.log
+Testing context-test4: Pass
 Testing liveness-test1: Pass
-Testing liveness-test2: FAIL. See liveness-test2.log
+Testing liveness-test2: Pass
 Testing call-replacement-test1: Pass
 Testing call-replacement-test2: Pass
 Testing call-replacement-test3: Pass
@@ -16,16 +47,18 @@ Testing call-replacement-test5: Pass
 Testing call-replacement-test6: Pass
 Testing call-replacement-test7: Pass
 Testing call-replacement-test8: Pass
-Testing call-replacement-test9: FAIL. See call-replacement-test9.log
-Testing call-replacement-test10: FAIL. See call-replacement-test10.log
-Testing call-replacement-test11: FAIL. See call-replacement-test11.log
+Testing call-replacement-test9: Pass
+Testing call-replacement-test10: Pass
+Testing call-replacement-test11: Pass
 Testing call-replacement-test12: Pass
 Testing name-resolution-test1: Pass
 Testing constant-value-test1: Pass
-Testing single-def-test1: Pass
-Testing constant-structure-test1: FAIL. See constant-structure-test1.log
+Testing single-def-test1: FAIL. See single-def-test1.log
+Testing set-matrix-property-test1: Pass
+Testing set-matrix-property-test2: FAIL. See set-matrix-property-test2.log
+Testing constant-structure-test1: Pass
 Testing value-symmetry-test1: FAIL. See value-symmetry-test1.log
 Testing structure-symmetry-test1: FAIL. See structure-symmetry-test1.log
-Total: 28
-Pass : 18
-Fail : 10
+Total: 31
+Pass : 25
+Fail : 6

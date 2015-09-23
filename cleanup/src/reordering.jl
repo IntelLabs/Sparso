@@ -210,8 +210,7 @@ function discover_SpMVs(
     L      = region.loop
     blocks = cfg.basic_blocks
     SpMVs  = CallSites(Set{CallSite}(), region, symbol_info, 
-                       Symexpr2PropertiesMap(), Vector{Pattern}(),
-                       actions, Dict{Symexpr, Symbol}())
+                       Vector{Pattern}(), actions, nothing)
     for bb_idx in L.members
         bb         = blocks[bb_idx]
         statements = bb.statements
@@ -375,6 +374,41 @@ function create_reorder_actions(
         end
     end
 end
+
+@doc """ 
+Perform analyses for reordering. Write the intended transformation into actions.
+"""
+function reordering(
+    actions     :: Vector{Action},
+    region      :: LoopRegion,
+    symbol_info :: Sym2TypeMap, 
+    liveness    :: Liveness, 
+    cfg         :: CFG,
+    call_sites  :: CallSites
+)
+    if call_sites.extra.reordering_decider == nothing
+        return actions
+    end
+    assert(!isempty(call_sites.extra.reordering_FAR))
+
+    decider = call_sites.extra.reordering_decider
+    FAR     = call_sites.extra.reordering_FAR
+    fknob   = call_sites.extra.function_knobs[decider]
+
+    distributive = check_distributivity(region, cfg, symbol_info)
+    if distributive
+        stmt_clusters = find_inter_dependent_arrays(region, cfg, symbol_info)
+        reorder_graph = discover_reorderable_arrays(region, stmt_clusters, liveness, cfg, decider, FAR, fknob)
+        create_reorder_actions(actions, reorder_graph, region, symbol_info, liveness, cfg, FAR)
+    end
+
+    dprintln(1, 0, "\nReordering actions to take:", actions)
+    
+    actions
+end
+
+# The functions below are obsolete, as we change to let the library to decide
+# reordering or not, permutation vectors, etc.
 
 @doc """ 
 Find the first arrays to reorder from the function's input parameters. So far,

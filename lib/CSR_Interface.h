@@ -68,11 +68,6 @@ void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, co
 
 int CSR_GetBandwidth(CSR_Handle *A);
 
-struct MatrixKnob;
-
-void CSR_ReorderMatrix(int numRows, int numCols, int *rowptr, int *colidx, double *values, int *i1, int *j1, double *v1, 
-                 int *perm, int *inversePerm, bool oneBasedOutput);
-                 
 // vector routines
 void reorderVector(double *v, double *tmp, const int *perm, int len);
 void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len);
@@ -93,6 +88,9 @@ double sum(int n, const double *x);
 double minimum(int n, const double *x);
 // w = min(x, alpha)
 void min(int n, double *w, const double *x, double alpha); 
+void CSR_abs(int n, double *w, const double *x);
+void CSR_exp(int n, double *w, const double *x);
+void CSR_log1p(int n, double *w, const double *x);
 
 void tallSkinnyDGEMM(
   int transA, int transB,

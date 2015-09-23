@@ -9,6 +9,23 @@ type UndescribedFunction <: Exception
     parameter_types :: Tuple
 end
 
+type NonDistributiveFunction <: Exception
+    module_name     :: String
+    function_name   :: String
+    parameter_types :: Tuple
+end
+
+type UnhandledExpr <: Exception
+    head
+    args
+end
+
+type ConflictPermutation <: Exception
+    from   :: Any # InterDependenceGraphVertex
+    vertex :: Any # InterDependenceGraphVertex
+    color  :: Int
+end
+
 type UnresolvedFunction <: Exception
     head
     args

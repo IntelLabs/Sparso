@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include <omp.h>
+#include <mkl.h>
 
 #include "SpMP/Utils.hpp"
 
@@ -40,9 +41,23 @@ void waxpby_(int n, T *w, T alpha, const T *x, T beta, const T *y)
     }
   }
   else if (-1 == alpha) {
+    if (0 == beta) {
+#pragma omp parallel for
+      for (int i = 0; i < n; ++i) {
+        w[i] = -x[i];
+      }
+    }
+    else {
+#pragma omp parallel for
+      for (int i = 0; i < n; ++i) {
+        w[i] = beta*y[i] - x[i];
+      }
+    }
+  }
+  else if (0 == beta) {
 #pragma omp parallel for
     for (int i = 0; i < n; ++i) {
-      w[i] = beta*y[i] - x[i];
+      w[i] = alpha*x[i];
     }
   }
   else {
@@ -69,6 +84,12 @@ void waxpb_(int n, T *w, T alpha, const T *x, T beta)
       for (int i = 0; i < n; ++i) {
         w[i] = x[i] + beta;
       }
+    }
+  }
+  else if (0 == beta) {
+#pragma omp parallel for
+    for (int i = 0; i < n; ++i) {
+      w[i] = alpha*x[i];
     }
   }
   else {
@@ -171,6 +192,42 @@ void min(int n, double *w, const double *x, double alpha)
   for (int i = 0; i < n; i++) {
     w[i] = min(x[i], alpha);
   }
+}
+
+void CSR_abs(int n, double *w, const double *x)
+{
+#pragma omp parallel for
+  for (int i = 0; i < n; i++) {
+    w[i] = fabs(x[i]);
+  }
+}
+
+void CSR_exp(int n, double *w, const double *x)
+{
+#pragma omp parallel
+  {
+    int begin, end;
+    SpMP::getSimpleThreadPartition(&begin, &end, n);
+    vdExp(end - begin, x + begin, w + begin);
+  }
+/*#pragma omp parallel for
+  for (int i = 0; i < n; i++) {
+    w[i] = exp(x[i]);
+  }*/
+}
+
+void CSR_log1p(int n, double *w, const double *x)
+{
+#pragma omp parallel
+  {
+    int begin, end;
+    SpMP::getSimpleThreadPartition(&begin, &end, n);
+    vdLog1p(end - begin, x + begin, w + begin);
+  }
+/*#pragma omp parallel for
+  for (int i = 0; i < n; i++) {
+    w[i] = log1p(x[i]);
+  }*/
 }
 
 } // extern "C"

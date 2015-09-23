@@ -72,6 +72,10 @@ fknob. But if there is one, since the function may have matrix inputs/output,
 the matrix-specific context info (mknobs) may need to be remembered in the fknob.
 These matrices are specified by matrices_to_track. Symbolic arguments may be 
 used here, in terms of the arguments in the new AST.
+The matched function call can decide reordering or not, based on its power. If
+it decides to reorder, the arrays it first reorders (First Arrays Reordered) are
+specified by reoredering_FAR; the first of the arrays is the one that determines
+permutation vectors, called Seed.
 """
 immutable ExprPattern <: Pattern
     name              :: String # Name of the pattern
@@ -83,6 +87,8 @@ immutable ExprPattern <: Pattern
     fknob_creator     :: String
     fknob_deletor     :: String
     matrices_to_track :: Tuple
+    reordering_power  :: Int
+    reordering_FAR    :: Tuple
 end
 
 @doc """
@@ -119,6 +125,8 @@ const SpMV_3_parameters_pattern = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -132,6 +140,8 @@ const SpMV_4_parameters_pattern = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -145,6 +155,8 @@ const SpMV_6_parameters_pattern = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -157,6 +169,8 @@ const number_times_matrix_vector_pattern = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -169,6 +183,8 @@ const number_times_vector_pattern = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -182,6 +198,8 @@ const WAXPBY_4_parameters_pattern = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -197,9 +215,12 @@ const dot_pattern1 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
+@doc """ A * x => SpMV(A, x) """
 const SpMV_pattern1 = ExprPattern(
     "SpMV_pattern1",
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
@@ -210,37 +231,30 @@ const SpMV_pattern1 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
+@doc """ a * A * x + g => SpMV(a, A, x, 0, x, g) """
 const SpMV_pattern2 = ExprPattern(
     "SpMV_pattern2",
-    (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
-    (:NO_SUB_PATTERNS,),
-    do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
-    do_nothing,
-    "",
-    "",
-    ()
-)
-
-const SpMV_pattern3 = ExprPattern(
-    "SpMV_pattern3",
     (:call, GlobalRef(Main, :+), Vector, Number),
-    (nothing, number_times_matrix_vector_pattern, nothing),
+    (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
      :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
-const SpMV_pattern4 = ExprPattern(
-    "SpMV_pattern4",
+@doc """ a * A * x => SpMV(a, A, x) """
+const SpMV_pattern3 = ExprPattern(
+    "SpMV_pattern3",
     (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -249,11 +263,14 @@ const SpMV_pattern4 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
-const SpMV_pattern5 = ExprPattern(
-    "SpMV_pattern5",
+@doc """ SpMV(a, A, x) + g => SpMV(a, A, x, 0, x, g) """
+const SpMV_pattern4 = ExprPattern(
+    "SpMV_pattern4",
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
@@ -262,9 +279,12 @@ const SpMV_pattern5 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
+@doc """ A_mul_B!(y, A, x) = SpMV!(y, A, x) """
 const SpMV!_pattern1 = ExprPattern(
     "SpMV!_pattern1",
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
@@ -275,9 +295,12 @@ const SpMV!_pattern1 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
+@doc """ z = SpMV(a, A, x, b, y, g), z is x or y => SpMV!(z, a, A, x, b, y, g) """
 const SpMV!_pattern2 = ExprPattern(
     "SpMV!_pattern2",
     (:(=), Vector, Vector),
@@ -288,19 +311,40 @@ const SpMV!_pattern2 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
+@doc """ x = a * A * x => SpMV!(x, a, A, x, 0, x, 0) """
 const SpMV!_pattern3 = ExprPattern(
     "SpMV!_pattern3",
     (:(=), Vector, Vector),
     (nothing, nothing, SpMV_3_parameters_pattern),
     LHS_in_RHS,
     (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, 0, :arg1, :aarg27),
+     :arg1, :aarg22, :aarg23, :aarg24, 0.0, :arg1, 0.0),
     do_nothing,
     "",
     "",
+    (),
+    0,
+    ()
+)
+
+@doc """ A_mul_B!(a, A, x, b, y) => SpMV!(y, a, A, x, b, y , 0) """
+const SpMV!_pattern4 = ExprPattern(
+    "SpMV_pattern4",
+    (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+     :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
     ()
 )
 
@@ -314,6 +358,8 @@ const WAXPBY_pattern1 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -327,6 +373,8 @@ const WAXPBY_pattern2 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -340,6 +388,8 @@ const WAXPBY!_pattern1 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -353,6 +403,8 @@ const element_wise_multiply_pattern1 = ExprPattern(
     do_nothing,
     "",
     "",
+    (),
+    0,
     ()
 )
 
@@ -363,9 +415,10 @@ expr_patterns = [
     SpMV_pattern2,
     SpMV_pattern3,
     SpMV_pattern4,
-    SpMV_pattern5,
     SpMV!_pattern1,
     SpMV!_pattern2,
+    SpMV!_pattern3,
+    SpMV!_pattern4,
     WAXPBY_pattern1,
     WAXPBY_pattern2,
     WAXPBY!_pattern1,
@@ -507,13 +560,13 @@ function match_replace(
     ast        :: Expr,
     call_sites :: CallSites
 )
-    if pattern == CS_last_resort_pattern
-        # This is the only pattern we do special handling. When it is reached, 
-        # it means all other patterns have been tried and do not work, and this
-        # one will tell us to do something special
-        return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
-    end
-    
+    #if pattern == CS_last_resort_pattern
+    #    # This is the only pattern we do special handling. When it is reached, 
+    #    # it means all other patterns have been tried and do not work, and this
+    #    # one will tell us to do something special
+    #    return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
+    #end
+
     symbol_info = call_sites.symbol_info
     if match_skeletons(skeleton, pattern.skeleton)
         # Check sub-expr_patterns
@@ -543,15 +596,18 @@ function match_replace(
                 return false
             end
         end
-        
-        dprintln(1, 0, "\n\nReplace")
+
+        dprintln(1, 0, "\n\nAccording to pattern")
+        dprintln(1, 1, pattern)
+        dprintln(1, 0, "replace")
         dsprintln(1, 1, symbol_info, ast)
 
         replace(pattern, ast, symbol_info)
         
         if pattern.post_processing != do_nothing
             if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
-                                        pattern.fknob_deletor, pattern.matrices_to_track)
+                                        pattern.fknob_deletor, pattern.matrices_to_track,
+                                        pattern.reordering_power, pattern.reordering_FAR)
                 # AST has already been changed by replace(). However, post 
                 # processing fails. That AST might be wrong. So abort 
                 dprintln(1, 0, "to")
@@ -564,9 +620,7 @@ function match_replace(
         
         dprintln(1, 0, "to")
         dsprintln(1, 1, symbol_info, ast)
-        dprintln(1, 0, "according to pattern")
-        dprintln(1, 1, pattern)
-        
+
         return true
     end
     return false
@@ -613,7 +667,9 @@ function replace(
     expr        :: Expr,
     symbol_info :: Sym2TypeMap
 )
-    dprintln(1, 0, "Replace")
+    dprintln(1, 0, "\n\nAccording to pattern")
+    dprintln(1, 1, pattern)
+    dprintln(1, 0, "replace")
     dsprintln(1, 1, symbol_info, prev_expr)
     dsprintln(1, 1, symbol_info, expr)
 
@@ -636,8 +692,6 @@ function replace(
     dprintln(1, 0, "to")
     dsprintln(1, 1, symbol_info, prev_expr)
     dsprintln(1, 1, symbol_info, expr)
-    dprintln(1, 0, "according to pattern")
-    dprintln(1, 1, pattern)
 end
 
 @doc """
@@ -687,8 +741,7 @@ function replace_calls(
     cfg         :: CFG
 )
     call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, 
-                            Symexpr2PropertiesMap(), expr_patterns,
-                            Vector{Action}(), Dict{Symexpr, Symbol}())
+                            expr_patterns, Vector{Action}(), nothing)
     for (bb_idx, bb) in cfg.basic_blocks
         prev_expr = nothing
         for stmt in bb.statements

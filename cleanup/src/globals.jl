@@ -39,15 +39,11 @@ WAXPBY, etc. with calls to the corresponding SPMP library functions.
 """
 const SA_REPLACE_CALLS = 40
 
-@doc """ Enable reordering of arrays. """
-const SA_REORDER = 48
-
-@doc """ Enable reordering only when it is potentially beneficial """
-const SA_REORDER_WHEN_BENEFICIAL = 56
-
 @doc """ Enable context-sensitive optimization. """
-const SA_CONTEXT = 64
+const SA_CONTEXT = 48
 
+@doc """ Enable reordering of arrays. """
+const SA_REORDER = 56
 
 # The internal booleans corresponding to the above options, and their default values
 sparse_acc_enabled            = false
@@ -57,13 +53,13 @@ use_MKL                       = false
 use_SPMP                      = true
 replace_calls_enabled         = false
 reorder_enabled               = false
-reorder_when_beneficial       = false
+reorder_when_beneficial       = true # By default, reordering with benefit-cost analysis
 context_sensitive_opt_enabled = false
 
 @doc """ 
 Set options for SparseAccelerator. The arguments can be any one or more 
-of the following: SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, 
-SA_REORDER_WHEN_BENEFICIAL. They can appear in any order, except that 
+of the following: SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP. 
+They can appear in any order, except that 
 SA_USE_JULIA, SA_USE_MKL and SA_USE_SPMP are exclusive with each other, and the
 last one of them wins. 
 """
@@ -88,12 +84,14 @@ function set_options(args...)
             global use_Julia = false; global use_MKL = false; global use_SPMP = true
         elseif arg == SA_REPLACE_CALLS
             global replace_calls_enabled = true
-        elseif arg == SA_REORDER
-            global reorder_enabled = true
-        elseif arg == SA_REORDER_WHEN_BENEFICIAL 
-            global reorder_when_beneficial = true
         elseif arg == SA_CONTEXT
             global context_sensitive_opt_enabled = true
+        elseif arg == SA_REORDER
+            # Reordering is a kind of context-sensitive optimization: without
+            # know a matrix is constant valued, the library might not want to
+            # do reordering.
+            global context_sensitive_opt_enabled = true
+            global reorder_enabled               = true
         else
             # TODO: print usage info
         end
@@ -150,7 +148,7 @@ function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
 end
 
 @doc """ Is the type a scalar (number), or an array? """
-function is_number_or_array(typ :: Type)
+function number_or_array(typ :: Type)
     is_number = (typ <: Number)
 
     # We assume the user program does not use Range for any array
@@ -162,9 +160,9 @@ end
 
 @doc """ Are the types scalars (numbers), or are some of them arrays? """
 function numbers_or_arrays(result_type, arg_types :: Tuple)
-    all_numbers, some_arrays = is_number_or_array(result_type)
+    all_numbers, some_arrays = number_or_array(result_type)
     for t in arg_types
-        is_number, is_array = is_number_or_array(t)
+        is_number, is_array = number_or_array(t)
         all_numbers         = all_numbers && is_number
         some_arrays         = some_arrays || is_array
     end
@@ -202,13 +200,14 @@ function resolve_call_names(call_args :: Vector)
         function_name = string(call_args[1])
     elseif isa(call_args[1], TopNode) && length(call_args) == 3
         # Example: top(getfield), SparseAccelerator,:SpMV
-        if call_args[1] == TopNode(:getfield)
+        # special case: top(getfield), GenSym, ...
+        if call_args[1] == TopNode(:getfield) && !isa(call_args[2], GenSym)
             module_name   = module_or_function_name(call_args[2])
             function_name = module_or_function_name(call_args[3])
         else
             function_name = module_or_function_name(call_args[1].name)
         end
-    elseif  isa(call_args[1], Expr) && call_args[1].head == :call
+    elseif isa(call_args[1], Expr) && call_args[1].head == :call
         # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
         return resolve_call_names(call_args[1].args)
     end
@@ -244,10 +243,10 @@ function look_for_function(
     return nothing
 end
 
-@doc """ Abstract type for a pattern. """
+@doc """ Abstract type for a pattern to match and/or replace AST nodes. """
 abstract Pattern
 
-@doc """ Abstract type for an action to take in code transformation"""
+@doc """ Abstract type for an action to take in transforming CFG. """
 abstract Action
 
 @doc """ 
@@ -278,6 +277,8 @@ is_symmetric          : The matrix is symmetric in value (and of course symmetri
 is_structure_symmetric: The matrix is symmetric in structure. 
 is_structure_only     : Only the structure of matrix is to be used.
 is_single_def         : The matrix is statically defined only once.
+
+TODO: get ride of is_structure_only. It seems to be internal to the library only.
 """
 type MatrixProperties
     constant_valued        :: Bool
@@ -286,6 +287,8 @@ type MatrixProperties
     is_structure_symmetric :: Bool
     is_structure_only      :: Bool
     is_single_def          :: Bool
+
+    MatrixProperties() = new(false, false, false, false, false, false)
 end
 typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 
@@ -296,18 +299,16 @@ Some patterns may need matrix properties in order to match.
 The patterns to match are specified by the specific analysis. In addition to the 
 direct change of the call site ASTs due to replacement, there might be additional
 actions resulted (like hoisting some computation out of a loop, etc.)
-The call site ASTs might also be added matrix knobs and function knobs (We 
-remember only matrix knobs here. Function knobs can be remembered in future, if
-needed.
+Additional information specific to each analysis can be attached to the "extra"
+field.
 """
 type CallSites
-    sites             :: Set{CallSite}
-    region            :: Region
-    symbol_info       :: Sym2TypeMap
-    matrix_properties :: Symexpr2PropertiesMap
-    patterns          :: Vector{Pattern}
-    actions           :: Vector{Action}
-    matrix_knobs      :: Dict{Symexpr, Symbol}
+    sites       :: Set{CallSite}
+    region      :: Region
+    symbol_info :: Sym2TypeMap
+    patterns    :: Vector{Pattern}
+    actions     :: Vector{Action}
+    extra       :: Any
 end
 
 @doc """ Insert new statements to a basic block before or after a statement. """
@@ -334,25 +335,21 @@ type InsertOnEdge <: Action
 end
 
 @doc """ 
-All the analyses, including reordering, reusing, call replacement, etc.
+All the transformations on the AST, including reusing, reordering, etc.
+This phase may change the AST. It does not change the CFG, but records the
+actions for changing the CFG.
 """
-function analyses(
+function AST_transformation(
     func_ast    :: Expr, 
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
-
-    regions = region_formation(cfg, loop_info)
+    func_region = FunctionRegion(func_ast, Dict()) 
+    regions = region_formation(func_region, cfg, loop_info)
     actions = Vector{Action}()
-    if reorder_enabled
-        actions = reordering(actions, regions, func_ast, symbol_info, liveness, cfg, loop_info)
-    end
-    if context_sensitive_opt_enabled
-        actions = context_info_discovery(actions, regions, func_ast, symbol_info, liveness, cfg)
-    end
-    actions
+    actions = AST_context_sensitive_transformation(actions, func_region, regions, symbol_info, liveness, cfg)
 end
 
 @doc """ 
@@ -387,12 +384,12 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dprintln(1, 0, "\nFunction body showing structures:")
         dsprintln(1, 1, symbol_info, liveness, func_ast)
 
-        if reorder_enabled || context_sensitive_opt_enabled
+        if context_sensitive_opt_enabled
             # Reordering and context-sensitive optimization: Do all analyses, and 
             # put their intended transformation code sequence into a list. Then 
             # transform the code with the list on the CFG.
-            actions = analyses(func_ast, symbol_info, liveness, cfg, loop_info)
-            code_transformation(actions, cfg)
+            actions = AST_transformation(func_ast, symbol_info, liveness, cfg, loop_info)
+            CFG_transformation(actions, cfg)
         end
 
         # Do call replacement at the end, because it relies only on type info, 

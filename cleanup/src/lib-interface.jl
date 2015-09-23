@@ -25,7 +25,6 @@ function new_matrix_knob(
     is_structure_only      = false,
     is_single_def          = false
  )
-    assert(constant_valued || constant_structured)
     assert(!constant_valued || constant_structured)
     assert(!is_symmetric || is_structure_symmetric)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
@@ -107,10 +106,22 @@ function set_derivative(
     ccall((:SetDerivative, LIB_PATH), Void, (Ptr{Void}, Cint, Ptr{Void}), mknob, derivative_type, derivative)
 end
 
+@doc """
+Derivative types between two matrix knobs.
+NOTE: when adding any new type, or changing any type' integer value,
+make sure to change int2derivative_map as well.
+"""
 const DERIVATIVE_TYPE_TRANSPOSE = 0
 const DERIVATIVE_TYPE_SYMMETRIC = 1
 const DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2
 const DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3
+
+const int2derivative_map = Dict(
+    0 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_TRANSPOSE),
+    1 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_SYMMETRIC),
+    2 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_LOWER_TRIANGULAR),
+    3 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_UPPER_TRIANGULAR)
+)
 
 @doc """ Delete a matrix knob. """
 function delete_matrix_knob(
@@ -271,22 +282,35 @@ Reorder a sparse matrix A and store the result in new_A. A itself is not changed
 If get_permutation is true, then compute the permutation and inverse permutation
 vector P and inverse_P. Otherwise, P and inverse_P are given inputs.
 One_based_input/output tells if A and new_A are 1-based.
+ISSUE: We hard code a sparse matrix format to be SparseMatrixCSC{Cdouble, Cint},
+and a permutation and inverse permutation vector to be Vector{Cint}.
+Should make it general in future
 """
 function reorder_matrix(
-    A                :: SparseMatrixCSC, 
-    new_A            :: SparseMatrixCSC, 
+    A                :: SparseMatrixCSC{Float64, Int32}, 
+    new_A            :: SparseMatrixCSC{Float64, Int32}, 
     P                :: Vector, 
-    inverse_P        :: Vector, 
-    one_based_output :: Bool = true
+    inverse_P        :: Vector
 )
-    ccall((:CSR_ReorderMatrix, LIB_PATH), Void,
+    ccall((:ReorderMatrix, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-               Ptr{Cint}, Ptr{Cint}, Bool),
+               Ptr{Cint}, Ptr{Cint}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(new_A.colptr), pointer(new_A.rowval), pointer(new_A.nzval),
-               pointer(P), pointer(inverse_P),
-               one_based_output)
+               pointer(P), pointer(inverse_P))
+end
+
+function reorder_matrix!(
+    A                :: SparseMatrixCSC{Float64, Int32}, 
+    P                :: Vector, 
+    inverse_P        :: Vector,
+)
+    ccall((:ReorderMatrixInplace, LIB_PATH), Void,
+              (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+               Ptr{Cint}, Ptr{Cint}),
+               A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
+               pointer(P), pointer(inverse_P))
 end
 
 @doc """ Reorder vector V into new vector new_V with permutation vector P """
@@ -322,14 +346,21 @@ end
 function get_reordering_vectors(
     fknob :: Ptr{Void}
  )
-    len = Ref{Cint}(0)
-    perm = ccall((:GetReorderingVector, LIB_PATH), Ptr{Cint},
+    m = Ref{Cint}(0)
+    n = Ref{Cint}(0)
+    row_perm = ccall((:GetRowReorderingVector, LIB_PATH), Ptr{Cint},
          (Ptr{Void}, Ref{Cint}),
-         fknob, len)
-    inv_perm = ccall((:GetInverseReorderingVector, LIB_PATH), Ptr{Cint},
+         fknob, m)
+    row_inv_perm = ccall((:GetRowInverseReorderingVector, LIB_PATH), Ptr{Cint},
          (Ptr{Void}, Ref{Cint}),
-         fknob, len)
-    pointer_to_array(perm, len[]), pointer_to_array(inv_perm, len[])
+         fknob, m)
+    col_perm = ccall((:GetColReorderingVector, LIB_PATH), Ptr{Cint},
+         (Ptr{Void}, Ref{Cint}),
+         fknob, n)
+    col_inv_perm = ccall((:GetColInverseReorderingVector, LIB_PATH), Ptr{Cint},
+         (Ptr{Void}, Ref{Cint}),
+         fknob, n)
+    pointer_to_array(row_perm, m[]), pointer_to_array(row_inv_perm, m[]), pointer_to_array(col_perm, n[]), pointer_to_array(col_inv_perm, n[])
 end
 
 @doc """
@@ -338,8 +369,8 @@ format, in CSR format.
 """
 function create_CSR(A :: SparseMatrixCSC)
     ccall((:CSR_Create, LIB_PATH), Ptr{Void},
-        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint),
-        A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval), 1)
+        (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+        A.n, A.m, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval))
 end
 
 @doc """ Destroy the CSR representation of the sparse matrix. """
@@ -405,7 +436,10 @@ function SpMV(
     gamma :: Number,
     fknob :: Ptr{Void} = C_NULL
 )
-   w = Array(Cdouble, size(A, fknob != C_NULL ? 1 : 2))
+   # When fknob is not null, we just use
+   # the CSC input matrix as if it's CSR
+   # assuming the input matrix is symmetric
+   w = Array(Cdouble, size(A, 1))
    SpMV!(w, alpha, A, x, beta, y, gamma, fknob)
    w
 end
@@ -514,6 +548,45 @@ function minimum(
           length(x), x)
   else
     minimum(x)
+  end
+end
+
+function abs!(
+    w :: Vector,
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:CSR_abs, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = abs(x)
+  end
+end
+
+function exp!(
+    w :: Vector,
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:CSR_exp, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = exp(x)
+  end
+end
+
+function log1p!(
+    w :: Vector,
+    x :: Vector
+)
+  if use_SPMP
+    ccall((:CSR_log1p, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = log1p(x)
   end
 end
 
@@ -777,6 +850,85 @@ function ADB(
     SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
 end
 
+# A*A'
+function SpSquareWithEps(
+    A     :: SparseMatrixCSC{Float64, Int32},
+    eps   :: Number,
+    fknob :: Ptr{Void} = C_NULL)
+
+    m = size(A, 1)
+    n = size(A, 2)
+
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
+
+    ccall((:SpSquareWithEps, LIB_PATH), Ptr{Void},
+          (Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Cdouble,
+           Ptr{Void}),
+          m, n,
+          C_colptr_ref, C_rowval_ref, C_nzval_ref,
+          A.colptr, A.rowval, A.nzval,
+          eps,
+          fknob)
+
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+# alpha*A + beta*B
+function SpAdd(
+    alpha :: Number,
+    A     :: SparseMatrixCSC{Float64, Int32},
+    beta  :: Number,
+    B     :: SparseMatrixCSC{Float64, Int32})
+
+    m = size(A, 1)
+    n = size(A, 2)
+    assert(m == size(B, 1))
+    assert(n == size(B, 2))
+
+    C_colptr_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_rowval_ref = Ref{Ptr{Cint}}(C_NULL)
+    C_nzval_ref = Ref{Ptr{Cdouble}}(C_NULL)
+
+    ccall((:SpAdd, LIB_PATH), Ptr{Void},
+          (Cint, Cint,
+           Ref{Ptr{Cint}}, Ref{Ptr{Cint}}, Ref{Ptr{Cdouble}},
+           Cdouble,
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Cdouble,
+           Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+           Ptr{Void}),
+          m, n,
+          C_colptr_ref, C_rowval_ref, C_nzval_ref,
+          alpha,
+          A.colptr, A.rowval, A.nzval,
+          beta,
+          B.colptr, B.rowval, B.nzval,
+          C_NULL)
+
+    C_colptr = pointer_to_array(C_colptr_ref[], n + 1)
+    nnz = C_colptr[n + 1] - 1
+    C_rowval = pointer_to_array(C_rowval_ref[], nnz)
+    C_nzval = pointer_to_array(C_nzval_ref[], nnz)
+    SparseMatrixCSC{Cdouble, Cint}(m, n, C_colptr, C_rowval, C_nzval)
+end
+
+function trace(
+    A   :: SparseMatrixCSC{Float64, Int32})
+
+    ccall((:Trace, LIB_PATH), Cdouble,
+          (Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+          size(A, 1), A.colptr, A.rowval, A.nzval)
+end
+
 @doc """ 
 Compute the sparse Cholesky factorization of a sparse matrix A, where A is
 constant in structure.
@@ -867,6 +1019,131 @@ function cholfact_inverse_divide(
     y
 end
 
+# Some symbolic names for each permutation vector.
+const NO_PERM      = 0
+const ROW_PERM     = 1
+const ROW_INV_PERM = 2
+const COL_PERM     = 3
+const COL_INV_PERM = 4
+
+const LOG_REORDERING = false
+
+@doc """
+Reorder arrays based on the the given permutation and inverse permutation vectors.
+If reverse_reorder is true, do reverse reordering instead.
+"""
+function reorder_arrays(
+    reverse_reorder     :: Bool,
+    permutation_vectors :: Vector,
+    arrays...
+)
+    if LOG_REORDERING
+      println("reorder_arrays")
+    end
+
+    matrices_done = false
+    array_tuple   = arrays[1]
+    i = 1
+    while i <= length(array_tuple)
+        A = array_tuple[i]
+        if A == :__delimitor__
+            # A delimiter that separate matrices from vectors
+            # It means that all matrices have been processed
+            matrices_done = true
+            i             = i + 1
+            continue
+        end
+        if matrices_done
+            assert(typeof(A) <: AbstractVector)
+            # For each vector, 1 permutation vector follows
+            perm = permutation_vectors[array_tuple[i + 1]]
+            i    = i + 2
+            new_A = copy(A)
+            if reverse_reorder
+                reverse_reorder_vector(A, new_A, perm)
+            else
+                reorder_vector(A, new_A, perm)
+            end
+            A[:] = new_A
+        else
+            assert(typeof(A) <: AbstractSparseMatrix)
+            # For each matrix, 2 permutation vectors follow
+            perm1 = permutation_vectors[array_tuple[i + 1]]
+            perm2 = permutation_vectors[array_tuple[i + 2]]
+            i     = i + 3
+            if reverse_reorder
+                reorder_matrix!(A, perm2, perm1)
+            else
+                reorder_matrix!(A, perm1, perm2)
+            end
+        end
+    end
+end
+
+@doc """
+The first time an reordering decision maker (a function, represented by the
+fknob) has decided that reordering should be done, this function should be 
+called to reorder the specified arrays.
+
+Status is a vector of the following elements:
+(1) reordering_done:       Bool, true if reordering has already been done
+(2) row_perm:              row permutation vector
+(3) row_inv_perm:          row inverse permutaiton vector
+(4) col_perm:              column permutation vector
+(5) col_inv_perm:          column inverse permutaiton vector
+(6) reordering_time:       time spent on reordering so far (for statistics)
+The vector is updated when the function returns.
+"""
+function reordering(
+    fknob  :: Ptr{Void},
+    status :: Vector,
+    arrays...
+)
+    reordering_done = status[1]
+    if !reordering_done
+        row_perm, row_inv_perm, col_perm, col_inv_perm = get_reordering_vectors(fknob)
+        if row_perm != C_NULL
+            assert(row_inv_perm != C_NULL && col_perm != C_NULL && col_inv_perm != C_NULL)
+
+            status[2] = row_perm
+            status[3] = row_inv_perm
+            status[4] = col_perm
+            status[5] = col_inv_perm
+
+            reordering_time  = status[6]
+            reordering_time -= time()
+
+            reorder_arrays(false, status[2 : 5], arrays)
+
+            reordering_time += time()
+            status[6]        = reordering_time
+            status[1]        = true # reordering is done 
+        end
+    end
+end
+
+@doc """
+Reverse reorder the specified arrays. 
+
+Status is a vector of the following 4 elements. See the above reordering()
+function for details.
+"""
+function reverse_reordering(
+    status :: Vector,
+    arrays...
+)
+    reordering_done = status[1]
+    if reordering_done
+        reordering_time  = status[6]
+        reordering_time -= time()
+
+        reorder_arrays(true, status[2 : 5], arrays)
+
+        reordering_time += time()
+        status[6]        = reordering_time
+    end
+end
+
 @doc """
 Read a matrix market file. Force it to be symmetric if force_symmetric is true.
 Error when symmetric_only is true but the matrix is not symmetric (and not
@@ -940,3 +1217,56 @@ function matrix_market_read(
       return A
     end
 end
+
+function lbfgs_compute_direction(
+    k     :: Int,
+    it    :: Int,
+    n     :: Int,
+    S,
+    Y,
+    dfk)
+
+    if use_SPMP
+      r = zeros(n)
+      ccall((:LBFGSComputeDirection, LIB_PATH), Void,
+            (Cint, Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+            k, it, n, S, Y, dfk, r)
+      r
+    else
+      a = zeros(k)
+
+      mm = min(it - 1, k)
+      begin_idx = it + k - mm - 2
+
+      yk = 1
+      if it <= k
+      else
+        skm1 = S[:,(begin_idx + mm)%k + 1]
+        ykm1 = Y[:,(begin_idx + mm)%k + 1]
+        yk = dot(skm1, ykm1)/dot(ykm1, ykm1)
+      end
+
+      p = zeros(mm, 1)
+      for i = 1:mm
+        p[i] = 1.0/dot(S[:,(begin_idx + i)%k + 1], Y[:,(begin_idx + i)%k + 1])
+      end
+
+      q = copy(dfk)
+      for i = mm:-1:1
+        si = S[:,(begin_idx + i)%k + 1]
+        yi = Y[:,(begin_idx + i)%k + 1]
+        a[i] = p[i]*dot(si, q)
+        q = q - a[i]*yi
+      end
+
+      r = yk*q
+      for i = 1:mm
+        si = S[:,(begin_idx + i)%k + 1]
+        yi = Y[:,(begin_idx + i)%k + 1]
+        b = p[i]*dot(yi, r)
+        r = r + si*(a[i] - b)
+      end
+
+      -r
+    end
+end 

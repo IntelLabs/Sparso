@@ -1,6 +1,8 @@
 CXX=icpc
 
-SPMP_DIR=$(HOME)/SpMP
+ifndef SPMP_DIR
+    SPMP_DIR=$(HOME)/SpMP
+endif
 
 CFLAGS = -I. -I$(SPMP_DIR)/.. -fopenmp --std=c++11 -Wall -I$(MKLROOT)/include
 
@@ -30,6 +32,9 @@ test/CSR_test: CSR_Interface.cpp Vector.cpp mm_io.cpp SpMV.cpp PageRank.cpp test
 
 test/sparse_orig: CSR_Interface.cpp Vector.cpp mm_io.cpp SpMV.cpp PageRank.cpp test/sparse_orig.cc $(SPMP_DIR)/libspmp.a
 	$(CXX) -o $@ $^ $(CFLAGS)
+
+test/BFSBipartite_test: $(OBJS) test/BFSBipartite_test.cpp $(SPMP_DIR)/libspmp.a
+	$(CXX) -o $@ $^ $(CFLAGS) -mkl
 
 $(SPMP_DIR)/libspmp.a:
 	cd $(SPMP_DIR); $(MAKE)

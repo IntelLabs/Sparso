@@ -30,17 +30,17 @@ println("Problem size = [$m $n]")
 #println("\tsum of p=", sum(p))
 
 println("Original: ")
-#x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-#    iter, relResidual, objval = ipm_ref(A, b, p)
-#println("sum of x=", sum(x))
-#@printf "\nref_total_time = %f\n" ref_total_time
-#@printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
-#@printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
+x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
+    iter, relResidual, objval = ipm_ref(A, b, p)
+println("Original sum of x=", sum(x))
+@printf "\nref_total_time = %f\n" ref_total_time
+@printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
+@printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
 
 println("\n\nAccelerated: ")
 @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
-println("sum of x=", sum(x))
+println("\nAccelerated sum of x=", sum(x))
 @printf "\nref_total_time = %f\n" ref_total_time
 @printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
 @printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
