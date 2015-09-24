@@ -136,10 +136,10 @@ function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
     local typ = typeof(node)
     if typ == Symbol
         # Use get() instead [] in case the key (like Symbol "*") does not exist
-        # Return Nothing if no info found
-        return get(symbol_info, node, Nothing)
+        # Return Void if no info found
+        return get(symbol_info, node, Void)
     elseif typ == GenSym
-        return get(symbol_info, node.id, Nothing)
+        return get(symbol_info, node.id, Void)
     elseif typ == Expr || typ == SymbolNode
         return node.typ
     else
@@ -220,8 +220,8 @@ name, function name, and argument types.
 """
 function look_for_function(
     database       :: Vector, 
-    module_name    :: String, 
-    function_name  :: String, 
+    module_name    :: AbstractString, 
+    function_name  :: AbstractString, 
     argument_types :: Tuple
 )
     for item in database

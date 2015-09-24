@@ -52,8 +52,8 @@ lower or upper part, the library building the graph would be twice slower.
 function CS_fwdBwdTriSolve!_check(
     ast           :: Expr,
     call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    fknob_creator :: AbstractString,
+    fknob_deletor :: AbstractString
 )
     # TODO: replace the code to be based on call_sites.extra.matrix_properties.
 
@@ -79,8 +79,8 @@ site at the given AST.
 function gather_context_sensitive_info(
     ast               :: Expr,
     call_sites        :: CallSites,
-    fknob_creator     :: String,
-    fknob_deletor     :: String,
+    fknob_creator     :: AbstractString,
+    fknob_deletor     :: AbstractString,
     matrices_to_track :: Tuple,
     reordering_power  :: Int,
     reordering_FAR    :: Tuple
@@ -137,8 +137,8 @@ array; and A has constant value.
 function CS_ADAT_check(
     ast           :: Expr,
     call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    fknob_creator :: AbstractString,
+    fknob_deletor :: AbstractString
 )
     A = ast.args[2]
     assert(typeof(A) == SymbolNode)
@@ -165,8 +165,8 @@ an exception.
 function CS_ADAT_post_replacement(
     ast               :: Expr,
     call_sites        :: CallSites,
-    fknob_creator     :: String,
-    fknob_deletor     :: String,
+    fknob_creator     :: AbstractString,
+    fknob_deletor     :: AbstractString,
     matrices_to_track :: Tuple,
     reordering_power  :: Int,
     reordering_FAR    :: Tuple
@@ -597,7 +597,7 @@ the function knob to the call as a parameter.
 function create_new_function_knob(
     new_stmts     :: Vector{Statement},
     fknob         :: Symbol,
-    fknob_creator :: String,
+    fknob_creator :: AbstractString,
 )
     assert(fknob_creator != "")
 
@@ -637,7 +637,7 @@ Create statements that will delete the function knob.
 function create_delete_function_knob(
     new_stmts     :: Vector{Statement},
     fknob         :: Symbol,
-    fknob_deletor :: String
+    fknob_deletor :: AbstractString
 )
     assert(fknob_deletor != "")
 

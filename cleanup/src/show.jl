@@ -99,7 +99,7 @@ function show_inter_dependence_graph(
 end
 
 function show_liveness(
-    space    :: String,
+    space    :: AbstractString,
     liveness :: Liveness
 )
     println(io_buffer, space, "")
@@ -145,7 +145,7 @@ end
 
 function show_structure(
     node        :: Any,
-    space       :: String,
+    space       :: AbstractString,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness
 )
