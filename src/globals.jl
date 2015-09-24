@@ -136,10 +136,10 @@ function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
     local typ = typeof(node)
     if typ == Symbol
         # Use get() instead [] in case the key (like Symbol "*") does not exist
-        # Return Nothing if no info found
-        return get(symbol_info, node, Nothing)
+        # Return Void if no info found
+        return get(symbol_info, node, Void)
     elseif typ == GenSym
-        return get(symbol_info, node.id, Nothing)
+        return get(symbol_info, node.id, Void)
     elseif typ == Expr || typ == SymbolNode
         return node.typ
     else
@@ -220,8 +220,8 @@ name, function name, and argument types.
 """
 function look_for_function(
     database       :: Vector, 
-    module_name    :: String, 
-    function_name  :: String, 
+    module_name    :: AbstractString, 
+    function_name  :: AbstractString, 
     argument_types :: Tuple
 )
     for item in database
@@ -348,7 +348,7 @@ function AST_transformation(
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
-    func_region = FunctionRegion(func_ast, Dict()) 
+    func_region = FunctionRegion(func_ast) 
     regions = region_formation(func_region, cfg, loop_info)
     actions = Vector{Action}()
     actions = AST_context_sensitive_transformation(actions, func_region, regions, symbol_info, liveness, cfg)
@@ -397,7 +397,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Do call replacement at the end, because it relies only on type info, 
         # which has not been changed so far.
         if replace_calls_enabled
-            replace_calls(symbol_info, cfg)
+            replace_calls(func_ast, symbol_info, cfg)
         end
 
         # Now create a new function based on the CFG

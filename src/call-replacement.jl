@@ -31,8 +31,8 @@ Pre-processing function: check if the LHS of an assignment is in the RHS.
 function LHS_in_RHS(
     ast           :: Expr,
     call_sites    :: CallSites,
-    fknob_creator :: String,
-    fknob_deletor :: String
+    fknob_creator :: AbstractString,
+    fknob_deletor :: AbstractString
 )
     assert(ast.head == :(=))
     return is_an_arg(ast.args[1], ast.args[2]);
@@ -78,14 +78,14 @@ specified by reoredering_FAR; the first of the arrays is the one that determines
 permutation vectors, called Seed.
 """
 immutable ExprPattern <: Pattern
-    name              :: String # Name of the pattern
+    name              :: AbstractString # Name of the pattern
     skeleton          :: Tuple
     sub_expr_patterns :: Tuple
     pre_processing    :: Function
     substitute        :: Tuple
     post_processing   :: Function
-    fknob_creator     :: String
-    fknob_deletor     :: String
+    fknob_creator     :: AbstractString
+    fknob_deletor     :: AbstractString
     matrices_to_track :: Tuple
     reordering_power  :: Int
     reordering_FAR    :: Tuple
@@ -107,7 +107,7 @@ for its result before it returns. By changing f to f!, we save memory allocation
 This pattern is frequently seen from a source line like x += ...
 """
 immutable InPlaceUpdatePattern <: Pattern
-    name        :: String # Name of the pattern
+    name        :: AbstractString # Name of the pattern
     f_skeleton  :: Tuple  # Skeleton of f
     f!          :: Tuple  # The substitute
 end
@@ -737,10 +737,11 @@ Pattern match and replace the code that is functionally equivalent to SpMV, SpMV
 dot, WAXPBY, WAXPBY!, etc. with calls to the corresponding SPMP library functions.
 """
 function replace_calls(
+    func_ast    :: Expr,
     symbol_info :: Sym2TypeMap, 
     cfg         :: CFG
 )
-    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, 
+    call_sites  = CallSites(Set{CallSite}(), FunctionRegion(func_ast), symbol_info, 
                             expr_patterns, Vector{Action}(), nothing)
     for (bb_idx, bb) in cfg.basic_blocks
         prev_expr = nothing

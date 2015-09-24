@@ -27,8 +27,8 @@ const COLUMN_ROW_INVERSE = 2 # A's column permutation vector is the inverse of B
 # How to represent and use some "may" information?
 
 immutable FunctionDescription
-    module_name     :: String # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
-    function_name   :: String # Name of the function
+    module_name     :: AbstractString # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
+    function_name   :: AbstractString # Name of the function
     argument_types  :: Tuple  # Tuple of the function arguments' types
     output          :: Set    # The arguments updated by the function
     distributive    :: Bool   # Is this function distributive?
@@ -491,8 +491,8 @@ function_descriptions  = [
 ]
 
 function look_for_function_description(
-    module_name    :: String, 
-    function_name  :: String, 
+    module_name    :: AbstractString, 
+    function_name  :: AbstractString, 
     argument_types :: Tuple
 )
     return look_for_function(function_descriptions, module_name, function_name, argument_types)

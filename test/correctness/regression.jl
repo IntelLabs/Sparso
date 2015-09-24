@@ -147,7 +147,7 @@ const context_test2 = Test(
         TestPattern(r"Manual_context_no_reorder k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context_no_reorder rel_err=6.62\d*e-11",
+        TestPattern(r"Manual_context_no_reorder rel_err=\d*e-11",
                      "Test rel_err"
         ),
         TestPattern(r"Manual_context sum of x=-1.577312043\d*e-5",
@@ -156,7 +156,7 @@ const context_test2 = Test(
         TestPattern(r"Manual_context k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context rel_err=6.62\d*e-11",
+        TestPattern(r"Manual_context rel_err=\d*e-11",
                      "Test rel_err"
         ),
         exception_pattern
@@ -167,7 +167,10 @@ const context_test2_without_reordering = Test(
     "context-test2-without-reordering",
     "context-test2-without-reordering.jl small-diag.mtx",
     [
-        TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434107334e-5(.|\n)*rel_err=6.382732220893931e-13(.|\n)*With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434515133e-5(.|\n)*rel_err=6.629156171119774e-11",
+        TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434\d*e-5(.|\n)*rel_err=\d.\d*e-13",
+                     "Test pcg_symgs"
+        ),
+        TestPattern(r"With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434\d*e-5(.|\n)*rel_err=\d.\d*e-11",
                      "Test pcg_symgs_with_context_opt"
         ),
         exception_pattern

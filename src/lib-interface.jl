@@ -149,7 +149,7 @@ end
 
 @doc """ Create a function knob. """
 function new_function_knob(
-    fknob_creator :: String
+    fknob_creator :: AbstractString
 )
     assert(fknob_creator != "")
 
@@ -168,7 +168,7 @@ new_function_knob() = new_function_knob("NewFunctionKnob")
 
 @doc """ Delete a function knob. """
 function delete_function_knob(
-    fknob_deletor :: String, 
+    fknob_deletor :: AbstractString, 
     fknob         :: Ptr{Void}
 )
     assert(fknob_deletor != "")
@@ -1151,7 +1151,7 @@ forced to be symmetric). It calls SpMP library to do the actual work, which is
 faster than a pure Julia version.
 """
 function matrix_market_read(
-    filename        :: String,
+    filename        :: AbstractString,
     symmetric_only  :: Bool = false,
     force_symmetric :: Bool = false
 )
@@ -1187,7 +1187,7 @@ function matrix_market_read(
       # Read into a COO array
       sizes::Vector{Cint} = [0, 0, 0, 0]
       ccall((:load_matrix_market_step1, LIB_PATH), Void, 
-          (Ptr{Uint8}, Ptr{Cint}, Bool, Bool), filename, pointer(sizes), force_symmetric, false)
+          (Ptr{UInt8}, Ptr{Cint}, Bool, Bool), filename, pointer(sizes), force_symmetric, false)
 
       is_symmetric::Cint = sizes[1] # 0/1: true/false    
       if symmetric_only && is_symmetric == 0
@@ -1211,7 +1211,7 @@ function matrix_market_read(
 
       # Convert the COO array to CSC array.
       ccall((:load_matrix_market_step2, LIB_PATH), Void, 
-          (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
+          (Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
           filename, pointer(j), pointer(i), pointer(v), pointer(sizes), true)
 
       return A
