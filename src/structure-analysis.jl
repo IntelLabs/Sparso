@@ -14,6 +14,17 @@ function set_matrix_property(
 ) 
 end
 
+const SA_LOWER_OF = 1
+const SA_UPPER_OF = 1
+
+@doc """ specify that matrix A is the lower/upper part of B"""
+function set_matrix_property(
+    A       :: Symbol,
+    part_of :: Int,
+    B       :: Symbol
+) 
+end
+
 @doc """
 Describe part (lower, upper, diagonal) of a matrix, of which the structure matters.
 """
@@ -34,7 +45,7 @@ const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
 abstract MatrixProperty
 
 include("property-constant-structure.jl")
-
+#include("property-symmetric-value.jl")
 
 @doc """
 Collect predefined maxtric property accoding from set_matrix_property statements
@@ -74,33 +85,50 @@ function find_predefined_properties(
         ast = expr
         m, func_name = resolve_call_names(ast.args)
         if func_name == "set_matrix_property"
-            pmap = eval(ast.args[2])
-            #dump(pmap)
-            for (sym, p) in pmap
-                sp = StructureProxy()
-                if (p & SA_CONST_VALUED) != 0
-                    dprintln(1, 1, "Predef: const_valued ", sym)
-                    sp.constant_valued = 3
+            if length(ast.args) == 4 # set lower_of/upper_of
+                dump(ast.args)
+                assert(isa(ast.args[2], QuoteNode) && isa(ast.args[4], QuoteNode))
+                sym = ast.args[2].value
+                psym = ast.args[4].value
+                if !haskey(structure_proxies, sym)
+                    structure_proxies[sym] = StructureProxy()
                 end
-                if (p & SA_CONST_STRUCTURED) != 0
-                    dprintln(1, 1, "Predef: const_structured ", sym)
-                    sp.constant_structured = 3
+                if ast.args[3].name == :SA_LOWER_OF
+                    structure_proxies[sym].lower_of = psym
+                else
+                    assert(ast.args[3].name == :SA_UPPER_OF)
+                    structure_proxies[sym].upper_of = psym
                 end
-                if (p & SA_SYMM_VALUED) != 0
-                    dprintln(1, 1, "Predef: symmetric_valued ", sym)
-                    sp.symmetric_valued = 3
-                end
-                if (p & SA_SYMM_STRUCTURED) != 0
-                    dprintln(1, 1, "Predef: symmetric_structured ", sym)
-                    sp.symmetric_structured = 3
-                end
+            else # set other properties
+                pmap = eval(ast.args[2])
+                #dump(pmap)
+                assert(isa(pmap, Dict))
+                for (sym, p) in pmap
+                    sp = StructureProxy()
+                    if (p & SA_CONST_VALUED) != 0
+                        dprintln(1, 1, "Predef: const_valued ", sym)
+                        sp.constant_valued = 3
+                    end
+                    if (p & SA_CONST_STRUCTURED) != 0
+                        dprintln(1, 1, "Predef: const_structured ", sym)
+                        sp.constant_structured = 3
+                    end
+                    if (p & SA_SYMM_VALUED) != 0
+                        dprintln(1, 1, "Predef: symmetric_valued ", sym)
+                        sp.symmetric_valued = 3
+                    end
+                    if (p & SA_SYMM_STRUCTURED) != 0
+                        dprintln(1, 1, "Predef: symmetric_structured ", sym)
+                        sp.symmetric_structured = 3
+                    end
 
-                if (p & SA_STRUCTURE_ONLY) != 0
-                    # TODO: fill this property?
+                    if (p & SA_STRUCTURE_ONLY) != 0
+                        # TODO: fill this property?
+                    end
+                    # add symbol to property map
+                    structure_proxies[sym] = sp
+                    #dprintln(1, 1, "Predef ", sym, ": ", sp)
                 end
-                # add symbol to property map
-                structure_proxies[sym] = sp
-                #dprintln(1, 1, "Predef ", sym, ": ", sp)
             end
             # replace the statement with nothing.
             stmt.expr = :(nothing)
@@ -136,10 +164,13 @@ function find_properties_of_matrices(
     # inherite properties from parent
     if isa(region, LoopRegion)
         for (sym, p) in region.parent.symbol_property
+            sp = StructureProxy()
             if p.constant_valued || 
                 p.constant_structured || 
                 p.is_structure_symmetric ||
-                p.is_symmetric
+                p.is_symmetric || 
+                p.lower_of != nothing ||
+                p.upper_of != nothing
                 if !haskey(structure_proxies, sym)
                     structure_proxies[sym] = StructureProxy()
                 end
@@ -157,6 +188,8 @@ function find_properties_of_matrices(
             if p.is_structure_symmetric && sp.symmetric_structured == 0
                 sp.symmetric_structured = 4 
             end
+            sp.lower_of = p.lower_of
+            sp.upper_of = p.upper_of
         end
     else
         constants = find_constant_values(region, liveness, cfg)
@@ -172,6 +205,7 @@ function find_properties_of_matrices(
 
     all_structure_properties = [
         ConstantStructureProperty()
+    #    SymmetricValueProperty()
     ]
 
     for one_property in all_structure_properties
@@ -193,6 +227,17 @@ function find_properties_of_matrices(
     dprintln(1, 0, "\n" * region_name * " Structure symmetry discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_structured>0, structure_proxies)))
 
+    dprintln(1, 0, "\n" * region_name * " Upper/Lower matrix discovered:")
+    for k in sorter(structure_proxies)
+        v = structure_proxies[k]
+        if v.lower_of != nothing
+            dprintln(1, 1, k, " is lower of ", v.lower_of)
+        end
+        if v.upper_of != nothing
+            dprintln(1, 1, k, " is upper of ", v.upper_of)
+        end
+    end
+
     # Merge with structure info
     single_defs = find_single_defs(region, liveness, cfg)
     symbols = union(single_defs, collect(keys(structure_proxies)))
@@ -213,7 +258,8 @@ function find_properties_of_matrices(
             matrix_properties[s].constant_structured = (p.constant_structured>0)
             matrix_properties[s].is_symmetric = (p.symmetric_valued>0)
             matrix_properties[s].is_structure_symmetric = (p.symmetric_structured>0) 
-            #matrix_properties[s].is_structure_only = structure_proxies[s].
+            matrix_properties[s].lower_of = p.lower_of
+            matrix_properties[s].upper_of = p.upper_of
         end
     end
 
