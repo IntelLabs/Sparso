@@ -617,6 +617,7 @@ const structure_symmetry_test1 = Test(
 )
 
 const all_tests = [
+context_test2_without_reordering,
     sanity_test1,
     sanity_test2,
     sanity_test3,
@@ -701,7 +702,6 @@ for test in tests
     for pattern in test.patterns
         assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
         m = match(pattern.pattern, output)
-        run(`grep -E $pattern.pattern $log`)
         if (m == nothing && typeof(pattern) == TestPattern) ||
            (m != nothing && typeof(pattern) == AntiTestPattern)
             comment = pattern.comment
