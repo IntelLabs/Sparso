@@ -737,10 +737,11 @@ Pattern match and replace the code that is functionally equivalent to SpMV, SpMV
 dot, WAXPBY, WAXPBY!, etc. with calls to the corresponding SPMP library functions.
 """
 function replace_calls(
+    func_ast    :: Expr,
     symbol_info :: Sym2TypeMap, 
     cfg         :: CFG
 )
-    call_sites  = CallSites(Set{CallSite}(), WholeFunction(), symbol_info, 
+    call_sites  = CallSites(Set{CallSite}(), FunctionRegion(func_ast), symbol_info, 
                             expr_patterns, Vector{Action}(), nothing)
     for (bb_idx, bb) in cfg.basic_blocks
         prev_expr = nothing

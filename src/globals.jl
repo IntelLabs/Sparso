@@ -348,7 +348,7 @@ function AST_transformation(
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
-    func_region = FunctionRegion(func_ast, Dict()) 
+    func_region = FunctionRegion(func_ast) 
     regions = region_formation(func_region, cfg, loop_info)
     actions = Vector{Action}()
     actions = AST_context_sensitive_transformation(actions, func_region, regions, symbol_info, liveness, cfg)
@@ -397,7 +397,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Do call replacement at the end, because it relies only on type info, 
         # which has not been changed so far.
         if replace_calls_enabled
-            replace_calls(symbol_info, cfg)
+            replace_calls(func_ast, symbol_info, cfg)
         end
 
         # Now create a new function based on the CFG

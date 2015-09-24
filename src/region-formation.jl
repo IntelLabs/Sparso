@@ -2,6 +2,8 @@
 type FunctionRegion <: Region
     func_ast        :: Expr
     symbol_property :: Symexpr2PropertiesMap
+    
+    FunctionRegion(_func_ast) = new(_func_ast, Symexpr2PropertiesMap())
 end
 
 @doc """ 
