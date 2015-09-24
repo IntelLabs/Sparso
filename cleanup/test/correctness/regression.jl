@@ -660,6 +660,9 @@ end
 if length(ARGS) > 0
   julia_command = ARGS[1]
   println("Using Julia command: ", julia_command)
+  if length(ARGS) == 2
+      include(ARGS[2])
+  end
 end
 
 fail = 0
