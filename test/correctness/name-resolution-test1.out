@@ -1,8 +1,0 @@
-Call args: Any[:((top(getfield))((top(getfield))((top(getfield))((top(getfield))((top(getfield))(X.Y,:Z),:U),:V),:W),:f)::F),1]
-Module name: X.Y.Z.U.V.W
-Function name: f
-
-Call args: Any[:(Main.*),:(A::Base.SparseMatrix.SparseMatrixCSC{Tv,Ti<:Integer}),:(B::Array{T,1})]
-Module name: Main
-Function name: *
-

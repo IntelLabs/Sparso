@@ -191,15 +191,15 @@ function find_properties_of_matrices(
             sp.lower_of = p.lower_of
             sp.upper_of = p.upper_of
         end
-    else
-        constants = find_constant_values(region, liveness, cfg)
-        for c in constants
-            if !haskey(structure_proxies, c)
-                structure_proxies[c] = StructureProxy()
-            end
-            if structure_proxies[c] == 0
-                structure_proxies[c].constant_valued = 1 
-            end
+    end
+
+    constants = find_constant_values(region, liveness, cfg)
+    for c in constants
+        if !haskey(structure_proxies, c)
+            structure_proxies[c] = StructureProxy()
+        end
+        if structure_proxies[c] == 0
+            structure_proxies[c].constant_valued = 1 
         end
     end
 

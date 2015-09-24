@@ -1,9 +1,6 @@
 [submodule "deps/SpMP"]
 	path = deps/SpMP
 	url = https://github.com/jspark1105/SpMP
-[submodule "deps/julia"]
-	path = deps/julia
-	url = https://github.com/JuliaLang/julia.git
 [submodule "deps/CompilerTools"]
 	path = deps/CompilerTools
 	url = http://lingxian-u1404x.sc.intel.com/git/CompilerTools.git/

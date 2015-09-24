@@ -30,7 +30,10 @@ immutable Test
     patterns :: Vector{Union(TestPattern, AntiTestPattern)}
 end
 
-julia_command = "julia"
+
+root_path       = joinpath(dirname(@__FILE__), "../..")
+load_path       = joinpath(root_path, "dpes")
+julia_command   = joinpath(root_path, "deps", "julia")
 
 const exception_pattern = AntiTestPattern(
     r"Exception!",
@@ -650,20 +653,43 @@ const all_tests = [
     structure_symmetry_test1
 ]
 
+const fast_tests = [
+    context_test2,
+    context_test2_without_reordering,
+    context_test3,
+    context_test4,
+]
+
+function get_julia_ver()
+    s, p = open(`$julia_command -v`)
+    readline(s)
+end
+
+if !ismatch(r"\.*0.4.0-rc1", get_julia_ver())
+    error("Wrong julia version! 0.4.0-rc1 is required!")
+end
+
 if isreadable("regression.conf")
     include("regression.conf")
     tests = local_tests
 else
-    tests = all_tests
+    tests = fast_tests
 end
 
 if length(ARGS) > 0
-  julia_command = ARGS[1]
-  println("Using Julia command: ", julia_command)
-  if length(ARGS) == 2
-      include(ARGS[2])
-  end
+    if ARGS[1] == "all"
+        tests = all_tests
+    elseif ARGS[1] == "fast"
+        tests = fast_tests
+    elseif ARGS[1] == "none"
+        tests = []
+    end 
 end
+
+
+ENV["JULIA_LOAD_PATH"] = root_path * "/deps"
+# avoid package precompilation issue
+run(`$julia_command precompl.jl`)
 
 fail = 0
 succ = 0
@@ -674,21 +700,23 @@ for test in tests
     log  = string(test.name, ".log")
     
     # Run the command. Redirect output to the log file
-    file = open(log, "w+")
-    redirect_stderr(file)
-    redirect_stdout(file)
+    #file = open(log, "w+")
+    #redirect_stderr(file)
+    #redirect_stdout(file)
     output = ""
     try
         split_res = split(test.command)
-        run(`$julia_command $split_res`)
+        cmd = `$julia_command $split_res`
+        #run(cmd |> log)
+        run(pipeline(cmd, stdout=log, stderr=log))
     catch ex
-        println("exception = ", ex)
+        println("\nexception = ", ex)
     finally
-        flush(file)
+        #flush(file)
     end
-    close(file)
-    redirect_stderr(old_stderr)
-    redirect_stdout(old_stdout)
+    #close(file)
+    #redirect_stderr(old_stderr)
+    #redirect_stdout(old_stdout)
 
     # Read the output to a string
     output = open(readall, log)
@@ -697,7 +725,11 @@ for test in tests
     successful = true
     for pattern in test.patterns
         assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
-        m = match(pattern.pattern, output)
+
+        # This may cause PCRE JIT stack overflow. So change to use grep
+        # m = match(pattern.pattern, output)
+        run(`grep -E $pattern.pattern $log`)
+
         if (m == nothing && typeof(pattern) == TestPattern) ||
            (m != nothing && typeof(pattern) == AntiTestPattern)
             comment = pattern.comment

@@ -1,8 +1,6 @@
 CXX=icpc
 
-ifndef SPMP_DIR
-    SPMP_DIR=../deps/SpMP
-endif
+SPMP_DIR=../deps/SpMP
 
 CFLAGS = -I. -I$(SPMP_DIR)/.. -fopenmp --std=c++11 -Wall -I$(MKLROOT)/include
 
