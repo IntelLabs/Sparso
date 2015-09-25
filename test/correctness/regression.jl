@@ -668,7 +668,9 @@ function get_julia_ver()
     readline(s)
 end
 
-if !ismatch(r"\.*0.4.0-rc1", get_julia_ver())
+if !isreadable(julia_command)
+    error("Plase install (softlink) julia command to \"" * julia_command  * "\".")
+elseif !ismatch(r"\.*0.4.0-rc1", get_julia_ver())
     error("Wrong julia version! 0.4.0-rc1 is required!")
 end
 
@@ -686,6 +688,13 @@ if length(ARGS) > 0
         tests = fast_tests
     elseif ARGS[1] == "none"
         tests = []
+    else
+        for t in all_tests
+            if t.name == ARGS[1]
+                tests = [t]
+                break
+            end
+        end
     end 
 end
 
@@ -711,7 +720,8 @@ for test in tests
         split_res = split(test.command)
         cmd = `$julia_command $split_res`
         #run(cmd |> log)
-        run(pipeline(cmd, stdout=log, stderr=log))
+        run(pipeline(cmd, stdout=log, stderr=log, append=true))
+        #run(pipeline(cmd))
     catch ex
         println("\nexception = ", ex)
     finally
@@ -730,8 +740,9 @@ for test in tests
         assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
 
         # This may cause PCRE JIT stack overflow. So change to use grep
-        # m = match(pattern.pattern, output)
-        run(`grep -E $pattern.pattern $log`)
+        m = match(pattern.pattern, output)
+        #pattern_str = pattern.pattern.pattern
+        #m = readall(`grep -E $pattern_str $log`)
 
         if (m == nothing && typeof(pattern) == TestPattern) ||
            (m != nothing && typeof(pattern) == AntiTestPattern)
