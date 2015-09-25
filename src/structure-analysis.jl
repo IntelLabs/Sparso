@@ -47,6 +47,22 @@ abstract MatrixProperty
 include("property-constant-structure.jl")
 #include("property-symmetric-value.jl")
 
+@doc "print out the content of property proxies"
+function print_property_proxies(
+    pmap    :: Dict 
+)
+    print("\tSym : CV CS SV SS Lo Up\n")
+    for (k, v) in pmap
+        print("\t", k, " : ", 
+                    v.constant_valued, " ", 
+                    v.constant_structured, " ",
+                    v.symmetric_valued, " ",
+                    v.symmetric_structured, " ",
+                    v.lower_of, " ",
+                    v.upper_of, "\n")
+    end
+end
+
 @doc """
 Collect predefined maxtric property accoding from set_matrix_property statements
 in a loop region.
@@ -86,7 +102,7 @@ function find_predefined_properties(
         m, func_name = resolve_call_names(ast.args)
         if func_name == "set_matrix_property"
             if length(ast.args) == 4 # set lower_of/upper_of
-                dump(ast.args)
+                #dump(ast.args)
                 assert(isa(ast.args[2], QuoteNode) && isa(ast.args[4], QuoteNode))
                 sym = ast.args[2].value
                 psym = ast.args[4].value
@@ -95,16 +111,22 @@ function find_predefined_properties(
                 end
                 if ast.args[3].name == :SA_LOWER_OF
                     structure_proxies[sym].lower_of = psym
+                    dprintln(1, 1, "Predef: ", sym, " is lower of ", psym)
                 else
                     assert(ast.args[3].name == :SA_UPPER_OF)
                     structure_proxies[sym].upper_of = psym
+                    dprintln(1, 1, "Predef: ", sym, " is upper of ", psym)
                 end
             else # set other properties
                 pmap = eval(ast.args[2])
                 #dump(pmap)
                 assert(isa(pmap, Dict))
                 for (sym, p) in pmap
-                    sp = StructureProxy()
+                    if haskey(structure_proxies, sym)
+                        sp = structure_proxies[sym]
+                    else
+                        sp = StructureProxy()
+                    end
                     if (p & SA_CONST_VALUED) != 0
                         dprintln(1, 1, "Predef: const_valued ", sym)
                         sp.constant_valued = 3
@@ -122,9 +144,6 @@ function find_predefined_properties(
                         sp.symmetric_structured = 3
                     end
 
-                    if (p & SA_STRUCTURE_ONLY) != 0
-                        # TODO: fill this property?
-                    end
                     # add symbol to property map
                     structure_proxies[sym] = sp
                     #dprintln(1, 1, "Predef ", sym, ": ", sp)
@@ -156,8 +175,6 @@ function find_properties_of_matrices(
 
     dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_name * " -----\n")
 
-    matrix_properties = Symexpr2PropertiesMap()
-
     # symbol does not have a constant structure?
     structure_proxies = find_predefined_properties(region, cfg)
 
@@ -188,8 +205,12 @@ function find_properties_of_matrices(
             if p.is_structure_symmetric && sp.symmetric_structured == 0
                 sp.symmetric_structured = 4 
             end
-            sp.lower_of = p.lower_of
-            sp.upper_of = p.upper_of
+            if p.lower_of != nothing
+                sp.lower_of = p.lower_of
+            end
+            if p.upper_of != nothing
+                sp.upper_of = p.upper_of
+            end
         end
     end
 
@@ -203,12 +224,15 @@ function find_properties_of_matrices(
         end
     end
 
+    dprintln(1, 0, "\nStructure proxies:")
+    print_property_proxies(structure_proxies)
 
     all_structure_properties = [
         ConstantStructureProperty()
     #    SymmetricValueProperty()
     ]
 
+    dprintln(1, 0, "\nProperty anylsis passes:")
     for one_property in all_structure_properties
         one_property.set_property_for(structure_proxies, region, liveness, symbol_info, cfg)
     end
@@ -245,6 +269,8 @@ function find_properties_of_matrices(
     # Merge with structure info
     single_defs = find_single_defs(region, liveness, cfg)
     symbols = union(single_defs, collect(keys(structure_proxies)))
+
+    matrix_properties = Symexpr2PropertiesMap()
 
     for s in symbols
         # These symbols are not necessary related with matrices. But

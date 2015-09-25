@@ -5,6 +5,37 @@ type ConstantStructureProperty <: MatrixProperty
     set_property_for    :: Function
 
     @doc """
+    """
+    function build_depend_set_from_args(
+        args    :: Array,
+        call_sites :: CallSites,
+        level      :: Int
+    )
+        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode, ASCIIString]
+        dep_set = Set{Union{GenSym,Symbol}}()
+        
+        for arg in args
+            arg_tp = typeof(arg)
+            if arg_tp <: Expr 
+                union!(dep_set, build_dependence(arg, call_sites, level+1))
+            elseif arg_tp <: Symbol || typeof(arg) <: GenSym 
+                push!(dep_set, arg)
+            elseif arg_tp <: SymbolNode  
+                push!(dep_set, arg.name)
+            elseif in(arg_tp, skip_types)
+                # skip GlobalRef
+            else
+                dprintln(1, 2, typeof(arg), "\n")
+                dump(arg)
+                error("Unknown type")
+            end
+        end
+
+        dep_set
+    end
+
+
+    @doc """
     Build dependence map for all symbols
     """
     function build_dependence(
@@ -12,8 +43,6 @@ type ConstantStructureProperty <: MatrixProperty
         call_sites :: CallSites,
         level      :: Int
     )
-        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode, ASCIIString]
-
         symbol_info = call_sites.symbol_info
         patterns    = call_sites.patterns
         depend_sets = call_sites.extra
@@ -40,31 +69,20 @@ type ConstantStructureProperty <: MatrixProperty
                 if !haskey(depend_sets, k)
                     depend_sets[k] = Set{Union{GenSym,Symbol}}() 
                 end 
-                for arg in ast.args[2:end]
-                    arg_tp = typeof(arg)
-                    if arg_tp <: Expr 
-                        union!(depend_sets[k], build_dependence(arg, call_sites, level+1))
-                    elseif arg_tp <: Symbol || typeof(arg) <: GenSym 
-                        push!(depend_sets[k], arg)
-                    elseif arg_tp <: SymbolNode  
-                        push!(depend_sets[k], arg.name)
-                    elseif in(arg_tp, skip_types)
-                        # skip GlobalRef
-                    else
-                        dprintln(1, 2, typeof(arg), "\n")
-                        dump(arg)
-                        error("Unknown type")
-                    end
-                end
+                
+                union!(depend_sets[k],
+                    build_depend_set_from_args(ast.args[2:end], call_sites, level))
+
                 dprintln(1, 1, k, " : ", depend_sets[k], "\n")
             elseif ast.head == :call 
-                """ TODO: check function description to 
-                1: get each arg's IO property
-                2: handle dependence among args
-                """
                 m, func_name = resolve_call_names(ast.args)
+
+                # this is not direct type of args
+                args_real_types = expr_skeleton(ast, symbol_info)[2:end]
+
                 # a quick hack for setfield! call
                 if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
+                    @assert(ast.args[2].typ == args_real_types[2])
                     m = ast.args[2].name
                     if ast.args[3].value != :nzval
                         dump(ast.args[3])
@@ -75,20 +93,19 @@ type ConstantStructureProperty <: MatrixProperty
                     end
                     return ret_set 
                 end
-                for arg in ast.args[2:end]
-                    arg_tp = typeof(arg)
-                    if arg_tp <: Expr 
-                        union!(ret_set, build_dependence(arg, call_sites, level+1))
-                    elseif arg_tp <: Symbol || arg_tp <: GenSym 
-                        push!(ret_set, arg)
-                    elseif arg_tp <: SymbolNode  
-                        push!(ret_set, arg.name)
-                    elseif in(arg_tp, skip_types)
-                        # skip GlobalRef
-                    else
-                        dprintln(1, 2, typeof(arg), "\n")
-                        dump(arg)
-                        error("Unknown type")
+
+                ret_set = build_depend_set_from_args(ast.args[2:end], call_sites, level)
+
+                # check function's output set
+                # an arg depends on all other args (including itself?) if it's an ouput
+                func_desc = look_for_function_description(m, func_name, args_real_types[2:end])
+                if func_desc != nothing
+                    for o in func_desc.output
+                        k = ast.args[o]
+                        if !haskey(depend_sets, k)
+                        #    depend_sets[k] = Set{Union{GenSym,Symbol}}() 
+                        end
+                        #union!(depend_sets[k], ret_set)
                     end
                 end
             elseif in(ast.head, [:gotoifnot, :return])
@@ -136,8 +153,14 @@ type ConstantStructureProperty <: MatrixProperty
         symbol_info :: Sym2TypeMap,
         cfg         :: CFG
     )
-        constants   = find_constant_values(region, liveness, cfg)
-        single_defs = find_single_defs(region, liveness, cfg)
+        # constant structure is a subset of constant value
+        for (sym, v) in mat_property
+            if v.constant_valued > 0 && v.constant_structured == 0
+                v.constant_structured = v.constant_valued
+            end
+        end
+
+        #constants   = find_constant_values(region, liveness, cfg)
 
         if isa(region, LoopRegion)
             bb_idxs = region.loop.members
@@ -145,7 +168,6 @@ type ConstantStructureProperty <: MatrixProperty
             bb_idxs = keys(cfg.basic_blocks)
         end
 
-        #sym_non_constant = gensym("SYMBOL_NON_CONSTANT")
         const sym_non_constant = Symbol(:NON_CONSTANT)
 
         # dependence map: k -> symbols that k depends on
@@ -192,26 +214,30 @@ type ConstantStructureProperty <: MatrixProperty
         property_map = Dict{Union{GenSym,Symbol}, Int}()
         property_map[sym_non_constant] = -1
 
+        single_defs = find_single_defs(region, liveness, cfg)
+
         for k in keys(depend_map)
             # always prefer predefined values
-            if haskey(mat_property, k) && mat_property[k].constant_structured!=0 
-                property_map[k] = mat_property[k].constant_structured 
+            if haskey(mat_property, k) 
+                if mat_property[k].constant_structured!=0 
+                    property_map[k] = mat_property[k].constant_structured 
+                end
             else
                 property_map[k] = in(k, single_defs) ? 0 : -1
             end
         end
 
         for rk in keys(reverse_depend_map)
-            if !haskey(property_map, rk)
+            if !haskey(property_map, rk) # rk is not in def set
                 property_map[rk] = 2
             end
         end
 
-        for c in constants
-            if !haskey(property_map, c) || property_map[c] <=0
-                property_map[c] = 2
-            end
-        end
+        #for c in constants
+        #    if !haskey(property_map, c) || property_map[c] <=0
+        #        property_map[c] = 2
+        #    end
+        #end
 
         print_property_map(1, property_map, depend_map)
 
@@ -287,14 +313,14 @@ type ConstantStructureProperty <: MatrixProperty
         # copy back result
         delete!(property_map, :NON_CONSTANT)
         for (k, v) in property_map
-            if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES)
+            #if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES) 
                 if !haskey(mat_property, k)
                     mat_property[k] = StructureProxy()
                 end
                 mat_property[k].constant_structured = v
-            else
-                dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
-            end
+            #else
+            #    dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
+            #end
         end
     end 
 

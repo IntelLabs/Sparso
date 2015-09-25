@@ -689,15 +689,18 @@ if length(ARGS) > 0
     elseif ARGS[1] == "none"
         tests = []
     else
+        matched_tests = []
         for t in all_tests
-            if t.name == ARGS[1]
-                tests = [t]
-                break
+            if startswith(t.name, ARGS[1])
+                push!(matched_tests, t)
             end
         end
-    end 
+        if !isempty(matched_tests)
+            tests = matched_tests
+        end
+    end  
+    print(length(tests), " test(s).\n")
 end
-
 
 ENV["JULIA_LOAD_PATH"] = root_path * "/deps"
 # avoid package precompilation issue

@@ -15,7 +15,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
     set_matrix_property(:L, SA_LOWER_OF, :A)
     set_matrix_property(:U, SA_UPPER_OF, :A)
     set_matrix_property(Dict(
-        :A => SA_SYMM_STRUCTURED
+        :A => SA_SYMM_STRUCTURED,
+        :U => SA_CONST_VALUED
         )
     )
 
