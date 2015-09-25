@@ -1,5 +1,8 @@
 module SparseAccelerator
 
+package_path = joinpath(dirname(@__FILE__), "..", "deps")
+push!(LOAD_PATH, package_path)
+
 using CompilerTools
 using CompilerTools.CFGs
 using CompilerTools.LambdaHandling

@@ -55,21 +55,39 @@ function CS_fwdBwdTriSolve!_check(
     fknob_creator :: AbstractString,
     fknob_deletor :: AbstractString
 )
-    # TODO: replace the code to be based on call_sites.extra.matrix_properties.
-
-    L_or_U = ast.args[2]
-    structure = get_structure_proxy(L_or_U) 
-    if structure == nothing
+    arg2 = ast.args[2]
+    if typeof(arg2) == SymbolNode
+        L_or_U = arg2.name
+    else
+        L_or_U = arg2
+    end
+    assert(typeof(L_or_U) <: Symexpr)
+    
+    if !haskey(call_sites.extra.matrix_properties, L_or_U) ||
+        (call_sites.extra.matrix_properties[L_or_U].lower_of == nothing &&
+         call_sites.extra.matrix_properties[L_or_U].upper_of == nothing)
         return false
     end
     
+    # It is not possible to be a lower of some matrix, and also an upper of some
+    # (other) matrix.
+    assert(call_sites.extra.matrix_properties[L_or_U].lower_of == nothing ||
+           call_sites.extra.matrix_properties[L_or_U].upper_of == nothing)
+    
     # Check it is lower or upper part of a symmetric matrix.
-    if structure.lower || structure.upper
-        # So far, symmetricity is not checked: that might need user annotation.
-        # TODO: Check symmetricity once available
-        return true
+    if call_sites.extra.matrix_properties[L_or_U].lower_of != nothing
+        M = call_sites.extra.matrix_properties[L_or_U].lower_of
+    else
+        M = call_sites.extra.matrix_properties[L_or_U].upper_of
     end
-    return false
+    assert(typeof(M) <: Symexpr)
+
+    if !haskey(call_sites.extra.matrix_properties, M) ||
+       !call_sites.extra.matrix_properties[M].constant_structured
+       !call_sites.extra.matrix_properties[M].is_structure_symmetric
+        return false
+    end
+    return true
 end
 
 @doc """ 

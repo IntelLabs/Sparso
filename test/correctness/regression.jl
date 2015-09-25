@@ -30,7 +30,10 @@ immutable Test
     patterns :: Vector{Union(TestPattern, AntiTestPattern)}
 end
 
-julia_command = "julia"
+
+root_path       = joinpath(dirname(@__FILE__), "../..")
+load_path       = joinpath(root_path, "dpes")
+julia_command   = joinpath(root_path, "deps", "julia")
 
 const exception_pattern = AntiTestPattern(
     r"Exception!",
@@ -144,7 +147,7 @@ const context_test2 = Test(
         TestPattern(r"Manual_context_no_reorder k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context_no_reorder rel_err=\d*e-11",
+        TestPattern(r"Manual_context_no_reorder rel_err=\d.\d*e-11",
                      "Test rel_err"
         ),
         TestPattern(r"Manual_context sum of x=-1.577312043\d*e-5",
@@ -153,7 +156,7 @@ const context_test2 = Test(
         TestPattern(r"Manual_context k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context rel_err=\d*e-11",
+        TestPattern(r"Manual_context rel_err=\d.\d*e-11",
                      "Test rel_err"
         ),
         exception_pattern
@@ -214,10 +217,10 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_inverse_divide"
         ),
-        TestPattern(r"Original sum of x=715375.9885000014",
+        TestPattern(r"Original sum of x=715375.98850000",
                      "Test original ipm-ref"
         ),
-        TestPattern(r"Accelerated sum of x=715375.9885000014",
+        TestPattern(r"Accelerated sum of x=715375.98850000",
                      "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
@@ -653,20 +656,52 @@ const all_tests = [
     structure_symmetry_test1
 ]
 
+const fast_tests = [
+    context_test2,
+    context_test2_without_reordering,
+    context_test3,
+    context_test4,
+]
+
+function get_julia_ver()
+    s, p = open(`$julia_command -v`)
+    readline(s)
+end
+
+if !isreadable(julia_command)
+    error("Plase install (softlink) julia command to \"" * julia_command  * "\".")
+elseif !ismatch(r"\.*0.4.0-rc1", get_julia_ver())
+    error("Wrong julia version! 0.4.0-rc1 is required!")
+end
+
 if isreadable("regression.conf")
     include("regression.conf")
     tests = local_tests
 else
-    tests = all_tests
+    tests = fast_tests
 end
 
 if length(ARGS) > 0
-  julia_command = ARGS[1]
-  println("Using Julia command: ", julia_command)
-  if length(ARGS) == 2
-      include(ARGS[2])
-  end
+    if ARGS[1] == "all"
+        tests = all_tests
+    elseif ARGS[1] == "fast"
+        tests = fast_tests
+    elseif ARGS[1] == "none"
+        tests = []
+    else
+        for t in all_tests
+            if t.name == ARGS[1]
+                tests = [t]
+                break
+            end
+        end
+    end 
 end
+
+
+ENV["JULIA_LOAD_PATH"] = root_path * "/deps"
+# avoid package precompilation issue
+run(`$julia_command precompl.jl`)
 
 fail = 0
 succ = 0
@@ -677,21 +712,24 @@ for test in tests
     log  = string(test.name, ".log")
     
     # Run the command. Redirect output to the log file
-    file = open(log, "w+")
-    redirect_stderr(file)
-    redirect_stdout(file)
+    #file = open(log, "w+")
+    #redirect_stderr(file)
+    #redirect_stdout(file)
     output = ""
     try
         split_res = split(test.command)
-        run(`$julia_command $split_res`)
+        cmd = `$julia_command $split_res`
+        #run(cmd |> log)
+        run(pipeline(cmd, stdout=log, stderr=log, append=false))
+        #run(pipeline(cmd))
     catch ex
-        println("exception = ", ex)
+        println("\nexception = ", ex)
     finally
-        flush(file)
+        #flush(file)
     end
-    close(file)
-    redirect_stderr(old_stderr)
-    redirect_stdout(old_stdout)
+    #close(file)
+    #redirect_stderr(old_stderr)
+    #redirect_stdout(old_stdout)
 
     # Read the output to a string
     output = open(readall, log)
@@ -700,7 +738,12 @@ for test in tests
     successful = true
     for pattern in test.patterns
         assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
+
+        # This may cause PCRE JIT stack overflow. So change to use grep
         m = match(pattern.pattern, output)
+        #pattern_str = pattern.pattern.pattern
+        #m = readall(`grep -E $pattern_str $log`)
+
         if (m == nothing && typeof(pattern) == TestPattern) ||
            (m != nothing && typeof(pattern) == AntiTestPattern)
             comment = pattern.comment

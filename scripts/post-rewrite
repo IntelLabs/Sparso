@@ -5,9 +5,9 @@ changedfiles=( `git diff --no-commit-id --name-only HEAD@{1} HEAD` )
 
 if [[ "${changedfiles[*]}" =~ "lib" ]]; then
     echo "Updating SpMP lib"
-    /opt/intel/bin/compilervars.sh intel64
+    source /opt/intel/bin/compilervars.sh intel64
     # PWD is in .git
     cd ../lib
     make clean
-    make -j
+    make -j DBG=yes
 fi

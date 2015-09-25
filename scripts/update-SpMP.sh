@@ -1,7 +1,6 @@
 #!/bin/bash
 
-
-git submodule update deps/SpMP
+HTTP_PROXY="" git submodule update deps/SpMP
 
 cd deps/SpMP
 

@@ -191,17 +191,18 @@ function find_properties_of_matrices(
             sp.lower_of = p.lower_of
             sp.upper_of = p.upper_of
         end
-    else
-        constants = find_constant_values(region, liveness, cfg)
-        for c in constants
-            if !haskey(structure_proxies, c)
-                structure_proxies[c] = StructureProxy()
-            end
-            if structure_proxies[c] == 0
-                structure_proxies[c].constant_valued = 1 
-            end
+    end
+
+    constants = find_constant_values(region, liveness, cfg)
+    for c in constants
+        if !haskey(structure_proxies, c)
+            structure_proxies[c] = StructureProxy()
+        end
+        if structure_proxies[c].constant_valued == 0
+            structure_proxies[c].constant_valued = 1 
         end
     end
+
 
     all_structure_properties = [
         ConstantStructureProperty()
@@ -213,10 +214,13 @@ function find_properties_of_matrices(
     end
 
     # sort by keys 
-    sorter = (x)->sort(collect(keys(x)))
+    sorter = (x)->sort(collect(keys(x)), by=v->string(v))
 
     dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, sorter(structure_proxies))
+
+    dprintln(1, 0, "\n" * region_name * " Constant value discovered:")
+    dprintln(1, 1, sorter(filter((k, v) -> v.constant_valued>0, structure_proxies)))
 
     dprintln(1, 0, "\n" * region_name * " Constant structures discovered:")
     dprintln(1, 1, sorter(filter((k, v) -> v.constant_structured>0, structure_proxies)))
