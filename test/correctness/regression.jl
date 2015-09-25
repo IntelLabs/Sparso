@@ -147,7 +147,7 @@ const context_test2 = Test(
         TestPattern(r"Manual_context_no_reorder k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context_no_reorder rel_err=\d*e-11",
+        TestPattern(r"Manual_context_no_reorder rel_err=\d.\d*e-11",
                      "Test rel_err"
         ),
         TestPattern(r"Manual_context sum of x=-1.577312043\d*e-5",
@@ -156,7 +156,7 @@ const context_test2 = Test(
         TestPattern(r"Manual_context k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context rel_err=\d*e-11",
+        TestPattern(r"Manual_context rel_err=\d.\d*e-11",
                      "Test rel_err"
         ),
         exception_pattern
