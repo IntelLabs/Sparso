@@ -720,7 +720,7 @@ for test in tests
         split_res = split(test.command)
         cmd = `$julia_command $split_res`
         #run(cmd |> log)
-        run(pipeline(cmd, stdout=log, stderr=log, append=true))
+        run(pipeline(cmd, stdout=log, stderr=log, append=false))
         #run(pipeline(cmd))
     catch ex
         println("\nexception = ", ex)
