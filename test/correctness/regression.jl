@@ -11,7 +11,7 @@ a friendly message when the pattern does not match.
 """
 immutable TestPattern
     pattern :: Regex
-    comment :: String
+    comment :: AbstractString
 end
 
 @doc """"
@@ -21,12 +21,12 @@ a friendly message when the pattern does match.
 """
 immutable AntiTestPattern
     pattern :: Regex
-    comment :: String
+    comment :: AbstractString
 end
 
 immutable Test
-    name     :: String
-    command  :: String
+    name     :: AbstractString
+    command  :: AbstractString
     patterns :: Vector{Union(TestPattern, AntiTestPattern)}
 end
 
