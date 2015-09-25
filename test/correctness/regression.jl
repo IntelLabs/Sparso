@@ -217,10 +217,10 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_inverse_divide"
         ),
-        TestPattern(r"Original sum of x=715375.9885000014",
+        TestPattern(r"Original sum of x=715375.98850000",
                      "Test original ipm-ref"
         ),
-        TestPattern(r"Accelerated sum of x=715375.9885000014",
+        TestPattern(r"Accelerated sum of x=715375.98850000",
                      "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
