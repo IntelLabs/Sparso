@@ -35,6 +35,11 @@ root_path       = joinpath(dirname(@__FILE__), "../..")
 load_path       = joinpath(root_path, "dpes")
 julia_command   = joinpath(root_path, "deps", "julia")
 
+# The following patterns often contains "(.|n)*?something". This is to let
+# pcregrep (if USE_PCREGREP_REGEX_MATCH is true) match immediately when
+# something appears. Otherwise, it will maximize the match and thus (.|n)* can
+# match the whole file, causing segmentation fault, etc.
+
 const exception_pattern = AntiTestPattern(
     r"Exception!",
     "Test if an exception has been thrown in sparse accelerator"
@@ -72,7 +77,7 @@ const sanity_test3 = Test(
     "sanity-test3",
     "sanity-test3.jl",
     [
-        TestPattern(r"New AST:(.|\n)*return A::[^\s\\]*SparseMatrixCSC.*x::Array",
+        TestPattern(r"New AST:(.|\n)*?return A::[^\s\\]*SparseMatrixCSC.*x::Array",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
         ),
         exception_pattern
@@ -106,13 +111,25 @@ const context_test1 = Test(
         TestPattern(r"Original rel_err=6.38\d*e-13",
                      "Test rel_err"
         ),
-        TestPattern(r"New AST:(.|\n)*mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,false,false,false,false\)",
+        TestPattern(r"Constant structures discovered:\n.*\[:A,:L,:U\]",
+                     "Test constant structures"
+        ),
+        TestPattern(r"Structure symmetry discovered:\n.*\[:A\]",
+                     "Test structure symmetry"
+        ),
+        TestPattern(r"L is lower of A",
+                     "Test L and A"
+        ),
+        TestPattern(r"U is upper of A",
+                     "Test U and A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,false,false,false,false\)",
                      "Test if mknobA is generated and is constant valued and constant structured"
         ),
-        TestPattern(r"New AST:(.|\n)*add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
+        TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
                      "Test if mknobA is added to a function knob (for SpMV)"
         ),
-        TestPattern(r"New AST:(.|\n)*Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
         TestPattern(r"Accelerated sum of x=-1.577312043\d*e-5",
@@ -167,10 +184,10 @@ const context_test2_without_reordering = Test(
     "context-test2-without-reordering",
     "context-test2-without-reordering.jl small-diag.mtx",
     [
-        TestPattern(r"Original:(.|\n)*sum of x=-1.5773120434\d*e-5(.|\n)*rel_err=\d.\d*e-13",
+        TestPattern(r"Original:(.|\n)*?sum of x=-1.5773120434\d*e-5(.|\n)*?rel_err=\d.\d*e-13",
                      "Test pcg_symgs"
         ),
-        TestPattern(r"With manual context-sensitive optimization:(.|\n)*sum of x=-1.5773120434\d*e-5(.|\n)*rel_err=\d.\d*e-11",
+        TestPattern(r"With manual context-sensitive optimization:(.|\n)*?sum of x=-1.5773120434\d*e-5(.|\n)*?rel_err=\d.\d*e-11",
                      "Test pcg_symgs_with_context_opt"
         ),
         exception_pattern
@@ -181,40 +198,40 @@ const context_test3 = Test(
     "context-test3",
     "context-test3.jl ipm/mps/osa-14",
     [
-        TestPattern(r"New AST:(.|\n)*__AT__ = \(Main.ctranspose\)\(A",
+        TestPattern(r"New AST:(.|\n)*?__AT__ = \(Main.ctranspose\)\(A",
                      "Test if accelerated ipm-ref generates AT"
         ),
-        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob",
+        TestPattern(r"New AST:(.|\n)*?mknob__AT__.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for AT"
         ),
-#        TestPattern(r"New AST:(.|\n)*mknob__AT__.*new_matrix_knob\)\(__AT__",
+#        TestPattern(r"New AST:(.|\n)*?mknob__AT__.*new_matrix_knob\)\(__AT__",
 #                     "Test if accelerated ipm-ref generates matrix knob for AT"
 #        ),
-        TestPattern(r"New AST:(.|\n)*mknobD.*new_matrix_knob",
+        TestPattern(r"New AST:(.|\n)*?mknobD.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for D"
         ),
-        TestPattern(r"New AST:(.|\n)*mknobA.*new_matrix_knob",
+        TestPattern(r"New AST:(.|\n)*?mknobA.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for A"
         ),
-        TestPattern(r"New AST:(.|\n)*mknobB.*new_matrix_knob",
+        TestPattern(r"New AST:(.|\n)*?mknobB.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for B"
         ),
-        TestPattern(r"New AST:(.|\n)*mknobR.*new_matrix_knob",
+        TestPattern(r"New AST:(.|\n)*?mknobR.*new_matrix_knob",
                      "Test if accelerated ipm-ref generates matrix knob for R"
         ),
-        TestPattern(r"New AST:(.|\n)*new_function_knob(.|\n)*new_function_knob(.|\n)*new_function_knob",
+        TestPattern(r"New AST:(.|\n)*?new_function_knob(.|\n)*?new_function_knob(.|\n)*?new_function_knob",
                      "Test if accelerated ipm-ref generates function knobs"
         ),
-        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\)\)\(A.*,D.*,__AT__.*,##fknob#",
+        TestPattern(r"New AST:(.|\n)*?B = .*\(SparseAccelerator,:ADB\)\)\(A.*,D.*,__AT__.*,##fknob#",
                      "Test if accelerated ipm-ref generates ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*B = .*\(SparseAccelerator,:ADB\).*\n.*propagate_matrix_info.*mknobB.*mknobExpr",
+        TestPattern(r"New AST:(.|\n)*?B = .*\(SparseAccelerator,:ADB\).*\n.*propagate_matrix_info.*mknobB.*mknobExpr",
                      "Test if accelerated ipm-ref generates propagate_matrix_info after B = ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*R = .*\(SparseAccelerator,:cholfact_int32\)\)\(B.*,##fknob#",
+        TestPattern(r"New AST:(.|\n)*?R = .*\(SparseAccelerator,:cholfact_int32\)\)\(B.*,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_int32"
         ),
-        TestPattern(r"New AST:(.|\n)*dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
+        TestPattern(r"New AST:(.|\n)*?dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_inverse_divide"
         ),
         TestPattern(r"Original sum of x=715375.98850000",
@@ -256,25 +273,25 @@ const liveness_test2 = Test(
     "liveness-test2",
     "liveness-test2.jl",
     [
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.*bigM.* A .*\) Use\(",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.*bigM.* A .*\) Use\(",
                         "Test liveness for ipm-ref: A should not be updated in the block that sets bigM"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* A .*bigM.*\) Use\(",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.* A .*bigM.*\) Use\(",
                         "Test liveness for ipm-ref: A should not be updated in the block that sets bigM"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.*Rd.* A .*\) Use\(",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.*Rd.* A .*\) Use\(",
                         "Test liveness for ipm-ref: A should not be updated in the block that sets Rd"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* A .*Rd.*\) Use\(",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.* A .*Rd.*\) Use\(",
                         "Test liveness for ipm-ref: A should not be updated in the block that sets Rd"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* mu .*\) Use\(.*\n.* = mu <=",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.* mu .*\) Use\(.*\n.* = mu <=",
                         "Test liveness for ipm-ref: mu should not be updated in the block that tests mu <= 1.0e-7"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.*blas1_time.* relResidual .*\) Use\(.*\n\s*blas1_time =.*\n.*Ac_mul_B",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.*blas1_time.* relResidual .*\) Use\(.*\n\s*blas1_time =.*\n.*Ac_mul_B",
                         "Test liveness for ipm-ref: relResidual, x, p should not be updated in the block that sets blas1_time"
         ),
-        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*Def\(.* relResidual .*blas1_time.*\) Use\(.*\n\s*blas1_time =.*\n.*Ac_mul_B",
+        AntiTestPattern(r"Liveness of basic blocks:(.|\n)*?Def\(.* relResidual .*blas1_time.*\) Use\(.*\n\s*blas1_time =.*\n.*Ac_mul_B",
                         "Test liveness for ipm-ref: relResidual, x, p should not be updated in the block that sets blas1_time"
         ),
         exception_pattern
@@ -285,7 +302,7 @@ const call_replacement_test1 = Test(
     "call-replacement-test1",
     "call-replacement-test1.jl small-diag.mtx",
     [
-        TestPattern(r"AST:(.|\n)*Main.dot(.|\n)*New AST(.|\n)*SparseAccelerator,:dot",
+        TestPattern(r"AST:(.|\n)*?Main.dot(.|\n)*?New AST(.|\n)*?SparseAccelerator,:dot",
                      "Test call replacement of Main.dot with SparseAccelerator.dot."
         ),
         exception_pattern
@@ -296,7 +313,7 @@ const call_replacement_test2 = Test(
     "call-replacement-test2",
     "call-replacement-test2.jl small-diag.mtx",
     [
-        TestPattern(r"AST:(.|\n)*A::[^\s\\]*SparseMatrixCSC.*\* x::Array(.|\n)*New AST(.|\n)*SparseAccelerator,:SpMV.*A::[^\s\\]*SparseMatrixCSC.*,x::Array",
+        TestPattern(r"AST:(.|\n)*?A::[^\s\\]*SparseMatrixCSC.*\* x::Array(.|\n)*?New AST(.|\n)*?SparseAccelerator,:SpMV.*A::[^\s\\]*SparseMatrixCSC.*,x::Array",
                      "Test call replacement of * with SparseAccelerator.SpMV."
         ),
         exception_pattern
@@ -307,7 +324,7 @@ const call_replacement_test3 = Test(
     "call-replacement-test3",
     "call-replacement-test3.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
                      "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
         ),
         exception_pattern
@@ -318,7 +335,7 @@ const call_replacement_test4 = Test(
     "call-replacement-test4",
     "call-replacement-test4.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\)\(y::Array\{Float64,1\},0.1,A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
                      "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
         ),
         exception_pattern
@@ -329,7 +346,7 @@ const call_replacement_test5 = Test(
     "call-replacement-test5",
     "call-replacement-test5.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},alpha::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},alpha::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for x += alpha * p."
         ),
         exception_pattern
@@ -340,7 +357,7 @@ const call_replacement_test6 = Test(
     "call-replacement-test6",
     "call-replacement-test6.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},-alpha::Float64::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\)\(x,1,x::Array\{Float64,1\},-alpha::Float64::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for x -= alpha * p."
         ),
         exception_pattern
@@ -351,7 +368,7 @@ const call_replacement_test7 = Test(
     "call-replacement-test7",
     "call-replacement-test7.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,r::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\)\(p,1,r::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
         ),
         exception_pattern
@@ -362,7 +379,7 @@ const call_replacement_test8 = Test(
     "call-replacement-test8",
     "call-replacement-test8.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::[^\s\\]*SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\)\(p,1 - r::Float64::Float64,A::[^\s\\]*SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
                      "Test call replacement of SpMV! in simple page rank."
         ),
         exception_pattern
@@ -419,7 +436,7 @@ const call_replacement_test12 = Test(
     "call-replacement-test12",
     "call-replacement-test12.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*SparseAccelerator,:WAXPBY\!\)\)\(p,1,z::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\)\(p,1,z::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
         ),
         exception_pattern
@@ -430,7 +447,7 @@ const name_resolution_test1 = Test(
     "name-resolution-test1",
     "name-resolution-test1.jl small-diag.mtx",
     [
-        TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*Module name: Main\nFunction name: \*",
+        TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*?Module name: Main\nFunction name: \*",
                      "Test name resolution."
         ),
         exception_pattern
@@ -663,6 +680,11 @@ const fast_tests = [
     context_test4,
 ]
 
+# If true, use pcregrep for regular expression match. 
+# If false, use Julia (If PCRE JIT stack overflow: enlarge JIT_STACK_MAX_SIZE in
+# julia/base/pcre.jl (times it with 10) and retry).
+const USE_PCREGREP_REGEX_MATCH = false
+
 function get_julia_ver()
     s, p = open(`$julia_command -v`)
     readline(s)
@@ -707,12 +729,18 @@ fail = 0
 succ = 0
 old_stderr = STDERR
 old_stdout = STDOUT
+
+# Two temporary output files' names.
+tmp_out_filename = "tmp_out.txt"
+tmp_err_filename = "tmp_err.txt"
+
 for test in tests
     print("Testing ", test.name)
     log  = string(test.name, ".log")
     
     # Run the command. Redirect output to the log file
-    #file = open(log, "w+")
+    # Clear the log file first.
+    file = open(log, "w"); close(file)
     #redirect_stderr(file)
     #redirect_stdout(file)
     output = ""
@@ -723,7 +751,10 @@ for test in tests
         run(pipeline(cmd, stdout=log, stderr=log, append=false))
         #run(pipeline(cmd))
     catch ex
-        println("\nexception = ", ex)
+        # Some tests are not really intended to run: they just want to have 
+        # compiler's output dumped. So their execution may fault. That is OK,
+        # as long as the compiler's output has the expected patterns.
+        # println("\nexception = ", ex)
     finally
         #flush(file)
     end
@@ -738,14 +769,36 @@ for test in tests
     successful = true
     for pattern in test.patterns
         assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
-
-        # This may cause PCRE JIT stack overflow. So change to use grep
-        m = match(pattern.pattern, output)
-        #pattern_str = pattern.pattern.pattern
-        #m = readall(`grep -E $pattern_str $log`)
-
-        if (m == nothing && typeof(pattern) == TestPattern) ||
-           (m != nothing && typeof(pattern) == AntiTestPattern)
+        if !USE_PCREGREP_REGEX_MATCH
+            m       = match(pattern.pattern, output)
+            matched = (m != nothing)
+        else
+            # Pcregrep matches a file. Thus write the output to a file
+            log1        = string(log, "1")
+            file        = open(log1, "w")
+            write(file, output)
+            close(file)
+            pattern_str = pattern.pattern.pattern
+            try
+                # Create two empty temporary files.
+                temp_out = open(tmp_out_filename, "w"); close(temp_out)
+                temp_err = open(tmp_err_filename, "w"); close(temp_err)
+                cmd  = `pcregrep --buffer-size=10000000 -M $pattern_str $log1`
+                run(pipeline(cmd, stdout=tmp_out_filename, stderr=tmp_err_filename, append=true))
+                matched = true
+            catch ex
+                # If pcregrep matches, it returns 0, and julia does not throw any
+                # exception. But if it does not match, it returns 1, and julia
+                # throws an exception.
+                matched = false
+            finally
+                rm(log1)
+                rm(tmp_out_filename)
+                rm(tmp_err_filename)
+            end
+        end
+        if (!matched && typeof(pattern) == TestPattern) ||
+           ( matched && typeof(pattern) == AntiTestPattern)
             comment = pattern.comment
             file = open(log, "a")
             write(file, "\n****** Failed in ", 
