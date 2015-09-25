@@ -406,11 +406,11 @@ const call_replacement_test10 = Test(
     "call-replacement-test10",
     "call-replacement-test10.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.5773120434107317e-5",
+        TestPattern(r"sum of x=-1.5773120434107\d*e-5",
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
+        TestPattern(r"accel sum of x=-1.5773120434107\d*e-5",
                      "Test accelerated sum"
         ),
         exception_pattern
@@ -421,11 +421,11 @@ const call_replacement_test11 = Test(
     "call-replacement-test11",
     "call-replacement-test11.jl small-diag.mtx",
     [
-        TestPattern(r"sum of x=-1.57731204341073\d*e-5",
+        TestPattern(r"sum of x=-1.5773120434107\d*e-5",
                      "Test orig sum"
         ),
 
-        TestPattern(r"accel sum of x=-1.57731204341073\d*e-5",
+        TestPattern(r"accel sum of x=-1.5773120434107\d*e-5",
                      "Test accelerated sum"
         ),
         exception_pattern
@@ -482,8 +482,14 @@ const single_def_test1 = Test(
     "single-def-test1",
     "single-def-test1.jl",
     [
-        TestPattern(Regex("Single-defs discovered:.*\\n.*" * gen_set_regex_string([:B, :D, :R])),
-                     "Test ipm-ref that B D R are recognized as single-defs in the loop."
+        TestPattern(Regex("Single-defs discovered:.*\\n.*\[.*[^:]*:B[^:].*\]"),
+                     "Test ipm-ref that B is recognized as single-defs in the loop."
+        ),
+        TestPattern(Regex("Single-defs discovered:.*\\n.*\[.*[^:]*:D[^:].*\]"),
+                     "Test ipm-ref that D is recognized as single-defs in the loop."
+        ),
+        TestPattern(Regex("Single-defs discovered:.*\\n.*\[.*[^:]*:R[^:].*\]"),
+                     "Test ipm-ref that R is recognized as single-defs in the loop."
         ),
         exception_pattern
     ]
@@ -683,7 +689,7 @@ const fast_tests = [
 # If true, use pcregrep for regular expression match. 
 # If false, use Julia (If PCRE JIT stack overflow: enlarge JIT_STACK_MAX_SIZE in
 # julia/base/pcre.jl (times it with 10) and retry).
-const USE_PCREGREP_REGEX_MATCH = false
+const USE_PCREGREP_REGEX_MATCH = true
 
 function get_julia_ver()
     s, p = open(`$julia_command -v`)

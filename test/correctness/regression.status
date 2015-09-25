@@ -1,8 +1,17 @@
+hrong1@hrong1-u1404x:~/SparseAccelerator/test/correctness$ julia regression.jl all
 Testing sanity-test1: Pass
 Testing sanity-test2: Pass
 Testing sanity-test3: Pass
-Testing spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
+Testing spmv-sanity-test1: Pass
 Testing context-test1: FAIL. See context-test1.log
+    Current issue: 
+        Exception! Sparse Accelerator skips optimizing the call.
+            AssertionError("")
+             in create_new_matrix_knob at /home/hrong1/SparseAccelerator/test/correctness/../../src/context.jl:579
+             in generate_and_delete_knobs at /home/hrong1/SparseAccelerator/test/correctness/../../src/context.jl:792
+        This is because U is not recognized as a SparseMatrixCSC, but Any. Linxiang is working on it.
+
+    Previous issue:
     There only change in the AST is replacing A*p with SpMV with a fknob. It runs
     and gives the correct sum. However, it takes 71 iterations, instead of 4
     iterations like the original code. Some details:
@@ -53,12 +62,17 @@ Testing call-replacement-test11: Pass
 Testing call-replacement-test12: Pass
 Testing name-resolution-test1: Pass
 Testing constant-value-test1: Pass
-Testing single-def-test1: FAIL. See single-def-test1.log
+Testing single-def-test1: Pass
 Testing set-matrix-property-test1: Pass
 Testing set-matrix-property-test2: FAIL. See set-matrix-property-test2.log
+    Failed in pattern
+        r"Loop0 Matrix structures discovered:.*\n.*\[[^:]*:A[^:]*:L[^:]*:U[^:]*\]"
+Testing set-matrix-property-test3: Pass
+Testing set-matrix-property-test4: Pass
+Testing set-matrix-property-test5: Pass
 Testing constant-structure-test1: Pass
 Testing value-symmetry-test1: FAIL. See value-symmetry-test1.log
 Testing structure-symmetry-test1: FAIL. See structure-symmetry-test1.log
-Total: 31
-Pass : 25
-Fail : 6
+Total: 34
+Pass : 30
+Fail : 4
