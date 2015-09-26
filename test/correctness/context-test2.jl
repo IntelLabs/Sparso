@@ -9,7 +9,6 @@ function pcg_symgs(x, A, b, tol, maxiter)
   
     trsv_time = 0.
     spmv_time = 0.
-    dot_time = 0.
     blas1_time = 0.
 
     L = tril(A)
@@ -96,7 +95,6 @@ function pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
   
     trsv_time = 0.
     spmv_time = 0.
-    dot_time = 0.
     blas1_time = 0.
 
     L = tril(A)
@@ -206,7 +204,6 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
   
     trsv_time = 0.
     spmv_time = 0.
-    dot_time = 0.
     blas1_time = 0.
     reorder_time = 0.
 
