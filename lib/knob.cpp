@@ -68,6 +68,19 @@ struct MatrixKnob {
         }
     }
 
+    ~MatrixKnob() 
+    {
+        // Delete only the data owned by this matrix knob.
+        // ISSUE: it seems that the fields in one matrix knob may be shared
+        // by other matrix knobs. And deleting the fields causing segementation
+        // fault when deleting the other matrix knobs.
+        // TODO: maybe each knob should know which fields it owns, and which it
+        // shares and does not own? Then each knob can safely releases the owned
+        // fields. But we do not need this functionality for now.
+        // if (schedule != NULL) delete schedule;
+        // if (A != NULL) DeleteOptimizedRepresentation(this)
+    }
+    
     // auxiliary data structure
     LevelSchedule     *schedule;
     _MKL_DSS_HANDLE_t dss_handle; 
@@ -99,6 +112,11 @@ struct FunctionKnob {
     ReorderingInfo reordering_info;
 
     FunctionKnob() : is_reordering_decision_maker(false) { }
+    ~FunctionKnob() 
+    {
+        // This does not affect the knobs themselves.
+        mknobs.clear();
+    } 
 };
 
 /**************************** Usage of knobs *****************************/
@@ -131,12 +149,7 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
 
 void DeleteMatrixKnob(MatrixKnob* mknob)
 {
-    //DeleteOptimizedRepresentation(mknob);
-    if (mknob->schedule) {
-        delete mknob->schedule;
-        mknob->schedule = NULL;
-    }
-    delete mknob;
+    if (mknob != NULL) delete mknob;
 }
 
 static bool CheckMatrixKnobConsistency(MatrixKnob *m)
@@ -445,7 +458,7 @@ FunctionKnob* NewFunctionKnob()
 
 void DeleteFunctionKnob(FunctionKnob* fknob)
 {
-    delete fknob;
+    if (fknob != NULL) delete fknob;
 }
 
 void SpMV(

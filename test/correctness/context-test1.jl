@@ -22,7 +22,6 @@ function pcg_symgs(x, A, b, tol, maxiter)
 
     L = tril(A)
     U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A))*triu(A))
-    M = L*U
     r = b - A * x
     normr0 = norm(r)
     rel_err = 1

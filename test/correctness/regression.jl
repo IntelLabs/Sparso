@@ -123,7 +123,7 @@ const context_test1 = Test(
         TestPattern(r"U is upper of A",
                      "Test U and A"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
                      "Test if mknobA is generated and is constant valued and constant structured"
         ),
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
@@ -138,7 +138,7 @@ const context_test1 = Test(
         TestPattern(r"Accelerated k=4",
                      "Test iterations"
         ),
-        TestPattern(r"Accelerated rel_err=6.38\d*e-13",
+        TestPattern(r"Accelerated rel_err=\d.\d*e-11",
                      "Test rel_err"
         ),
         exception_pattern
@@ -680,6 +680,7 @@ const all_tests = [
 ]
 
 const fast_tests = [
+    context_test1,
     context_test2,
     context_test2_without_reordering,
     context_test3,

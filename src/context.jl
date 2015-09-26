@@ -87,6 +87,12 @@ function CS_fwdBwdTriSolve!_check(
        !call_sites.extra.matrix_properties[M].is_structure_symmetric
         return false
     end
+
+
+    if typeof(L_or_U) == Symbol && typeof(M) == Symbol
+        push!(call_sites.extra.derivatives, (L_or_U, DERIVATIVE_TYPE_SYMMETRIC, M))
+    end
+
     return true
 end
 
