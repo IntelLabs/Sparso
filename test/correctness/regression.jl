@@ -542,7 +542,7 @@ const set_matrix_property_test3 = Test(
     "set-matrix-property-test3",
     "set-matrix-property-test3.jl",
     [
-        TestPattern(Regex("Func Constant structures discovered:.*\\n.*" * gen_set_regex_string([:B])),
+        TestPattern(Regex("Func Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
@@ -734,100 +734,88 @@ ENV["JULIA_LOAD_PATH"] = root_path * "/deps"
 # avoid package precompilation issue
 run(`$julia_command precompl.jl`)
 
-fail = 0
-succ = 0
-old_stderr = STDERR
-old_stdout = STDOUT
-
-# Two temporary output files' names.
-tmp_out_filename = "tmp_out.txt"
-tmp_err_filename = "tmp_err.txt"
-
-for test in tests
-    print("Testing ", test.name)
+@doc """
+Run a test
+"""
+function run_test(
+    test :: Test
+)
     log  = string(test.name, ".log")
     
     # Run the command. Redirect output to the log file
-    # Clear the log file first.
-    file = open(log, "w"); close(file)
-    #redirect_stderr(file)
-    #redirect_stdout(file)
-    output = ""
-    try
-        split_res = split(test.command)
-        cmd = `$julia_command $split_res`
-        #run(cmd |> log)
-        run(pipeline(cmd, stdout=log, stderr=log, append=false))
-        #run(pipeline(cmd))
-    catch ex
-        # Some tests are not really intended to run: they just want to have 
-        # compiler's output dumped. So their execution may fault. That is OK,
-        # as long as the compiler's output has the expected patterns.
-        # println("\nexception = ", ex)
-    finally
-        #flush(file)
-    end
-    #close(file)
-    #redirect_stderr(old_stderr)
-    #redirect_stdout(old_stdout)
+    split_res = split(test.command)
+    cmd = `$julia_command $split_res`
+    successful = success(pipeline(cmd, stdout=log, stderr=log, append=false))
+   
+    if successful
+        # Match with patterns
+        log_file = open(log, "a")
+        for pattern in test.patterns
+            assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
+            if !USE_PCREGREP_REGEX_MATCH
+                # Read the output to a string
+                output = open(readall, log)
+                m       = match(pattern.pattern, output)
+                matched = (m != nothing)
+            else
+                pattern_str = pattern.pattern.pattern
 
-    # Read the output to a string
-    output = open(readall, log)
-    
-    # Match with patterns
-    successful = true
-    for pattern in test.patterns
-        assert(typeof(pattern) == TestPattern || typeof(pattern) == AntiTestPattern)
-        if !USE_PCREGREP_REGEX_MATCH
-            m       = match(pattern.pattern, output)
-            matched = (m != nothing)
-        else
-            # Pcregrep matches a file. Thus write the output to a file
-            log1        = string(log, "1")
-            file        = open(log1, "w")
-            write(file, output)
-            close(file)
-            pattern_str = pattern.pattern.pattern
-            try
-                # Create two empty temporary files.
-                temp_out = open(tmp_out_filename, "w"); close(temp_out)
-                temp_err = open(tmp_err_filename, "w"); close(temp_err)
-                cmd  = `pcregrep --buffer-size=10000000 -M $pattern_str $log1`
-                run(pipeline(cmd, stdout=tmp_out_filename, stderr=tmp_err_filename, append=true))
-                matched = true
-            catch ex
-                # If pcregrep matches, it returns 0, and julia does not throw any
-                # exception. But if it does not match, it returns 1, and julia
-                # throws an exception.
-                matched = false
-            finally
-                rm(log1)
-                rm(tmp_out_filename)
-                rm(tmp_err_filename)
+                cmd  = `pcregrep --buffer-size=10000000 -M $pattern_str $log`
+                matched = success(pipeline(cmd, stdout=DevNull, stderr=DevNull))
+            end
+            if (!matched && typeof(pattern) == TestPattern) ||
+               ( matched && typeof(pattern) == AntiTestPattern)
+                comment = pattern.comment
+                write(log_file, "\n****** Failed in ", 
+                    (typeof(pattern) == AntiTestPattern) ? "anti-pattern\n\t" : "pattern\n\t",
+                    string(pattern.pattern), "\n\tComment: ", comment)
+                successful = false
             end
         end
-        if (!matched && typeof(pattern) == TestPattern) ||
-           ( matched && typeof(pattern) == AntiTestPattern)
-            comment = pattern.comment
-            file = open(log, "a")
-            write(file, "\n****** Failed in ", 
-                (typeof(pattern) == AntiTestPattern) ? "anti-pattern\n\t" : "pattern\n\t",
-                string(pattern.pattern), "\n\tComment: ", comment)
-            close(file)
-            successful = false
-        end
+        close(log_file)
     end
+
     if successful
-        succ = succ + 1
         rm(log)
-        println(": Pass")
-    else
-        fail = fail + 1
-        println(": FAIL. See ", log)
     end
+
+    successful
 end
 
-println("Total: ", fail + succ)
+total = length(tests)
+succ = 0
+tasks = []
+for test in tests
+    print("Testing ", test.name)
+    s = run_test(test)
+    if s
+        succ = succ + 1
+        println(": Pass")
+    else
+        println(": FAIL. See ", test.name * ".log")
+    end
+#    push!(tasks, @schedule(run_test(test)))
+end
+
+#finished = 0
+#while finished < total
+#    finished = 0
+#    running = 0
+#    for t in tasks
+#        if istaskdone(t)
+#            finished = finished + 1
+#        end
+#    end
+#    print("{}\rDone: ", finished, "/", total) 
+#    sleep(1)
+#end
+
+#fail = 0
+#for t in tasks
+#    succ = succ + wait(t)
+#end
+
+println("Total: ", total)
 println("Pass : ", succ)
-println("Fail : ", fail)
-flush(STDOUT)
+println("Fail : ", total-succ)
+

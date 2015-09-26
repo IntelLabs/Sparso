@@ -15,7 +15,6 @@ function foo()
     m = 10
     A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
 
-
     for i = 1:2
         B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
         m = size(A, 1)

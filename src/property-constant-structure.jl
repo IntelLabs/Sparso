@@ -73,6 +73,10 @@ type ConstantStructureProperty <: MatrixProperty
                 union!(depend_sets[k],
                     build_depend_set_from_args(ast.args[2:end], call_sites, level))
 
+                dump(k)
+                if isa(k, Symbol)
+                    dump(typeof(k))
+                end
                 dprintln(1, 1, k, " : ", depend_sets[k], "\n")
             elseif ast.head == :call 
                 m, func_name = resolve_call_names(ast.args)

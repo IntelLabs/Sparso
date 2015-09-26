@@ -238,22 +238,25 @@ function find_properties_of_matrices(
     end
 
     # sort by keys 
-    sorter = (x)->sort(collect(keys(x)), by=v->string(v))
+    sorter = (x) -> sort(collect(keys(x)), by=v->string(v))
+    # filter out matrix type
+    is_matrix_type = (x) -> any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+    mfilter = (x) -> filter(is_matrix_type, x)
 
     dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
-    dprintln(1, 1, sorter(structure_proxies))
+    dprintln(1, 1, mfilter(sorter(structure_proxies)))
 
     dprintln(1, 0, "\n" * region_name * " Constant value discovered:")
-    dprintln(1, 1, sorter(filter((k, v) -> v.constant_valued>0, structure_proxies)))
+    dprintln(1, 1, mfilter(sorter(filter((k, v) -> v.constant_valued>0, structure_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Constant structures discovered:")
-    dprintln(1, 1, sorter(filter((k, v) -> v.constant_structured>0, structure_proxies)))
+    dprintln(1, 1, mfilter(sorter(filter((k, v) -> v.constant_structured>0, structure_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Value symmetry discovered:")
-    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies)))
+    dprintln(1, 1, mfilter(sorter(filter((k, v) -> v.symmetric_valued>0, structure_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Structure symmetry discovered:")
-    dprintln(1, 1, sorter(filter((k, v) -> v.symmetric_structured>0, structure_proxies)))
+    dprintln(1, 1, mfilter(sorter(filter((k, v) -> v.symmetric_structured>0, structure_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Upper/Lower matrix discovered:")
     for k in sorter(structure_proxies)
