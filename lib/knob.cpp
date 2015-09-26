@@ -34,7 +34,13 @@ struct ReorderingInfo {
     { }
 };
 
+// set this true to see important decisions on matrix reordering
 static const bool LOG_REORDERING = false;
+// set this true to see if we're doing transposes which is not cheap.
+// we'd like to avoid transpose as much as possible if matrix
+// is symmetric or a transposed version of the matrix is already
+// available in the application context
+static const bool LOG_TRANSPOSE = false;
 
 // Julia variables' scope is function-wise at AST level, even though in the source
 // level, it may appears to have nested scopes. Our Julia compiler creates matrix 
@@ -293,6 +299,9 @@ static void CreateOptimizedRepresentation(
 
     if (needTranspose) {
         m->A = AT->transpose();
+        if (LOG_TRANSPOSE) {
+            clog << "Transposing a matrix" << endl;
+        }
 
 #ifndef NDEBUG
         AT->make0BasedIndexing();
@@ -651,6 +660,10 @@ static void TriangularSolve_(
             L = LT->transpose();
             delete LT;
 
+            if (LOG_TRANSPOSE) {
+                clog << "Transposing a matrix" << endl;
+            }
+
             if (m && m->constant_structured) {
                 MatrixKnob *symKnob = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
                 if (!symKnob) {
@@ -688,6 +701,11 @@ static void TriangularSolve_(
             CSR *LT = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
             L = LT->transpose();
             delete LT;
+
+            if (LOG_TRANSPOSE) {
+                clog << "Transposing a matrix" << endl;
+            }
+
             needToDeleteL = true;
         }
     }
@@ -917,6 +935,10 @@ void SpSquareWithEps(
     }
     else {
         A = AT.transpose();
+
+        if (LOG_TRANSPOSE) {
+            clog << "Transposing a matrix" << endl;
+        }
     }
 
     CSR *C = SpGEMMWithEps(A, &AT, eps);
