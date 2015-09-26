@@ -48,5 +48,6 @@ libs:	lib
 
 clean:
 	rm -f test/CSR_test libcsr.so *.o
+	cd $(SPMP_DIR); make clean
 
 .PHONY: clean $(SPMP_DIR)/libspmp.a
