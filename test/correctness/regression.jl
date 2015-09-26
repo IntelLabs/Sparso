@@ -98,17 +98,19 @@ const spmv_sanity_test1 = Test(
     ]
 )
 
+const CG_MATRIX = "bcsstk14.mtx"
+
 const context_test1 = Test(
     "context-test1",
-    "context-test1.jl small-diag.mtx",
+    string("context-test1.jl ", CG_MATRIX),
     [
-        TestPattern(r"Original sum of x=-1.57731204341073\d*e-5",
+        TestPattern(r"Original sum of x=40.11\d*",
                      "Test sum of pcg_symgs"
         ),
-        TestPattern(r"Original k=4",
+        TestPattern(r"Original k=208",
                      "Test iterations"
         ),
-        TestPattern(r"Original rel_err=6.38\d*e-13",
+        TestPattern(r"Original rel_err=8.89\d*e-8",
                      "Test rel_err"
         ),
         TestPattern(r"Constant structures discovered:\n.*\[:A,:L,:U\]",
@@ -132,13 +134,13 @@ const context_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
-        TestPattern(r"Accelerated sum of x=-1.577312043\d*e-5",
+        TestPattern(r"Accelerated sum of x=40.11\d*",
                      "Test sum of pcg_symgs"
         ),
-        TestPattern(r"Accelerated k=4",
+        TestPattern(r"Accelerated k=208",
                      "Test iterations"
         ),
-        TestPattern(r"Accelerated rel_err=\d.\d*e-11",
+        TestPattern(r"Accelerated rel_err=8.89\d*e-8",
                      "Test rel_err"
         ),
         exception_pattern
@@ -147,33 +149,33 @@ const context_test1 = Test(
 
 const context_test2 = Test(
     "context-test2",
-    "context-test2.jl small-diag.mtx small-diag.mtx",
+    string("context-test2.jl ", CG_MATRIX, " ", CG_MATRIX),
     [
-        TestPattern(r"Original sum of x=-1.577312043\d*e-5",
+        TestPattern(r"Original sum of x=40.11\d*",
                      "Test sum of pcg_symgs"
         ),
-        TestPattern(r"Original k=4",
+        TestPattern(r"Original k=208",
                      "Test iterations"
         ),
-        TestPattern(r"Original rel_err=6.38\d*e-13",
+        TestPattern(r"Original rel_err=8.89\d*e-8",
                      "Test rel_err"
         ),
-        TestPattern(r"Manual_context_no_reorder sum of x=-1.577312043\d*e-5",
+        TestPattern(r"Manual_context_no_reorder sum of x=40.11\d*",
                      "Test sum of pcg_symgs"
         ),
-        TestPattern(r"Manual_context_no_reorder k=4",
+        TestPattern(r"Manual_context_no_reorder k=208",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context_no_reorder rel_err=\d.\d*e-11",
+        TestPattern(r"Manual_context_no_reorder rel_err=8.89\d*e-8",
                      "Test rel_err"
         ),
-        TestPattern(r"Manual_context sum of x=-1.577312043\d*e-5",
+        TestPattern(r"Manual_context sum of x=40.11\d*",
                      "Test sum of pcg_symgs"
         ),
-        TestPattern(r"Manual_context k=4",
+        TestPattern(r"Manual_context k=208",
                      "Test iterations"
         ),
-        TestPattern(r"Manual_context rel_err=\d.\d*e-11",
+        TestPattern(r"Manual_context rel_err=8.89\d*e-8",
                      "Test rel_err"
         ),
         exception_pattern
@@ -182,12 +184,12 @@ const context_test2 = Test(
 
 const context_test2_without_reordering = Test(
     "context-test2-without-reordering",
-    "context-test2-without-reordering.jl small-diag.mtx",
+    string("context-test2-without-reordering.jl ", CG_MATRIX),
     [
-        TestPattern(r"Original:(.|\n)*?sum of x=-1.5773120434\d*e-5(.|\n)*?rel_err=\d.\d*e-13",
+        TestPattern(r"Original:(.|\n)*?sum of x=40.11\d*(.|\n)*?rel_err=8.89\d*e-8",
                      "Test pcg_symgs"
         ),
-        TestPattern(r"With manual context-sensitive optimization:(.|\n)*?sum of x=-1.5773120434\d*e-5(.|\n)*?rel_err=\d.\d*e-11",
+        TestPattern(r"With manual context-sensitive optimization:(.|\n)*?sum of x=40.11\d*(.|\n)*?rel_err=8.89\d*e-8",
                      "Test pcg_symgs_with_context_opt"
         ),
         exception_pattern
