@@ -15,13 +15,13 @@ function pcg_symgs(x, A, b, tol, maxiter)
     set_matrix_property(:L, SA_LOWER_OF, :A)
     set_matrix_property(:U, SA_UPPER_OF, :A)
     set_matrix_property(Dict(
-        :A => SA_SYMM_STRUCTURED,
+        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
         :U => SA_CONST_VALUED
         )
     )
 
     L = tril(A)
-    U  = spdiagm(1./diag(A))*triu(A)
+    U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A))*triu(A))
     M = L*U
     r = b - A * x
     normr0 = norm(r)
