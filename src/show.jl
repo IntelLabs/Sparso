@@ -282,7 +282,7 @@ function show(
     liveness      :: Liveness,
     msgs...
 )
-    if(level >= verbosity)
+    if(level >= show_level)
         message_tuple = msgs[1]
         for msg in message_tuple
             show(structure, symbol_info, liveness, msg)
