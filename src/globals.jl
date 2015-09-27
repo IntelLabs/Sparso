@@ -9,9 +9,9 @@ typealias Loop            CompilerTools.Loops.Loop
 typealias GenSymId        Int
 typealias BasicBlockIndex Int
 typealias StatementIndex  Int
-typealias Sym             Union(Symbol, GenSym) # A Symbol or GenSym.
+typealias Sym             Union{Symbol, GenSym} # A Symbol or GenSym.
 typealias Sym2TypeMap     Dict{Sym, Type}
-typealias Symexpr         Union(Symbol, GenSym, Expr) # A Symbol, GenSym or Expr
+typealias Symexpr         Union{Symbol, GenSym, Expr} # A Symbol, GenSym or Expr
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
