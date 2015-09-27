@@ -11,7 +11,7 @@ type ConstantStructureProperty <: MatrixProperty
         call_sites :: CallSites,
         level      :: Int
     )
-        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode, ASCIIString]
+        const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString]
         dep_set = Set{Union{GenSym,Symbol}}()
         
         for arg in args
@@ -295,12 +295,12 @@ type ConstantStructureProperty <: MatrixProperty
             # check every symbol that depends on s
             # 
             for rd in reverse_depend_map[s]
-                if property_map[rd] != 0
+                if haskey(property_map, rd) && property_map[rd] != 0
                     continue
                 end
                 constant = true
                 for d in depend_map[rd]
-                    if property_map[d] == 0 
+                    if haskey(property_map, d) && property_map[d] == 0 
                         constant = false
                     end
                 end

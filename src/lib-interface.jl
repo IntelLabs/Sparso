@@ -417,7 +417,7 @@ function SpMV!(
         end
     else
         # use Julia implementation
-        w = alpha * A * x + beta * y + gamma
+        w[:] = alpha * A * x + beta * y + gamma
     end
     w
 end

@@ -124,6 +124,19 @@ const SpMV_Desc = FunctionDescription(
     ])
 )
 
+const SpMV!_7_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV!",
+    (Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    Set(1),                           # Argument 1 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (1, 3, ROW_ROW),
+          (3, 4, COLUMN_ROW_INVERSE),
+          (3, 6, ROW_ROW)
+    ])
+)
+
 const star_Desc = FunctionDescription(
     "Main", 
     "*",                              # *(A::SparseMatrixCSC, x::Vector)
@@ -431,7 +444,7 @@ const bwdTriSolve!_Desc = FunctionDescription(
 const asignment_Desc = FunctionDescription(
     "", 
     ":=",
-    (AbstractSparseMatrix, AbstractSparseMatrix),
+    (Any, AbstractMatrix),            # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
     Set(1),                           # Argument 1 (the left hand side) is updated
     true,                             # The function is distributive
     Set([ (1, 2, ROW_ROW),
@@ -442,7 +455,7 @@ const asignment_Desc = FunctionDescription(
 const asignment1_Desc = FunctionDescription(
     "", 
     ":=",
-    (Vector, Vector),
+    (Any, Vector),                    # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
     Set(1),                           # Argument 1 (the left hand side) is updated
     true,                             # The function is distributive
     Set([ (1, 2, ROW_ROW) ])
@@ -456,6 +469,7 @@ function_descriptions  = [
     element_wise_divide2_Desc,
     element_wise_divide!_Desc,
     SpMV_Desc,
+    SpMV!_7_parameters_Desc,
     star_Desc,
     star1_Desc,
     star2_Desc,

@@ -47,7 +47,7 @@ const SA_REORDER = 56
 
 # The internal booleans corresponding to the above options, and their default values
 sparse_acc_enabled            = false
-verbosity                     = 0
+show_level                    = 256
 use_Julia                     = false
 use_MKL                       = false
 use_SPMP                      = true
@@ -74,7 +74,7 @@ function set_options(args...)
             end
             global sparse_acc_enabled = true
         elseif arg == SA_VERBOSE 
-            global verbosity = 1
+            global show_level = 1
             #OptFramework.set_debug_level(3)
         elseif arg == SA_USE_JULIA 
             global use_Julia = true; global use_MKL = false; global use_SPMP = false

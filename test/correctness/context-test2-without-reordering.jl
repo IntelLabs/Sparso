@@ -200,8 +200,8 @@ end
 m       = size(A, 1)
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
-tol     = 1e-10
-maxiter = 1000
+tol     = 1e-7
+maxiter = 20000
 
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)

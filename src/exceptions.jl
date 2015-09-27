@@ -7,6 +7,7 @@ type UndescribedFunction <: Exception
     module_name     :: String
     function_name   :: String
     parameter_types :: Tuple
+    ast             :: Any    # The ast that causes this exception.
 end
 
 type NonDistributiveFunction <: Exception
