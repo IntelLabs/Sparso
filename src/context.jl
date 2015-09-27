@@ -1,4 +1,11 @@
 @doc """
+A function knob is a symbol in compile time. For this symbol, we would like to
+record a type for it in the Sym2TypeMap. This abstract type is for this purpose
+only.
+"""
+abstract FunctionKnob
+
+@doc """
 The CallSites' extra field for context info discovery.
 """
 type ContextExtra
@@ -118,9 +125,13 @@ function gather_context_sensitive_info(
     call_sites.extra.fknob2ctor_dtor[fknob] = (fknob_creator, fknob_deletor)
     call_sites.extra.fknob2mknobs[fknob]    = []
     
+    # Record the new symbol with a FunctionKnob type so that we may distinguish
+    # it from a normal argument. 
+    symbol_info        = call_sites.symbol_info
+    symbol_info[fknob] = FunctionKnob
+
     # Create matrix-specific knobs for the matrices inputs.
-    symbol_info = call_sites.symbol_info
-    args        = ast.args
+    args = ast.args
     for arg in matrices_to_track
         if arg == :result
             M = ast
@@ -861,6 +872,13 @@ function add_function_knobs_to_calls(
     for fknob in call_sites.extra.function_knobs
         expr = call_sites.extra.fknob2expr[fknob]
         push!(expr.args, fknob)
+        
+        # It seems that Julia looks up a dictionary's key by value, not by
+        # address (It does not have the concept of pointer anyway), and thus
+        # expr is considered changed with the new fknob added. So update the
+        # mappings between the expr and the fknob:
+        call_sites.extra.expr2fknob[expr]  = fknob
+        call_sites.extra.fknob2expr[fknob] = expr
     end
 end
 
@@ -966,7 +984,6 @@ function AST_context_sensitive_transformation(
     liveness    :: Liveness, 
     cfg         :: CFG
 )
-    # 
     func_region.symbol_property = find_properties_of_matrices(func_region, symbol_info, liveness, cfg)
 
     # Discover context info for each loop region

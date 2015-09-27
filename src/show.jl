@@ -46,6 +46,17 @@ function set_to_str(
     return str
 end
 
+function permutation_color_to_str(
+    color :: Int
+)
+    color == NO_PERM ? "colorless " :
+                     color == ROW_PERM ? "Pr " :
+                     color == ROW_INV_PERM ? "Pr' " :
+                     color == COL_PERM ? "Pc " :
+                     color == COL_INV_PERM ? "Pc' " :
+                     "InvalidColor "
+end
+                     
 function show_inter_dependence_graph_vertex(
     vertex       :: InterDependenceGraphVertex,
     vertex2index :: Dict{InterDependenceGraphVertex, Int},
@@ -54,12 +65,7 @@ function show_inter_dependence_graph_vertex(
 )
     print(io_buffer, "Vertex ", vertex2index[vertex], ": ")
     print(io_buffer, vertex.row_perm ? "rows " : "columns ")
-    print(io_buffer, vertex.color == NO_PERM ? "colorless " :
-                     vertex.color == ROW_PERM ? "Pr " :
-                     vertex.color == ROW_INV_PERM ? "Pr' " :
-                     vertex.color == COL_PERM ? "Pc " :
-                     vertex.color == COL_INV_PERM ? "Pc' " :
-                     "InvalidColor ")
+    print(io_buffer, permutation_color_to_str(vertex.color))
     print(io_buffer, "Neighbours={ ")
     for (vertex1, inverse) in vertex.neighbours
         print(io_buffer, vertex2index[vertex1], inverse ? "(Inverse) " : " ")
@@ -89,7 +95,7 @@ function show_inter_dependence_graph(
         i                    = i + 1
     end
 
-    println(io_buffer, "Seed = Vertex ", vertex2index[graph.seed])
+    println(io_buffer, "Seed = ", graph.seed)
     for (symexpr, vertex) in graph.rows
         show_inter_dependence_graph_vertex(vertex, vertex2index, symbol_info, liveness)
     end

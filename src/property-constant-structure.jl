@@ -11,7 +11,7 @@ type ConstantStructureProperty <: MatrixProperty
         call_sites :: CallSites,
         level      :: Int
     )
-        const skip_types = [GlobalRef, Int64, Float64, Bool, QuoteNode, ASCIIString]
+        const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString]
         dep_set = Set{Union{GenSym,Symbol}}()
         
         for arg in args
