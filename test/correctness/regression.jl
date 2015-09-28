@@ -134,6 +134,15 @@ const context_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
+        TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
+                     "Test reordering"
+        ),
+        TestPattern(r"SparseAccelerator.reordering\)\(##fknob#\d*?,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+                     "Test reordering"
+        ),      
+        TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+                     "Test pagerank with reordering"
+        ),
         TestPattern(r"Accelerated sum of x=40.11\d*",
                      "Test sum of pcg_symgs"
         ),
@@ -255,6 +264,29 @@ const context_test4 = Test(
         ),
         TestPattern(r"Manual_context sum of x=715375.988500001",
                      "Test ipm-ref with context-sensitve optimization"
+        ),
+        exception_pattern
+    ]
+)
+
+const pagerank_test1 = Test(
+    "pagerank-test1",
+    "pagerank.jl  hmatrix.1024.mtx",
+    [
+        TestPattern(r"Original sum of x=12287.99",
+                     "Test original pagerank"
+        ),
+        TestPattern(r"Accelerated sum of x=12287.99",
+                     "Test pagerank with reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
+                     "Test pagerank with reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SpMV!\)\)\(p,1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,##fknob.*?\)",
+                     "Test pagerank with reordering"
+        ),
+        TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,p,SparseAccelerator.ROW_PERM\)",
+                     "Test pagerank with reordering"
         ),
         exception_pattern
     ]
@@ -654,6 +686,7 @@ const all_tests = [
     context_test2_without_reordering,
     context_test3,
     context_test4,
+    pagerank_test1,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,
@@ -682,6 +715,7 @@ const all_tests = [
 ]
 
 const fast_tests = [
+    pagerank_test1,
     context_test1,
     context_test2,
     context_test2_without_reordering,

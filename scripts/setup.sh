@@ -13,3 +13,9 @@ cd ./lib
 make clean
 make -j DBG=yes
 cd ..
+
+echo "Patching CompilerTools"
+cd deps/CompilerTools/
+patch -p 1 < ../../scripts/CompilerTools.patch
+cd - 
+
