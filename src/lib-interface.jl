@@ -419,7 +419,6 @@ function SpMV!(
         # use Julia implementation
         w[:] = alpha * A * x + beta * y + gamma
     end
-    w
 end
 
 @doc """ y = A*x """
@@ -1270,3 +1269,35 @@ function lbfgs_compute_direction(
       -r
     end
 end 
+
+function get_spmp_spmv_time()
+  ccall((:GetSpMPSpMVTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_spmp_spmv_time()
+  ccall((:ResetSpMPSpMVTime, LIB_PATH), Void, ())
+end
+
+function get_spmp_trisolve_time()
+  ccall((:GetSpMPTriangularSolveTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_spmp_trisolve_time()
+  ccall((:ResetSpMPTriangularSolveTime, LIB_PATH), Void, ())
+end
+
+function get_knob_spmv_time()
+  ccall((:GetKnobSpMVTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_knob_spmv_time()
+  ccall((:ResetKnobSpMVTime, LIB_PATH), Void, ())
+end
+
+function get_knob_trisolve_time()
+  ccall((:GetKnobTriangularSolveTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_knob_trisolve_time()
+  ccall((:ResetKnobTriangularSolveTime, LIB_PATH), Void, ())
+end
