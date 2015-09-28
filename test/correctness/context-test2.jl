@@ -354,6 +354,7 @@ b       = ones(Float64, m)
 tol     = 1e-7
 maxiter = 20000
 
+x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
 if print_sum
@@ -362,6 +363,7 @@ end
 println("\tOriginal k=", k)
 println("\tOriginal rel_err=", rel_err)
 
+x, k, rel_err = pcg_symgs_with_context_opt_without_reordering(x, A, b, tol, maxiter)
 println("\nWith manual context-sensitive optimization without reordering: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)
@@ -372,6 +374,8 @@ end
 println("\tManual_context_no_reorder k=", k)
 println("\tManual_context_no_reorder rel_err=", rel_err)
 
+A2 = copy(A) # workaround that we change A in-place
+x, k, rel_err = pcg_symgs_with_context_opt(x, A2, b, tol, maxiter)
 println("\nWith manual context-sensitive optimization: ")
 x       = zeros(Float64, m)
 b       = ones(Float64, m)

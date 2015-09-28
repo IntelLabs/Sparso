@@ -119,15 +119,16 @@ b       = ones(Float64, m)
 tol     = 1e-7
 maxiter = 20000
 
+x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-println("\tOriginal sum of x=", sum(x))
 println("\tOriginal k=", k)
 println("\tOriginal rel_err=", rel_err)
 
+A2 = copy(A) # workaround that we change A in-place
+@acc x, k, rel_err = pcg_symgs(x, A2, b, tol, maxiter)
 println("\nAccelerated: ")
 x = zeros(Float64, m)
 @acc x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
-println("\tAccelerated sum of x=", sum(x))
 println("\tAccelerated k=", k)
 println("\tAccelerated rel_err=", rel_err)
