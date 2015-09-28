@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
 maxiter = 100
 
@@ -46,7 +46,7 @@ x = pagerank(A, p, r)
 
 @acc x= pagerank(A, p, r)
 
-println("\nAccelerated: ")
+println("\nAccelerated without reordering: ")
 SparseAccelerator.reset_spmp_spmv_time()
 SparseAccelerator.reset_knob_spmv_time()
 @acc x= pagerank(A, p, r)
