@@ -324,8 +324,17 @@ function reorder_vector(
          pointer(V), pointer(new_V), pointer(P), length(V))
 end
 
+function reorder_vector!(
+    V     :: Vector, 
+    P     :: Vector
+)
+    ccall((:reorderVectorInplace, LIB_PATH), Void,
+         (Ptr{Cdouble}, Ptr{Cint}, Cint),
+         pointer(V), pointer(P), length(V))
+end
+
 @doc """ Reversely reorder vector V into new vector new_V with permutation vector P """
-function reverse_reorder_vector(
+function inverse_reorder_vector(
     V     :: Vector, 
     new_V :: Vector, 
     P     :: Vector
@@ -333,6 +342,15 @@ function reverse_reorder_vector(
     ccall((:reorderVectorWithInversePerm, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(new_V), pointer(P), length(V))
+end
+
+function inverse_reorder_vector!(
+    V     :: Vector, 
+    P     :: Vector
+)
+    ccall((:reorderVectorWithInversePermInplace, LIB_PATH), Void,
+         (Ptr{Cdouble}, Ptr{Cint}, Cint),
+         pointer(V), pointer(P), length(V))
 end
 
 function set_reordering_decision_maker(
@@ -419,7 +437,6 @@ function SpMV!(
         # use Julia implementation
         w[:] = alpha * A * x + beta * y + gamma
     end
-    w
 end
 
 @doc """ y = A*x """
@@ -1030,10 +1047,10 @@ const LOG_REORDERING = false
 
 @doc """
 Reorder arrays based on the the given permutation and inverse permutation vectors.
-If reverse_reorder is true, do reverse reordering instead.
+If inverse_reorder is true, do inverse reordering instead.
 """
 function reorder_arrays(
-    reverse_reorder     :: Bool,
+    inverse_reorder     :: Bool,
     permutation_vectors :: Vector,
     arrays...
 )
@@ -1058,20 +1075,18 @@ function reorder_arrays(
             # For each vector, 1 permutation vector follows
             perm = permutation_vectors[array_tuple[i + 1]]
             i    = i + 2
-            new_A = copy(A)
-            if reverse_reorder
-                reverse_reorder_vector(A, new_A, perm)
+            if inverse_reorder
+                inverse_reorder_vector!(A, perm)
             else
-                reorder_vector(A, new_A, perm)
+                reorder_vector!(A, perm)
             end
-            A[:] = new_A
         else
             assert(typeof(A) <: AbstractSparseMatrix)
             # For each matrix, 2 permutation vectors follow
             perm1 = permutation_vectors[array_tuple[i + 1]]
             perm2 = permutation_vectors[array_tuple[i + 2]]
             i     = i + 3
-            if reverse_reorder
+            if inverse_reorder
                 reorder_matrix!(A, perm2, perm1)
             else
                 reorder_matrix!(A, perm1, perm2)
@@ -1270,3 +1285,35 @@ function lbfgs_compute_direction(
       -r
     end
 end 
+
+function get_spmp_spmv_time()
+  ccall((:GetSpMPSpMVTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_spmp_spmv_time()
+  ccall((:ResetSpMPSpMVTime, LIB_PATH), Void, ())
+end
+
+function get_spmp_trisolve_time()
+  ccall((:GetSpMPTriangularSolveTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_spmp_trisolve_time()
+  ccall((:ResetSpMPTriangularSolveTime, LIB_PATH), Void, ())
+end
+
+function get_knob_spmv_time()
+  ccall((:GetKnobSpMVTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_knob_spmv_time()
+  ccall((:ResetKnobSpMVTime, LIB_PATH), Void, ())
+end
+
+function get_knob_trisolve_time()
+  ccall((:GetKnobTriangularSolveTime, LIB_PATH), Cdouble, ())
+end
+
+function reset_knob_trisolve_time()
+  ccall((:ResetKnobTriangularSolveTime, LIB_PATH), Void, ())
+end

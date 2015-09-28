@@ -104,9 +104,6 @@ const context_test1 = Test(
     "context-test1",
     string("context-test1.jl ", CG_MATRIX),
     [
-        TestPattern(r"Original sum of x=40.11\d*",
-                     "Test sum of pcg_symgs"
-        ),
         TestPattern(r"Original k=208",
                      "Test iterations"
         ),
@@ -143,9 +140,6 @@ const context_test1 = Test(
         TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
                      "Test pagerank with reordering"
         ),
-        TestPattern(r"Accelerated sum of x=40.11\d*",
-                     "Test sum of pcg_symgs"
-        ),
         TestPattern(r"Accelerated k=208",
                      "Test iterations"
         ),
@@ -160,9 +154,6 @@ const context_test2 = Test(
     "context-test2",
     string("context-test2.jl ", CG_MATRIX, " ", CG_MATRIX),
     [
-        TestPattern(r"Original sum of x=40.11\d*",
-                     "Test sum of pcg_symgs"
-        ),
         TestPattern(r"Original k=208",
                      "Test iterations"
         ),
@@ -177,9 +168,6 @@ const context_test2 = Test(
         ),
         TestPattern(r"Manual_context_no_reorder rel_err=8.89\d*e-8",
                      "Test rel_err"
-        ),
-        TestPattern(r"Manual_context sum of x=40.11\d*",
-                     "Test sum of pcg_symgs"
         ),
         TestPattern(r"Manual_context k=208",
                      "Test iterations"

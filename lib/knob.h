@@ -88,6 +88,18 @@ void SpMV(
     double gamma,
     FunctionKnob *fknob);
 
+/**
+ * @return Get cummulative time that has purely spent on SpMP SpMV.
+ *         Can be useful for performance debugging to tell if
+ *         we're not seeing expected performance because we didn't
+ *         really improve kernel performance or because of other
+ *         overhead.
+ */
+double GetSpMPSpMVTime();
+void ResetSpMPSpMVTime();
+double GetKnobSpMVTime();
+void ResetKnobSpMVTime();
+
 void ForwardTriangularSolve(
     int L_numrows, int L_numcols, int* L_colptr, int* L_rowval, double* L_nzval,
     double *y, double *b, FunctionKnob *fknob);
@@ -95,6 +107,14 @@ void ForwardTriangularSolve(
 void BackwardTriangularSolve(
     int U_numrows, int U_numcols, int* U_colptr, int* U_rowval, double* U_nzval,
     double *y, double *b, FunctionKnob *fknob);
+
+/**
+ * @see GetSpMPSpMVTime
+ */
+double GetSpMPTriangularSolveTime();
+void ResetSpMPTriangularSolveTime();
+double GetKnobTriangularSolveTime();
+void ResetKnobTriangularSolveTime();
 
 void *CholFact(
     int m, int n, int *colptr, int *rowval, double *nzval,

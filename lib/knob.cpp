@@ -42,6 +42,52 @@ static const bool LOG_REORDERING = false;
 // available in the application context
 static const bool LOG_TRANSPOSE = false;
 
+static double spmp_spmv_time = 0;
+static double spmp_trsv_time = 0;
+
+static double knob_spmv_time = 0;
+static double knob_trsv_time = 0;
+
+double GetSpMPSpMVTime()
+{
+    return spmp_spmv_time;
+}
+
+void ResetSpMPSpMVTime()
+{
+    spmp_spmv_time = 0;
+}
+
+double GetSpMPTriangularSolveTime()
+{
+    return spmp_trsv_time;
+}
+
+void ResetSpMPTriangularSolveTime()
+{
+    spmp_trsv_time = 0;
+}
+
+double GetKnobSpMVTime()
+{
+    return knob_spmv_time;
+}
+
+void ResetKnobSpMVTime()
+{
+    knob_spmv_time = 0;
+}
+
+double GetKnobTriangularSolveTime()
+{
+    return knob_trsv_time;
+}
+
+void ResetKnobTriangularSolveTime()
+{
+    knob_trsv_time = 0;
+}
+
 // Julia variables' scope is function-wise at AST level, even though in the source
 // level, it may appears to have nested scopes. Our Julia compiler creates matrix 
 // knobs for array variables at the entry of a function, and deleted all
@@ -481,6 +527,8 @@ void SpMV(
     double gamma,
     FunctionKnob *fknob)
 {
+    knob_spmv_time -= omp_get_wtime();
+
     assert(fknob);
     MatrixKnob *mknob = GetMatrixKnob(fknob, 0);
     assert(mknob);
@@ -512,17 +560,20 @@ void SpMV(
             }
         }
         else {
-            mknob->A->getRCMPermutation(fknob->reordering_info.col_perm, fknob->reordering_info.row_inverse_perm);
+            double t = omp_get_wtime();
+            mknob->A->getBFSPermutation(fknob->reordering_info.col_perm, fknob->reordering_info.row_inverse_perm);
 #pragma omp parallel for
             for (int i = 0; i < m; i++) {
                 fknob->reordering_info.row_perm[i] = fknob->reordering_info.col_perm[i];
                 fknob->reordering_info.col_inverse_perm[i] = fknob->reordering_info.row_inverse_perm[i];
             }
+            t = omp_get_wtime() - t;
+            if (LOG_REORDERING) {
+                clog << "SpMV: matrix is square. bfs takes " << t << "(" << (mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+            }
         }
 
-        if (LOG_REORDERING) {
-            printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
-        }
+        double t = omp_get_wtime();
 
         mknob->A = mknob->A->permute(
             fknob->reordering_info.col_perm,
@@ -535,9 +586,19 @@ void SpMV(
         if (y)
             reorderVectorWithInversePerm(
                 y, fknob->reordering_info.row_perm, m);
+
+        if (LOG_REORDERING) {
+            printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
+            t = omp_get_wtime() - t;
+            clog << "SpMV: permutation takes " << t << "(" << (mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+        }
     }
 
+    spmp_spmv_time -= omp_get_wtime();
     mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+    spmp_spmv_time += omp_get_wtime();
+
+    knob_spmv_time += omp_get_wtime();
 }
 
 static void TriangularSolve_(
@@ -546,6 +607,8 @@ static void TriangularSolve_(
     void (*solveFunction)(CSR&, double *, const double *, const LevelSchedule&),
     void (*solveFunctionWithReorderedMatrix)(CSR&, double *, const double *, const LevelSchedule&))
 {
+    knob_trsv_time -= omp_get_wtime();
+
     CSR* L = NULL;
     bool needToDeleteL = false;
 
@@ -743,6 +806,7 @@ static void TriangularSolve_(
     assert(L != NULL);
     assert(schedule != NULL);
     
+    spmp_trsv_time -= omp_get_wtime();
     if (fknob->reordering_info.row_inverse_perm == m->reordering_info.row_inverse_perm) {
         (*solveFunctionWithReorderedMatrix)(*L, y, b, *schedule);
     }
@@ -750,6 +814,7 @@ static void TriangularSolve_(
         assert(m->reordering_info.row_inverse_perm == NULL);
         (*solveFunction)(*L, y, b, *schedule);
     }
+    spmp_trsv_time += omp_get_wtime();
 
     if (needToDeleteSchedule) {
         delete schedule;
@@ -757,6 +822,8 @@ static void TriangularSolve_(
     if (needToDeleteL) {
         delete L;
     }
+
+    knob_spmv_time += omp_get_wtime();
 }
 
 void ForwardTriangularSolve(
