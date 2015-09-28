@@ -120,6 +120,7 @@ tol     = 1e-7
 maxiter = 20000
 
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
+x = zeros(Float64, m)
 println("Original: ")
 x, k, rel_err = pcg_symgs(x, A, b, tol, maxiter)
 println("\tOriginal k=", k)
