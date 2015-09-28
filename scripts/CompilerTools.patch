@@ -1,0 +1,28 @@
+diff --git a/src/liveness.jl b/src/liveness.jl
+index f5c13f2..155f749 100644
+--- a/src/liveness.jl
++++ b/src/liveness.jl
+@@ -446,9 +446,22 @@ function compute_live_ranges(state :: expr_state, dfn)
+ 
+             accum = Set{SymGen}()
+             if bb_index == -2
++              # Hongbo's comments: reference inputs should not be treated as
++              # liveout. Liveness analysis is a backward analysis, driven purely
++              # by uses. If no use of a variable appears, the variable is dead
++              # in this function. This is true even when the variable is an 
++              # input reference, and eve when the input reference is modified in 
++              # the function. If you worry if that input reference is live or not
++              # in the caller function, it is the responsibility of the caller 
++              # function's liveness analysis. If you worry if we do not add the
++              # input reference as live out, reordering may forget
++              # to reversely reorder it, that is the responsibility of reordering. 
++              # Liveness analysis itself should be strict and clean, purely based
++              # on uses.
++
+               # Special case for final block.
+               # Treat input arrays as live at end of function.
+-              accum = Set{SymGen}(state.ref_params)
++              #accum = Set{SymGen}(state.ref_params)
+               dprintln(3,"Final block live_out = ", accum)
+             else
+               # The live_out of this block is the union of the live_in of every successor block.

@@ -75,7 +75,6 @@ function set_options(args...)
             global sparse_acc_enabled = true
         elseif arg == SA_VERBOSE 
             global show_level = 1
-            #OptFramework.set_debug_level(3)
         elseif arg == SA_USE_JULIA 
             global use_Julia = true; global use_MKL = false; global use_SPMP = false
         elseif arg == SA_USE_MKL 

@@ -48,18 +48,18 @@ include("property-constant-structure.jl")
 #include("property-symmetric-value.jl")
 
 @doc "print out the content of property proxies"
-function print_property_proxies(
+function dprint_property_proxies(
     pmap    :: Dict 
 )
-    print("\tSym : CV CS SV SS Lo Up\n")
+    dprintln(1, 1, "Sym : CV CS SV SS Lo Up")
     for (k, v) in pmap
-        print("\t", k, " : ", 
+        dprintln(1, 1, k, " : ", 
                     v.constant_valued, " ", 
                     v.constant_structured, " ",
                     v.symmetric_valued, " ",
                     v.symmetric_structured, " ",
                     v.lower_of, " ",
-                    v.upper_of, "\n")
+                    v.upper_of)
     end
 end
 
@@ -225,7 +225,7 @@ function find_properties_of_matrices(
     end
 
     dprintln(1, 0, "\nStructure proxies:")
-    print_property_proxies(structure_proxies)
+    dprint_property_proxies(structure_proxies)
 
     all_structure_properties = [
         ConstantStructureProperty()

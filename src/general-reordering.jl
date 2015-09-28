@@ -144,6 +144,12 @@ function build_inter_dependence_graph_for_call(
     args          :: Vector,
     call_sites    :: CallSites
 )
+    # Recursively handle each argument 
+    for arg in args
+        build_inter_dependence_graph(arg, call_sites)
+    end
+    
+    # Now handle the call itself
     all_numbers, some_arrays = numbers_or_arrays(ast.typ, arg_types)
     if all_numbers || !some_arrays
         # The function call's result and arguments are all numbers, or 
@@ -221,6 +227,7 @@ function build_inter_dependence_graph(
                 return nothing
             end
             lhs_type = type_of_ast_node(args[1], symbol_info)
+            module_name   = ""
             function_name = ":="
             arg_types     = (lhs_type, rhs_type)
             arguments     = args
@@ -357,16 +364,17 @@ function add_arrays_to_reorder(
     symbol_info   :: Sym2TypeMap, 
     liveness      :: Liveness, 
     graph         :: InterDependenceGraph,
+    FAR           :: Vector, # Vector{Symbol},
     matrices_done :: Bool
 )
     live_out = LivenessAnalysis.live_out(decider_stmt, liveness)
     def      = LivenessAnalysis.def(decider_stmt, liveness)
     use      = LivenessAnalysis.use(decider_stmt, liveness)
     
-    # The symbols defined and used in the decider statements have already been
+    # FAR (the symbols defined and used in the decider statements) have already been
     # reordered during the execution of that statement. Reorder all the live-out
     # symbols except them.         
-    for A in setdiff(live_out, union(def, use))
+    for A in setdiff(live_out, FAR)
         add_array(new_expr, A, symbol_info, graph, matrices_done)
     end
 end
@@ -439,9 +447,9 @@ function create_reorder_actions(
     push!(inside_loop_action.new_stmts,  Statement(0, stmt))
 
     decider_stmt = decider_bb.statements[decider_stmt_idx]
-    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, false)
+    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, false)
     push!(stmt.args, QuoteNode(:__delimitor__))
-    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, true)
+    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, true)
     
     # At each loop exit, insert reverse reordering of array.
     # Create statements that will delete the function knob at region exits
@@ -450,7 +458,7 @@ function create_reorder_actions(
         push!(actions, action)
 
         stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
-                       reordering_status)
+                     reordering_status)
         push!(action.new_stmts,  Statement(0, stmt))
     
         add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, false)

@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER)
 
 #include("./pcg-symgs.jl")
 include("utils.jl")
@@ -50,6 +50,16 @@ function pcg_symgs(x, A, b, tol, maxiter)
     rz = dot(r, z)
     blas1_time += time()
 
+    # For statistics only. We get these values so that L, U and A won't be live out of
+    # the loop -- to save reverse-reordering of them.
+    nnzL = nnz(L)
+    nnzU = nnz(U)
+    sizeL1 = size(L, 1) 
+    sizeL2 = size(L, 2)
+    nnzA = nnz(A)
+    sizeA1 = size(A, 1) 
+    sizeA2 = size(A, 2)
+
     k = 1
 
     while k <= maxiter
@@ -91,7 +101,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
     end
 
     total_time = time() - total_time
-    println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
+    println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnzL   + nnzU  ) + 2.*8*(sizeL1     + sizeL2    ))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnzA   + 8.*(sizeA1     + sizeA2    ))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
+#   println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
  
     return x, k, rel_err
 end
