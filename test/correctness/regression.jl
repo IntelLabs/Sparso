@@ -179,6 +179,20 @@ const context_test2 = Test(
     ]
 )
 
+const context_test2_ilu0 = Test(
+    "context-test2-ilu0",
+    string("context-test2-ilu0.jl ", CG_MATRIX),
+    [
+        TestPattern(r"Original:(.|\n)*?rel_err=8.89\d*e-8",
+                     "Test pcg_symgs"
+        ),
+        TestPattern(r"With manual context-sensitive optimization:(.|\n)*?rel_err=8.89\d*e-8",
+                     "Test pcg_symgs_with_context_opt"
+        ),
+        exception_pattern
+    ]
+)
+
 const context_test2_without_reordering = Test(
     "context-test2-without-reordering",
     string("context-test2-without-reordering.jl ", CG_MATRIX),
@@ -672,6 +686,7 @@ const all_tests = [
     context_test1,
     context_test2,
     context_test2_without_reordering,
+    context_test2_ilu0,
     context_test3,
     context_test4,
     pagerank_test1,
