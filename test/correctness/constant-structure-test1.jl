@@ -4,11 +4,10 @@ using SparseAccelerator
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
 include("./ipm-ref.jl")
-include("utils.jl")
 
-A = generate_symmetric_sparse_matrix(10)
-b = Vector{Float64}(10)
-p = Vector{Float64}(10)
+A = matrix_market_read(string(ARGS[1], "-A.mtx"))'
+b = vec(matrix_market_read(string(ARGS[1], "-b.mtx")))
+p = vec(matrix_market_read(string(ARGS[1], "-p.mtx")))
 
 println("\n\nAccelerated: ")
 @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,

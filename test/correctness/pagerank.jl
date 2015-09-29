@@ -3,9 +3,7 @@ using SparseAccelerator
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER)
 
-maxiter = 100
-
-function pagerank(A, p, r) # p: initial rank, r: damping factor
+function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
   set_matrix_property(Dict(
     :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED))
 
@@ -40,16 +38,18 @@ r = 0.15
 d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
 A = scale(A,1./d)
 
-x = pagerank(A, p, r)
-println("Original: ")
-x = pagerank(A, p, r)
+maxiter = 100
 
-@acc x= pagerank(A, p, r)
+x = pagerank(A, p, r, maxiter)
+println("Original: ")
+x = pagerank(A, p, r, maxiter)
+
+@acc x= pagerank(A, p, r, maxiter)
 
 println("\nAccelerated: ")
 SparseAccelerator.reset_spmp_spmv_time()
 SparseAccelerator.reset_knob_spmv_time()
-@acc x= pagerank(A, p, r)
+@acc x= pagerank(A, p, r, maxiter)
 t = SparseAccelerator.get_spmp_spmv_time()
 bytes = maxiter*(nnz(A)*12 + m*3*8)
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")

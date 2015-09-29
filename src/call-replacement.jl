@@ -115,6 +115,7 @@ end
 # Below are the expr_patterns we care about.
 
 # Patterns that are used only for matching (sub-expressions).
+@doc """ SpMV(a, A, x) """
 const SpMV_3_parameters_pattern = ExprPattern(
     "SpMV_3_parameters_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
@@ -472,13 +473,13 @@ The real arg to replace the symbolic arg (like :arg1) in the patterns.
 function replacement_arg(
     arg         :: Any, 
     args        :: Vector,
-    result      :: Any,       # For in_place update pattern only
+    result      :: Any,
     symbol_info :: Sym2TypeMap
 )
     if typeof(arg) == Symbol
         arg_string = string(arg)
         if length(arg_string) == 6 && arg_string[1 : 6] == "result" 
-            # This refers to the result arg of expr in an in_place update pattern.
+            # This refers to the result arg of expr.
             assert(result != nothing)
             arg = result
         elseif length(arg_string) > 3 && arg_string[1 : 3] == "arg" 
@@ -507,7 +508,9 @@ end
 replacement_arg(arg :: Any, args :: Vector, symbol_info :: Sym2TypeMap) =
     replacement_arg(arg, args, nothing, symbol_info)
 
-@doc """ Replace the AST based on the expression pattern. """
+@doc """
+Replace the AST based on the expression pattern. Return true if AST is replaced.
+"""
 function replace(
     pattern     :: ExprPattern,
     ast         :: Expr,
@@ -515,7 +518,7 @@ function replace(
 )
     substitute = pattern.substitute
     if length(substitute) == 1 && substitute[1] == :NO_CHANGE
-        return
+        return false
     end
 
     orig_ast = copy(ast)
@@ -525,6 +528,7 @@ function replace(
         arg = replacement_arg(substitute[i], orig_ast.args, symbol_info)
         push!(ast.args, arg)
     end
+    return true
 end
 
 @doc """ 
@@ -602,7 +606,7 @@ function match_replace(
         dprintln(1, 0, "replace")
         dsprintln(1, 1, symbol_info, ast)
 
-        replace(pattern, ast, symbol_info)
+        ast_changed = replace(pattern, ast, symbol_info)
         
         if pattern.post_processing != do_nothing
             if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
@@ -618,9 +622,13 @@ function match_replace(
             end
         end
         
-        dprintln(1, 0, "to")
-        dsprintln(1, 1, symbol_info, ast)
-
+        if ast_changed
+            dprintln(1, 0, "to")
+            dsprintln(1, 1, symbol_info, ast)
+        else
+            dprintln(1, 0, "No change.")
+        end
+        
         return true
     end
     return false
