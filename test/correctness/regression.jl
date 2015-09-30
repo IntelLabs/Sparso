@@ -774,6 +774,9 @@ const fast_tests = [
 # julia/base/pcre.jl (times it with 10) and retry).
 const USE_PCREGREP_REGEX_MATCH = true
 
+# Run tests with multiple threads?
+const USE_THREADS = true
+
 function get_julia_ver()
     s, p = open(`$julia_command -v`)
     readline(s)
@@ -875,36 +878,53 @@ end
 
 total = length(tests)
 succ = 0
-tasks = []
-for test in tests
-    print("Testing ", test.name)
-    s = run_test(test)
-    if s
-        succ = succ + 1
-        println(": Pass")
-    else
-        println(": FAIL. See ", test.name * ".log")
+
+if USE_THREADS == false
+    for test in tests
+        print("Testing ", test.name)
+        s = run_test(test)
+        if s
+            succ = succ + 1
+            println(": Pass")
+        else
+            println(": FAIL. See ", test.name * ".log")
+        end
     end
-#    push!(tasks, @schedule(run_test(test)))
+else
+    tasks = []
+    task_map = Dict()
+    for test in tests
+        push!(tasks, @schedule(run_test(test)))
+        task_map[last(tasks)] = test
+    end
+    finished = []
+    running = []
+    while length(finished) < total
+        for t in tasks
+            if istaskdone(t)
+                if !in(t, finished)
+                    push!(finished, t)
+                    name = task_map[t].name
+                    ret = wait(t)
+                    print(length(finished), "/", total, " ")
+                    if ret 
+                        println(name, ": Pass")
+                    else
+                        println(name, ": FAIL. See ", name * ".log")
+                    end
+                    succ = succ + ret
+                end
+            elseif istaskstarted(t)
+                if !in(t, running)
+                    push!(running, t)
+                    name = task_map[t].name
+                    println("Testing ", name)
+                end
+            end
+        end
+        sleep(1)
+    end
 end
-
-#finished = 0
-#while finished < total
-#    finished = 0
-#    running = 0
-#    for t in tasks
-#        if istaskdone(t)
-#            finished = finished + 1
-#        end
-#    end
-#    print("{}\rDone: ", finished, "/", total) 
-#    sleep(1)
-#end
-
-#fail = 0
-#for t in tasks
-#    succ = succ + wait(t)
-#end
 
 println("Total: ", total)
 println("Pass : ", succ)
