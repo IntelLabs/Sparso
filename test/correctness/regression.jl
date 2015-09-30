@@ -280,6 +280,56 @@ const context_test4 = Test(
     ]
 )
 
+const context_test5 = Test(
+    "context-test5",
+    "context-test5.jl lap3d_4x4x4.mtx",
+    [
+        TestPattern(r"Original k=5",
+                     "Test original pcg_symgs_ilu0 "
+        ),
+        TestPattern(r"Original rel_err=4.398690\d*e-9",
+                     "Test original pcg_symgs_ilu0 "
+        ),
+        TestPattern(r"Accelerated k=5",
+                     "Test iterations"
+        ),
+        TestPattern(r"Accelerated rel_err=4.398690\d*e-9",
+                     "Test rel_err"
+        ),
+        TestPattern(r"Constant structures discovered:\n.*\[:A,:L,:U\]",
+                     "Test constant structures"
+        ),
+        TestPattern(r"Structure symmetry discovered:\n.*\[:A\]",
+                     "Test structure symmetry"
+        ),
+        TestPattern(r"L is lower of A",
+                     "Test L and A"
+        ),
+        TestPattern(r"U is upper of A",
+                     "Test U and A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
+                     "Test if mknobA is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
+                     "Test if mknobA is added to a function knob (for SpMV)"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+                     "Test if Ap = A * p has been replaced with SpMV with context info"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
+                     "Test reordering"
+        ),
+        TestPattern(r"SparseAccelerator.reordering\)\(##fknob#\d*?,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+                     "Test reordering"
+        ),      
+        TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+                     "Test reordering"
+        ),
+        exception_pattern
+    ]
+)
+
 const pagerank_test1 = Test(
     "pagerank-test1",
     "pagerank.jl  hmatrix.1024.mtx",
@@ -735,6 +785,7 @@ const all_tests = [
     context_test2_ilu0,
     context_test3,
     context_test4,
+    context_test5,
     pagerank_test1,
     liveness_test1,
     liveness_test2,
@@ -768,11 +819,12 @@ const all_tests = [
 
 const fast_tests = [
     pagerank_test1,
-    context_test1,
+#    context_test1,
     context_test2,
     context_test2_without_reordering,
     context_test3,
     context_test4,
+    context_test5
 ]
 
 # If true, use pcregrep for regular expression match. 
