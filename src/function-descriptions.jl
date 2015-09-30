@@ -124,6 +124,18 @@ const SpMV_Desc = FunctionDescription(
     ])
 )
 
+const SpMV_6_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV",
+    (Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE),
+          (2, 5, ROW_ROW)
+    ])
+)
+
 const SpMV!_7_parameters_Desc = FunctionDescription(
     "SparseAccelerator", 
     "SpMV!",
@@ -491,6 +503,7 @@ function_descriptions  = [
     element_wise_divide2_Desc,
     element_wise_divide!_Desc,
     SpMV_Desc,
+    SpMV_6_parameters_Desc,
     SpMV!_7_parameters_Desc,
     star_Desc,
     star1_Desc,

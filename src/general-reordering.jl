@@ -369,12 +369,17 @@ function add_arrays_to_reorder(
 )
     live_out = LivenessAnalysis.live_out(decider_stmt, liveness)
     def      = LivenessAnalysis.def(decider_stmt, liveness)
-    use      = LivenessAnalysis.use(decider_stmt, liveness)
+#    use      = LivenessAnalysis.use(decider_stmt, liveness)
     
-    # FAR (the symbols defined and used in the decider statements) have already been
-    # reordered during the execution of that statement. Reorder all the live-out
-    # symbols except them.         
-    for A in setdiff(live_out, FAR)
+    # FAR (the symbols defined and used in the decider function call) have already
+    # been reordered during the execution of that call. We expect a decide call
+    # f happens in this way: 
+    #   f(...)  or  x = f(...)
+    # In the secon case, the defininition of x has also been reordered.
+    # Reorder all the live-out symbols except them.
+    # ISSUE: how to make sure f() is the only call happens in the statement it 
+    # is called? What if for a statement like  x= f(...) * g(...)? 
+    for A in setdiff(live_out, union(FAR, def))
         add_array(new_expr, A, symbol_info, graph, matrices_done)
     end
 end
@@ -478,17 +483,17 @@ function reordering(
     cfg         :: CFG,
     call_sites  :: CallSites
 )
-    old_actions = copy(actions)
     old_extra   = call_sites.extra
     try
-        decider = call_sites.extra.reordering_decider
-        if decider == nothing
+        fknob = call_sites.extra.reordering_decider_fknob
+        if !in(fknob, call_sites.extra.function_knobs)
+            # The AST that can decides reordering was probably removed due to,
+            # for example, parent tree being changed.
             return actions
         end
-
+        decider          = call_sites.extra.fknob2expr[fknob]
         FAR              = call_sites.extra.reordering_FAR
         seed             = FAR[1]
-        fknob            = call_sites.extra.expr2fknob[decider]
         call_sites.extra = ReorderingExtra(seed, decider)
         
         # An empty inter-dependence graph has been built. Build a row and a 
@@ -508,12 +513,17 @@ function reordering(
         dprintln(1, 0, "\nColored inter-dependence graph:")
         dprintln(1, 1, liveness, graph)
 
-        create_reorder_actions(actions, region, symbol_info, liveness, graph, 
+	new_actions = Vector{Action}()
+        create_reorder_actions(new_actions, region, symbol_info, liveness, graph, 
                                cfg, FAR, fknob, 
                                call_sites.extra.decider_bb,
                                call_sites.extra.decider_stmt_idx)
 
-        dprintln(1, 0, "\nReordering actions to take:", actions)
+        dprintln(1, 0, "\nReordering actions to take:", new_actions)
+	
+	for action in new_actions
+		push!(actions, action)
+	end
     catch ex
         # In case any exception happen in the printing, try
         try
@@ -527,8 +537,6 @@ function reordering(
         catch
             # Do nothing
         end
-
-        actions = old_actions
     finally
         call_sites.extra = old_extra
         return actions

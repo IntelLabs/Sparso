@@ -217,18 +217,9 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
 end
 
 if length(ARGS) == 0
-    println("Need an input matrix. Try add ipm/mps/osa-14")
-    assert(false)
-    # This does not seem to work.
-    # min 2*x1 + x2 subject to x1 + x2 = 1, x1 >= 0, x2 >= 0
-    # expected solution: x1 = 0, x2 = 1, obj = 1
-    A = sparse([1 1])
-    b = [ 1 ]'
-    p = [ 2 1 ]'
+  A, b, p = load_ipm_input("ipm/mps/osa-14")
 else
-    A = matrix_market_read(string(ARGS[1], "-A.mtx"))'
-    b = matrix_market_read(string(ARGS[1], "-b.mtx"))
-    p = matrix_market_read(string(ARGS[1], "-p.mtx"))
+  A, b, p = load_ipm_input(ARGS[1])
 end
 
 m = size(A, 1)

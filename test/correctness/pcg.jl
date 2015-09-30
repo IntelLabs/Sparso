@@ -30,12 +30,3 @@ function pcg(x, A, b, M, tol, maxiter)
     end
     return x, k, rel_err
 end
-
-
-m = 10
-A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-x = repmat([1/m], m)
-b   = ones(Float64, m)
-tol = 1e-10
-maxiter = 1000
-M = A # Perfect
