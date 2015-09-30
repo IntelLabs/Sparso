@@ -181,12 +181,15 @@ const context_test2 = Test(
 
 const context_test2_ilu0 = Test(
     "context-test2-ilu0",
-    string("context-test2-ilu0.jl ", CG_MATRIX),
+    string("context-test2-ilu0.jl  lap3d_4x4x4.mtx"),
     [
-        TestPattern(r"Original:(.|\n)*?rel_err=8.89\d*e-8",
+        TestPattern(r"Original:(.|\n)*?k=5(.|\n)*?rel_err=4.398690\d*e-9",
                      "Test pcg_symgs"
         ),
-        TestPattern(r"With manual context-sensitive optimization:(.|\n)*?rel_err=8.89\d*e-8",
+        TestPattern(r"With manual context-sensitive optimization without reordering:(.|\n)*?k=5(.|\n)*?rel_err=4.398690\d*e-9",
+                     "Test pcg_symgs with contextopt but without reordering"
+        ),
+        TestPattern(r"With manual context-sensitive optimization:(.|\n)*?k=5(.|\n)*?rel_err=4.398690\d*e-9",
                      "Test pcg_symgs_with_context_opt"
         ),
         exception_pattern
