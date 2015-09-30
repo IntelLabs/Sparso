@@ -253,7 +253,13 @@ const context_test3 = Test(
         TestPattern(r"Original sum of x=715375.98850000",
                      "Test original ipm-ref"
         ),
+        TestPattern(r"Original iter 26, resid =  3.93e-15",
+                     "Test original ipm-ref"
+        ),
         TestPattern(r"Accelerated sum of x=715375.98850000",
+                     "Test ipm-ref with context-sensitve optimization"
+        ),
+        TestPattern(r"Accelerated iter 26, resid =  3.93e-15",
                      "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
@@ -898,7 +904,8 @@ else
         task_map[last(tasks)] = test
     end
     finished = []
-    running = []
+    running  = []
+    passed   =  Dict()
     while length(finished) < total
         for t in tasks
             if istaskdone(t)
@@ -909,8 +916,10 @@ else
                     print(length(finished), "/", total, " ")
                     if ret 
                         println(name, ": Pass")
+                        passed[name] = true
                     else
                         println(name, ": FAIL. See ", name * ".log")
+                        passed[name] = false
                     end
                     succ = succ + ret
                 end
@@ -923,6 +932,12 @@ else
             end
         end
         sleep(1)
+    end
+
+    # Print out the results in a fixed order for easier checking
+    println("\nFinal report:")
+    for test in tests
+        println(test.name, ": ", passed[test.name] ? "Pass" : "FAIL. See $(test.name).log")
     end
 end
 
