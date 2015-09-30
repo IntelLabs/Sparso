@@ -278,7 +278,7 @@ const pagerank_test1 = Test(
         TestPattern(r"Original:(.\n)*?\s*error = 1.5473442587636215e-8",
                      "Test original pagerank"
         ),
-        TestPattern(r"Accelerated:(.\n)*?\s*error = 1.5435816122233582e-8",
+        TestPattern(r"Accelerated:(.\n)*?\s*error = 1.5435816122233\d*e-8",
                      "Test pagerank with reordering"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
@@ -289,6 +289,9 @@ const pagerank_test1 = Test(
         ),
         TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,p,SparseAccelerator.ROW_PERM\)",
                      "Test pagerank with reordering"
+        ),
+        TestPattern(r"err = .*?\(SparseAccelerator,:norm\)\)\(Ap.*? - p.*?\).*? / .*?\(SparseAccelerator,:norm\)\)\(p.*?\)",
+                     "Test pagerank if call replacement of norm happens"
         ),
         exception_pattern
     ]

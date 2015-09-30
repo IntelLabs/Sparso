@@ -205,7 +205,7 @@ const WAXPBY_4_parameters_pattern = ExprPattern(
 )
 
 # Patterns that do transformation
-
+@doc """ dot(x, y) ==> SparseAccelerator.dot(x, y)"""
 const dot_pattern1 = ExprPattern(
     "dot_pattern1",
     (:call, GlobalRef(Main, :dot), Vector, Vector),
@@ -220,6 +220,23 @@ const dot_pattern1 = ExprPattern(
     0,
     ()
 )
+
+@doc """ norm(x) ==> SparseAccelerator.norm(x)"""
+const norm_pattern1 = ExprPattern(
+    "dot_pattern1",
+    (:call, GlobalRef(Main, :norm), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:norm)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 
 @doc """ A * x => SpMV(A, x) """
 const SpMV_pattern1 = ExprPattern(
@@ -411,6 +428,7 @@ const element_wise_multiply_pattern1 = ExprPattern(
 
 expr_patterns = [
     dot_pattern1,
+    norm_pattern1,
     #WAXPBY_pattern,
     SpMV_pattern1,
     SpMV_pattern2,
