@@ -309,7 +309,19 @@ const context_test5 = Test(
                      "Test U and A"
         ),
         TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
-                     "Test if mknobA is generated and is constant valued and constant structured"
+                     "Test if mknobA is generated and is constant valued, constant structured, symmetric valued and structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(SparseAccelerator.new_matrix_knob\)\(L,true,true,false,false,false,false\)",
+                     "Test if mknobL is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(SparseAccelerator.new_matrix_knob\)\(U,true,true,false,false,false,false\)",
+                     "Test if mknobL is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobL.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+                    "Test if L is found as part of A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobU.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+                    "Test if U is found as part of A"
         ),
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
                      "Test if mknobA is added to a function knob (for SpMV)"
@@ -320,11 +332,45 @@ const context_test5 = Test(
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test reordering"
         ),
-        TestPattern(r"SparseAccelerator.reordering\)\(##fknob#\d*?,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(##fknob#\d*?,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
                      "Test reordering"
-        ),      
-        TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        ),
+        TestPattern(r"New AST:(.|\n)*?reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
                      "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?r = b.* - .*SparseAccelerator,:SpMV\)\)\(A.*,x.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?normr0 = .*SparseAccelerator,:norm\)\)\(r.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?rz = .*SparseAccelerator,:dot\)\)\(r.*,z.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?alpha = old_rz.*?/.*?SparseAccelerator,:dot\)\)\(p.*?,Ap.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(x,1,x.*?,alpha.*?,p.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(r,1,r.*?,-alpha.*?,Ap.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?rel_err = .*?SparseAccelerator,:norm\)\)\(r.*?\).*?/ normr0",
+                     "Test call replacement"
+        ),
+# TODO: enable this test.
+#        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:copy!\)\)\(z.*?,r.*?\)",
+#                     "Test call replacement"
+#        )
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:fwdTriSolve!\)\)\(L.*?,z.*?,.*?fknob.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:bwdTriSolve!\)\)\(U.*?,z.*?,.*?fknob.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(p,1,z.*?,beta.*?,p.*?\)",
+                     "Test call replacement"
         ),
         exception_pattern
     ]
