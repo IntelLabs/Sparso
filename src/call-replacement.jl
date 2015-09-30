@@ -205,13 +205,141 @@ const WAXPBY_4_parameters_pattern = ExprPattern(
 )
 
 # Patterns that do transformation
-
+@doc """ dot(x, y) ==> SparseAccelerator.dot(x, y)"""
 const dot_pattern1 = ExprPattern(
     "dot_pattern1",
     (:call, GlobalRef(Main, :dot), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ norm(x) ==> SparseAccelerator.norm(x)"""
+const norm_pattern1 = ExprPattern(
+    "norm_pattern1",
+    (:call, GlobalRef(Main, :norm), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:norm)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ sum(x) ==> SparseAccelerator.sum(x)"""
+const sum_pattern1 = ExprPattern(
+    "sum_pattern1",
+    (:call, GlobalRef(Main, :sum), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ minimum(x) ==> SparseAccelerator.minimum(x)"""
+const minimum_pattern1 = ExprPattern(
+    "minimum_pattern1",
+    (:call, GlobalRef(Main, :minimum), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:minimum)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ abs!(w, x) ==> SparseAccelerator.abs!(w, x)"""
+const abs!_pattern1 = ExprPattern(
+    "abs!_pattern1",
+    (:call, GlobalRef(Main, :abs!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:abs!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ exp!(w, x) ==> SparseAccelerator.exp!(w, x)"""
+const exp!_pattern1 = ExprPattern(
+    "exp!_pattern1",
+    (:call, GlobalRef(Main, :exp!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:exp!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ log1p!(w, x) ==> SparseAccelerator.log1p!(w, x)"""
+const log1p!_pattern1 = ExprPattern(
+    "log1p!_pattern1",
+    (:call, GlobalRef(Main, :log1p!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:log1p!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ min!(w, x) ==> SparseAccelerator.min!(w, x)"""
+const min!_pattern1 = ExprPattern(
+    "min!_pattern1",
+    (:call, GlobalRef(Main, :min!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:min!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x)"""
+const copy!_pattern1 = ExprPattern(
+    "copy!_pattern1",
+    (:call, GlobalRef(Main, :copy!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:copy!)),
      :arg2, :arg3),
     do_nothing,
     "",
@@ -394,6 +522,7 @@ const WAXPBY!_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ w = x.*y => w = element_wise_multiply(x, y) """
 const element_wise_multiply_pattern1 = ExprPattern(
     "element_wise_multiply_pattern1",
     (:call, GlobalRef(Main, :.*), Vector, Vector),
@@ -409,8 +538,32 @@ const element_wise_multiply_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ w = x ./ y => w = element_wise_divide(x, y) """
+const element_wise_divide_pattern1 = ExprPattern(
+    "element_wise_divide_pattern1",
+    (:call, GlobalRef(Main, :./), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_divide)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 expr_patterns = [
     dot_pattern1,
+    norm_pattern1,
+    sum_pattern1, 
+    minimum_pattern1, 
+    abs!_pattern1, 
+    exp!_pattern1, 
+    log1p!_pattern1, 
+    min!_pattern1,
+    copy!_pattern1,
     #WAXPBY_pattern,
     SpMV_pattern1,
     SpMV_pattern2,
@@ -423,8 +576,8 @@ expr_patterns = [
     WAXPBY_pattern1,
     WAXPBY_pattern2,
     WAXPBY!_pattern1,
-    element_wise_multiply_pattern1
-    #SpMV_pattern2,
+    element_wise_multiply_pattern1,
+    element_wise_divide_pattern1
     #WAXPBY!_pattern,
 ]
 

@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
 function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
   set_matrix_property(Dict(
