@@ -1,10 +1,18 @@
+typealias PropertyMap Dict{Union{GenSym,Symbol}, Int}
+
+type ASTContextArgs
+    changed         :: Bool
+    property_map    :: PropertyMap 
+    local_map       :: Dict{Any, Int}
+end
+
 @doc """ Set is_constant_structured perperty for mat_property in a region """
 type SymmetricValueProperty <: MatrixProperty 
 
-    typealias PropertyMap Dict{Union{GenSym,Symbol, Expr}, Int}()
-
     @doc """ set_property_for method"""
     set_property_for    :: Function
+
+    const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString, UnitRange]
 
     @doc """
     """
@@ -75,10 +83,6 @@ type SymmetricValueProperty <: MatrixProperty
                 union!(depend_sets[k],
                     build_depend_set_from_args(ast.args[2:end], call_sites, level))
 
-                dump(k)
-                if isa(k, Symbol)
-                    dump(typeof(k))
-                end
                 dprintln(1, 1, k, " : ", depend_sets[k], "\n")
             elseif ast.head == :call 
                 m, func_name = resolve_call_names(ast.args)
@@ -91,7 +95,6 @@ type SymmetricValueProperty <: MatrixProperty
                     @assert(ast.args[2].typ == args_real_types[2])
                     m = ast.args[2].name
                     if ast.args[3].value != :nzval
-                        dump(ast.args[3])
                         if !haskey(depend_sets, m)
                             depend_sets[m] = Set{Union{GenSym,Symbol}}()
                         end
@@ -132,87 +135,310 @@ type SymmetricValueProperty <: MatrixProperty
         build_dependence(ast, call_sites, 1)
     end
 
+    @doc """
+    Get the structure proxy for a symbol or expr
+    returns nothing if it's not found
+    """
+    function get_property_val(
+        call_sites  :: CallSites,
+        sym_name    :: Union{GenSym, Symbol, Expr, SymbolNode}
+    )
+        if typeof(sym_name) == SymbolNode
+            sym_name = sym_name.name
+        end
+
+        if in(typeof(sym_name), [Expr])
+            pmap = call_sites.extra.local_map 
+        else
+            pmap = call_sites.extra.property_map
+        end
+
+        if !haskey(pmap, sym_name)
+            pmap[sym_name] = 0
+        end
+        return pmap[sym_name]
+    end
+
+    function set_property_val(
+        call_sites  :: CallSites,
+        sym_name    :: Union{GenSym, Symbol, Expr, SymbolNode},
+        value       :: Int
+    )
+        if typeof(sym_name) == SymbolNode
+            sym_name = sym_name.name
+        end
+
+        if in(typeof(sym_name), [ Expr])
+            pmap = call_sites.extra.local_map 
+        else
+            pmap = call_sites.extra.property_map
+            if value != 0 && (!haskey(pmap, sym_name) || pmap[sym_name] != value)
+                call_sites.extra.changed = true
+                dprintln(1, 1, "val changed: ", sym_name, value)
+            end
+        end
+        
+        pmap[sym_name] = value
+    end
+
     @doc """ Post-processing function. Propagate the structure of the last arg. """
-    function propagate_last_structure(
+    function post_assign_action(
         ast               :: Expr,
         call_sites        :: CallSites,
-        fknob_creator     :: String,
-        fknob_deletor     :: String,
-        matrices_to_track :: Tuple
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString,
+        matrices_to_track :: Tuple,
+        reordering_power  :: Int,
+        reordering_FAR    :: Tuple
     )
-        A = last(ast.args)
-        structure = get_structure_proxy(call_sites, A) 
-        if structure != nothing
-            if ast.head == :(=)
-                set_structure_proxy(call_sites, ast.args[1], structure_proxies[A])
-            else
-                set_structure_proxy(call_sites, ast, structure_proxies[A])
+        LHS = ast.args[1]
+        RHS = ast.args[2]
+        vRHS = get_property_val(call_sites, RHS) 
+        vLHS = get_property_val(call_sites, LHS)
+        if vRHS !=0 && vLHS != vRHS
+            set_property_val(call_sites, LHS, vRHS)
+        end
+        return true
+    end
+
+    @doc """ Post-processing function. Propagate the structure of the last arg. """
+    function post_add_sub_action(
+        ast               :: Expr,
+        call_sites        :: CallSites,
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString,
+        matrices_to_track :: Tuple,
+        reordering_power  :: Int,
+        reordering_FAR    :: Tuple
+    )
+        args = ast.args[2:end]
+        prop_vals = map(x -> get_property_val(call_sites, x), args)
+        vR = get_property_val(call_sites, ast)
+        if any(x -> x < 0, prop_vals) && vR >= 0 
+            # TODO: check conflicts
+            set_property_val(call_sites, ast, -1)
+        elseif all(x -> x >0, prop_vals) && vR == 0 
+            set_property_val(call_sites, ast, 1)
+        end
+        return true
+    end
+
+    @doc """ Post-processing function. Propagate the structure of the last arg. """
+    function post_A_mul_Bc_action(
+        ast               :: Expr,
+        call_sites        :: CallSites,
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString,
+        matrices_to_track :: Tuple,
+        reordering_power  :: Int,
+        reordering_FAR    :: Tuple
+    )
+        A = ast.args[2]
+        B = ast.args[3]
+        if isa(A, SymbolNode) && isa(B, SymbolNode) && A.name == B.name
+            set_property_val(call_sites, ast, 1)
+        end
+        return true
+    end
+
+    @doc """ Post-processing function for spmatmul_witheps. """
+    function post_spmatmul_witheps_action(
+        ast               :: Expr,
+        call_sites        :: CallSites,
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString,
+        matrices_to_track :: Tuple,
+        reordering_power  :: Int,
+        reordering_FAR    :: Tuple
+    )
+        A = ast.args[2]
+        B = ast.args[3]
+        if isa(A, SymbolNode) && typeof(B) <: Expr && B.head == :call
+            m, func_name = resolve_call_names(B.args)
+            if func_name == "ctranspose" && B.args[2].name == A.name
+                set_property_val(call_sites, ast, 1)
             end
         end
         return true
     end
 
-    @doc """ Pre-processing function. Check if arg2 is a sparse diagonal matrix """
-    function CS_spdiagm_times_any_check(
-        ast           :: Expr,
-        call_sites    :: CallSites,
-        fknob_creator :: String,
-        fknob_deletor :: String
+
+
+    @doc """ Post-processing function for * operation. """
+    function post_multi_action(
+        ast               :: Expr,
+        call_sites        :: CallSites,
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString,
+        matrices_to_track :: Tuple,
+        reordering_power  :: Int,
+        reordering_FAR    :: Tuple
     )
-        A = ast.args[2]
-        structure = get_structure_proxy(call_sites, A) 
-        if structure == nothing || !(structure.diagonal)
-            return false
+        symbol_info = call_sites.symbol_info
+        types = expr_skeleton(ast, symbol_info)[2:end]
+        assert(length(ast.args)==length(types))
+
+        type_map = Dict{Any, Any}()
+        for (idx, arg) in enumerate(ast.args)
+            type_map[arg] = types[idx]
         end
+
+        # remove all scales so that only matrics/vectors are left in args
+        is_scale_type = x -> isa(x, SymbolNode)&&in(x.typ, [Int32, Int64, Float64]) || in(x, [Int32, Int64, Float64])
+        args = filter(x -> !is_scale_type(x), ast.args[2:end])
+        dump(args)
+        len = length(args)
+        
+        if len == 1
+            v = get_property_val(call_sites, args[1])
+            set_property_val(call_sites, ast, v) 
+        elseif len == 2
+        elseif len == 3
+        end
+
         return true
     end
 
-    const CS_spdiagm_pattern = ExprPattern(
-        "CS_spdiagm_pattern",
-        (:call, GlobalRef(Main, :spdiagm), Vector),
+    @doc """
+    Pre-processing function: A function that will be called when no pattern
+    could handle an AST.
+    """
+    function last_resort(
+        ast           :: Expr,
+        call_sites    :: CallSites,
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString,
+        matrices_to_track :: Tuple,
+        reordering_power  :: Int,
+        reordering_FAR    :: Tuple
+    )
+        # TODO: put whatever you want as the last resort of the analysis here.
+        return true
+    end
+
+    const CS_spmatmul_witheps_pattern = ExprPattern(
+        "CS_Aspmatmul_witheps_pattern",
+        (:call, GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC, Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
-        memoize_diagonal_structure,
+        post_spmatmul_witheps_action,
         "",
         "",
+        (),
+        0,
         ()
     )
 
-    const CS_spdiagm_times_any_pattern = ExprPattern(
-        "CS_spdiagm_times_any_pattern",
-        (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC),
+    const CS_A_mul_Bc_pattern = ExprPattern(
+        "CS_A_mul_Bc_pattern",
+        (:call, GlobalRef(Main, :A_mul_Bc), SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
-        CS_spdiagm_times_any_check,
+        do_nothing,
         (:NO_CHANGE, ),
-        propagate_last_structure,
+        post_A_mul_Bc_action,
         "",
         "",
+        (),
+        0,
         ()
     )
 
     const CS_add_pattern = ExprPattern(
         "CS_add_pattern",
-        (:(+), Any, Any),
-        (:NO_SUB_PATTERNS,),
-        CS_add_check,
-        (:NO_CHANGE, ),
-        propagate_last_structure,
-        "",
-        "",
-        ()
-    )
-
-
-    const CS_assign_pattern = ExprPattern(
-        "CS_assign_pattern",
-        (:(=), Any, Any),
+        (:call, GlobalRef(Main, :+), SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
-        propagate_last_structure,
+        post_add_sub_action,
         "",
         "",
+        (),
+        0,
+        ()
+    )
+
+    const CS_add3_pattern = ExprPattern(
+        "CS_add3_pattern",
+        (:call, GlobalRef(Main, :+), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_add_sub_action,
+        "",
+        "",
+        (),
+        0,
+        ()
+    )
+
+    const CS_sub_pattern = ExprPattern(
+        "CS_sub_pattern",
+        (:call, GlobalRef(Main, :-), SparseMatrixCSC, SparseMatrixCSC),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_add_sub_action,
+        "",
+        "",
+        (),
+        0,
+        ()
+    )
+
+    const CS_sub3_pattern = ExprPattern(
+        "CS_sub3_pattern",
+        (:call, GlobalRef(Main, :-), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_add_sub_action,
+        "",
+        "",
+        (),
+        0,
+        ()
+    )
+
+    const CS_multi_pattern = ExprPattern(
+        "CS_multi_pattern",
+        (:call, GlobalRef(Main, :*), Any, Any),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_multi_action,
+        "",
+        "",
+        (),
+        0,
+        ()
+    )
+
+    const CS_multi3_pattern = ExprPattern(
+        "CS_multi3_pattern",
+        (:call, GlobalRef(Main, :*), Any, Any, Any),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_multi_action,
+        "",
+        "",
+        (),
+        0,
+        ()
+    )
+
+    const CS_assign_pattern = ExprPattern(
+        "CS_assign_pattern",
+        (:(=), SparseMatrixCSC, SparseMatrixCSC),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_assign_action,
+        "",
+        "",
+        (),
+        0,
         ()
     )
 
@@ -228,6 +454,8 @@ type SymmetricValueProperty <: MatrixProperty
         do_nothing,               # Useless
         "",                       # Useless
         "",                       # Useless
+        (),
+        0,
         ()
     )
 
@@ -235,14 +463,17 @@ type SymmetricValueProperty <: MatrixProperty
     Patterns used for discovering matrix structures. 
     """
     CS_symmetric_propagation_patterns = [
-        CS_add_pattern,
-        #CS_spdiagm_pattern,
-        #CS_spdiagm_times_any_pattern,
         CS_assign_pattern,
+        CS_add_pattern,
+        CS_add3_pattern,
+        CS_sub_pattern,
+        CS_sub3_pattern,
+        CS_multi_pattern,
+        CS_multi3_pattern,
+        CS_A_mul_Bc_pattern,
+        CS_spmatmul_witheps_pattern,
         CS_last_resort_pattern
     ]
-
-
 
 
     @doc """
@@ -254,11 +485,13 @@ type SymmetricValueProperty <: MatrixProperty
         depend_map  :: Dict
     )
         for (k, v) in pm
-            if haskey(depend_map, k)
-                dprintln(1, level, v, "\t", k, "\t", set_to_str(depend_map[k]))
-            else
+            #if haskey(depend_map, k)
+            #    dprintln(1, level, v, "\t", k, "\t", set_to_str(depend_map[k]))
+            #else
+            #if isa(k, Expr)
+            #else
                 dprintln(1, level, v, "\t", k)
-            end
+            #end
         end
     end
 
@@ -335,10 +568,10 @@ type SymmetricValueProperty <: MatrixProperty
         #  2: external(constant)
         #  3: specified by set_matrix_property statement
         #  4: inherited from parent region
-        property_map = PropetyMap()
+        property_map = PropertyMap()
         property_map[sym_non_constant] = -1
 
-        #single_defs = find_single_defs(region, liveness, cfg)
+        single_defs = find_single_defs(region, liveness, cfg)
 
         for k in keys(depend_map)
             # always prefer predefined values
@@ -346,24 +579,30 @@ type SymmetricValueProperty <: MatrixProperty
                 if mat_property[k].symmetric_valued!=0 
                     property_map[k] = mat_property[k].symmetric_valued
                 end
-            #else
-            #    property_map[k] = in(k, single_defs) ? 0 : -1
+            else
+                property_map[k] = in(k, single_defs) ? 0 : -1
             end
         end
 
-        dprintln("\nBefore symmetric anaylsis:")
+        for rk in keys(reverse_depend_map)
+            if !haskey(property_map, rk)  && 
+                        haskey(mat_property, rk) && mat_property[rk].symmetric_valued>0
+                property_map[rk] = mat_property[rk].symmetric_valued
+            end
+        end
+
+
+        dprintln(1, 1, "\nBefore symmetric anaylsis:")
         print_property_map(1, property_map, depend_map)
 
 
-        # cs_arg is attached to call_sites so that
+        # ctx_args is attached to call_sites so that
         # pattern functions can pass back their results
-        #  cs_arg[1]: property_map
-        #  cs_arg[2]: whether a Sym/Gensym/Expr's property has been changed
-        cs_arg = Tuple{PropertyMap, Bool}(property_map, false)
+        ctx_args = ASTContextArgs(false, property_map, Dict{Expr, Int}())
 
         call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
                             CS_symmetric_propagation_patterns,
-                            Vector{Action}(), cs_arg)
+                            Vector{Action}(), ctx_args)
 
         converged = false
         while !converged
@@ -373,28 +612,25 @@ type SymmetricValueProperty <: MatrixProperty
                 if typeof(expr) != Expr
                     continue
                 end
-                cs_arg[2] = false
+                ctx_args.changed = false
+                ctx_args.local_map = Dict{Any, Int}()
                 CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
-                if cs_args[2] 
+                if ctx_args.changed 
                     converged = false 
                 end
             end
         end
 
-        dprintln("\nAfter symmetric anaylsis:")
+        dprintln(1, 1, "\nAfter symmetric anaylsis:")
         print_property_map(1, property_map, depend_map)
 
         # copy back result
         delete!(property_map, :NON_CONSTANT)
         for (k, v) in property_map
-            #if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES) 
-                if !haskey(mat_property, k)
-                    mat_property[k] = StructureProxy()
-                end
-                mat_property[k].constant_structured = v
-            #else
-            #    dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
-            #end
+            if !haskey(mat_property, k)
+                mat_property[k] = StructureProxy()
+            end
+            mat_property[k].symmetric_valued = v
         end
     end 
 

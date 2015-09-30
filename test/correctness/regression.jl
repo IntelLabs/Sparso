@@ -642,9 +642,20 @@ const constant_structure_test1 = Test(
     ]
 )
 
-const value_symmetry_test1 = Test(
-    "value-symmetry-test1",
-    "value-symmetry-test1.jl",
+const symmetric_value_test1 = Test(
+    "symmetric-value-test1",
+    "symmetric-value-test1.jl",
+    [
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :E, :F, :G, :S])),
+                     "Test ipm-ref that B E F G S is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+const symmetric_value_test2 = Test(
+    "symmetric-value-test2",
+    "symmetric-value-test2.jl",
     [
         TestPattern(r"Value symmetry discovered:.*\n.*\[.*:A.*\]",
                      "Test ipm-ref that A is recognized as symmetric in value."
@@ -653,9 +664,32 @@ const value_symmetry_test1 = Test(
     ]
 )
 
-const structure_symmetry_test1 = Test(
-    "structure-symmetry-test1",
-    "structure-symmetry-test1.jl",
+const symmetric_value_test3 = Test(
+    "symmetric-value-test3",
+    "symmetric-value-test3.jl",
+    [
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :C, :G, :S])),
+                     "Test ipm-ref that B E F G S is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+const symmetric_value_test4 = Test(
+    "symmetric-value-test4",
+    "symmetric-value-test4.jl",
+    [
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+                     "Test ipm-ref that B E F G S is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+
+const symmetric_structure_test1 = Test(
+    "symmetric-structure-test1",
+    "symmetric-structure-test1.jl",
     [
         TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A B are recognized as symmetric in structure."
@@ -690,16 +724,19 @@ const all_tests = [
     call_replacement_test11,
     call_replacement_test12,
     name_resolution_test1,
-    constant_value_test1,
     single_def_test1,
+    constant_value_test1,
     set_matrix_property_test1,
     set_matrix_property_test2,
     set_matrix_property_test3,
     set_matrix_property_test4,
     set_matrix_property_test5,
     constant_structure_test1,
-    value_symmetry_test1,
-    structure_symmetry_test1
+    symmetric_value_test1,
+    symmetric_value_test2,
+    symmetric_value_test3,
+    symmetric_value_test4,
+    symmetric_structure_test1
 ]
 
 const fast_tests = [
@@ -723,8 +760,8 @@ end
 
 if !isreadable(julia_command)
     error("Plase install (softlink) julia command to \"" * julia_command  * "\".")
-elseif !ismatch(r"\.*0.4.0-rc1", get_julia_ver())
-    error("Wrong julia version! 0.4.0-rc1 is required!")
+elseif !ismatch(r"\.*0.4.0-rc*", get_julia_ver())
+    error("Wrong julia version! 0.4.0-rc is required!")
 end
 
 if isreadable("regression.conf")
@@ -750,6 +787,8 @@ if length(ARGS) > 0
         end
         if !isempty(matched_tests)
             tests = matched_tests
+        else
+            print("No testing group matched.\n")
         end
     end  
     print(length(tests), " test(s).\n")
@@ -801,7 +840,7 @@ function run_test(
     end
 
     if successful
-        rm(log)
+        #rm(log)
     end
 
     successful

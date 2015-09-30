@@ -45,7 +45,7 @@ const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
 abstract MatrixProperty
 
 include("property-constant-structure.jl")
-#include("property-symmetric-value.jl")
+include("property-symmetric-value.jl")
 
 @doc "print out the content of property proxies"
 function dprint_property_proxies(
@@ -229,7 +229,7 @@ function find_properties_of_matrices(
 
     all_structure_properties = [
         ConstantStructureProperty()
-    #    SymmetricValueProperty()
+#        SymmetricValueProperty()
     ]
 
     dprintln(1, 0, "\nProperty anylsis passes:")
