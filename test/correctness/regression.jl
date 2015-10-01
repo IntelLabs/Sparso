@@ -380,10 +380,10 @@ const pagerank_test1 = Test(
     "pagerank-test1",
     "pagerank.jl  hmatrix.1024.mtx",
     [
-        TestPattern(r"Original:(.\n)*?\s*error = 1.5473442587636215e-8",
+        TestPattern(r"Original:(.\n)*?\s*error = 1.54\d*e-8",
                      "Test original pagerank"
         ),
-        TestPattern(r"Accelerated:(.\n)*?\s*error = 1.5435816122233\d*e-8",
+        TestPattern(r"Accelerated:(.\n)*?\s*error = 1.54\d*e-8",
                      "Test pagerank with reordering"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
