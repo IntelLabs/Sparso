@@ -394,7 +394,7 @@ function find_properties_of_matrices(
 
     all_structure_properties = [
         ConstantStructureProperty(),
-        #SymmetricValueProperty(),
+        SymmetricValueProperty(),
         #SymmetricStructureProperty(),
         #LowerUpperProperty()
     ]
