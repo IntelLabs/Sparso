@@ -370,7 +370,7 @@ const CS_cholfact_int32_pattern = ExprPattern(
 
 const CS_cholsolve_pattern = ExprPattern(
     "CS_cholsolve_pattern",
-    (:call, GlobalRef(Main, :\), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Any),
+    (:call, GlobalRef(Main, :\), Factorization{Float64}, Any),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_inverse_divide)),

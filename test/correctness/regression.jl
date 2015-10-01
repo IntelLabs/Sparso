@@ -253,7 +253,13 @@ const context_test3 = Test(
         TestPattern(r"Original sum of x=715375.98850000",
                      "Test original ipm-ref"
         ),
+        TestPattern(r"Original iter 26, resid =  3.93e-15",
+                     "Test original ipm-ref"
+        ),
         TestPattern(r"Accelerated sum of x=715375.98850000",
+                     "Test ipm-ref with context-sensitve optimization"
+        ),
+        TestPattern(r"Accelerated iter 26, resid =  3.93e-15",
                      "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
@@ -269,6 +275,102 @@ const context_test4 = Test(
         ),
         TestPattern(r"Manual_context sum of x=715375.988500001",
                      "Test ipm-ref with context-sensitve optimization"
+        ),
+        exception_pattern
+    ]
+)
+
+const context_test5 = Test(
+    "context-test5",
+    "context-test5.jl lap3d_4x4x4.mtx",
+    [
+        TestPattern(r"Original k=5",
+                     "Test original pcg_symgs_ilu0 "
+        ),
+        TestPattern(r"Original rel_err=4.398690\d*e-9",
+                     "Test original pcg_symgs_ilu0 "
+        ),
+        TestPattern(r"Accelerated k=5",
+                     "Test iterations"
+        ),
+        TestPattern(r"Accelerated rel_err=4.398690\d*e-9",
+                     "Test rel_err"
+        ),
+        TestPattern(r"Constant structures discovered:\n.*\[:A,:L,:U\]",
+                     "Test constant structures"
+        ),
+        TestPattern(r"Structure symmetry discovered:\n.*\[:A\]",
+                     "Test structure symmetry"
+        ),
+        TestPattern(r"L is lower of A",
+                     "Test L and A"
+        ),
+        TestPattern(r"U is upper of A",
+                     "Test U and A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
+                     "Test if mknobA is generated and is constant valued, constant structured, symmetric valued and structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(SparseAccelerator.new_matrix_knob\)\(L,true,true,false,false,false,false\)",
+                     "Test if mknobL is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(SparseAccelerator.new_matrix_knob\)\(U,true,true,false,false,false,false\)",
+                     "Test if mknobL is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobL.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+                    "Test if L is found as part of A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobU.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+                    "Test if U is found as part of A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
+                     "Test if mknobA is added to a function knob (for SpMV)"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+                     "Test if Ap = A * p has been replaced with SpMV with context info"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
+                     "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(##fknob#\d*?,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+                     "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+                     "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?r = b.* - .*SparseAccelerator,:SpMV\)\)\(A.*,x.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?normr0 = .*SparseAccelerator,:norm\)\)\(r.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?rz = .*SparseAccelerator,:dot\)\)\(r.*,z.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?alpha = old_rz.*?/.*?SparseAccelerator,:dot\)\)\(p.*?,Ap.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(x,1,x.*?,alpha.*?,p.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(r,1,r.*?,-alpha.*?,Ap.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?rel_err = .*?SparseAccelerator,:norm\)\)\(r.*?\).*?/ normr0",
+                     "Test call replacement"
+        ),
+# TODO: enable this test.
+#        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:copy!\)\)\(z.*?,r.*?\)",
+#                     "Test call replacement"
+#        )
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:fwdTriSolve!\)\)\(L.*?,z.*?,.*?fknob.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:bwdTriSolve!\)\)\(U.*?,z.*?,.*?fknob.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(p,1,z.*?,beta.*?,p.*?\)",
+                     "Test call replacement"
         ),
         exception_pattern
     ]
@@ -741,6 +843,7 @@ const all_tests = [
     context_test2_ilu0,
     context_test3,
     context_test4,
+    context_test5,
     pagerank_test1,
     liveness_test1,
     liveness_test2,
@@ -775,11 +878,12 @@ const all_tests = [
 
 const fast_tests = [
     pagerank_test1,
-    context_test1,
+#    context_test1,
     context_test2,
     context_test2_without_reordering,
     context_test3,
     context_test4,
+    context_test5
 ]
 
 # If true, use pcregrep for regular expression match. 
@@ -912,7 +1016,8 @@ else
         sleep(0.5)
     end
     finished = []
-    running = []
+    running  = []
+    passed   =  Dict()
     while length(finished) < total
         for t in tasks
             if istaskdone(t)
@@ -923,8 +1028,10 @@ else
                     print(length(finished), "/", total, " ")
                     if ret 
                         println(name, ": Pass")
+                        passed[name] = true
                     else
                         println(name, ": FAIL. See ", name * ".log")
+                        passed[name] = false
                     end
                     succ = succ + ret
                 end
@@ -937,6 +1044,12 @@ else
             end
         end
         sleep(0.5)
+    end
+
+    # Print out the results in a fixed order for easier checking
+    println("\nFinal report:")
+    for test in tests
+        println(test.name, ": ", passed[test.name] ? "Pass" : "FAIL. See $(test.name).log")
     end
 end
 

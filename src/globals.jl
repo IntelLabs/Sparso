@@ -265,7 +265,8 @@ type CallSite
 end
 
 @doc """"
-Properties of a matrix. 
+Properties of a matrix in a region (The properties may be different in another
+region). 
 
 constant_valued       : The matrix is a constant in value(and thus of course 
                         constant in structure).

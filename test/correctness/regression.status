@@ -1,41 +1,44 @@
-hrong1@hrong1-u1404x:~/SparseAccelerator/test/correctness$ julia regression.jl all
-Testing sanity-test1: Pass
-Testing sanity-test2: Pass
-Testing sanity-test3: Pass
-Testing spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
+sanity-test1: Pass
+sanity-test2: Pass
+sanity-test3: Pass
+spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
     Need to fix the library to handle SpMV!(x, A, x, ...) case
-Testing context-test1: Pass
-Testing context-test2: Pass
-Testing context-test2-without-reordering: Pass
-Testing context-test3: Pass
-Testing context-test4: Pass
-Testing pagerank-test1: Pass
-Testing liveness-test1: Pass
-Testing liveness-test2: Pass
-Testing call-replacement-test1: Pass
-Testing call-replacement-test2: Pass
-Testing call-replacement-test3: Pass
-Testing call-replacement-test4: Pass
-Testing call-replacement-test5: Pass
-Testing call-replacement-test6: Pass
-Testing call-replacement-test7: Pass
-Testing call-replacement-test8: Pass
-Testing call-replacement-test9: Pass
-Testing call-replacement-test10: Pass
-Testing call-replacement-test11: Pass
-Testing call-replacement-test12: Pass
-Testing name-resolution-test1: Pass
-Testing constant-value-test1: Pass
-Testing single-def-test1: Pass
-Testing set-matrix-property-test1: Pass
-Testing set-matrix-property-test2: Pass
-Testing set-matrix-property-test3: Pass
-Testing set-matrix-property-test4: FAIL. See set-matrix-property-test4.log
+context-test1: Pass
+context-test2: Pass
+context-test2-without-reordering: Pass
+context-test2-ilu0: Pass
+context-test3: Pass
+context-test4: Pass
+pagerank-test1: Pass
+liveness-test1: Pass
+liveness-test2: Pass
+call-replacement-test1: Pass
+call-replacement-test2: Pass
+call-replacement-test3: Pass
+call-replacement-test4: Pass
+call-replacement-test5: Pass
+call-replacement-test6: Pass
+call-replacement-test7: Pass
+call-replacement-test8: Pass
+call-replacement-test9: Pass
+call-replacement-test10: Pass
+call-replacement-test11: Pass
+call-replacement-test12: Pass
+name-resolution-test1: Pass
+single-def-test1: Pass
+constant-value-test1: Pass
+set-matrix-property-test1: Pass
+set-matrix-property-test2: Pass
+set-matrix-property-test3: Pass
+set-matrix-property-test4: FAIL. See set-matrix-property-test4.log
     B is renamed and thus the annotation does not work.
-Testing set-matrix-property-test5: Pass
-Testing constant-structure-test1: Pass
-Testing value-symmetry-test1: FAIL. See value-symmetry-test1.log
-Testing structure-symmetry-test1: FAIL. See structure-symmetry-test1.log
-Total: 35
+set-matrix-property-test5: Pass
+constant-structure-test1: FAIL. See constant-structure-test1.log
+symmetric-value-test1: FAIL. See symmetric-value-test1.log
+symmetric-value-test2: FAIL. See symmetric-value-test2.log
+symmetric-value-test3: FAIL. See symmetric-value-test3.log
+symmetric-value-test4: FAIL. See symmetric-value-test4.log
+symmetric-structure-test1: FAIL. See symmetric-structure-test1.log
+Total: 39
 Pass : 31
-Fail : 4
+Fail : 8
