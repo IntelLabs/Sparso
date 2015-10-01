@@ -32,7 +32,7 @@ end
 
 
 root_path       = joinpath(dirname(@__FILE__), "../..")
-load_path       = joinpath(root_path, "dpes")
+load_path       = joinpath(root_path, "deps")
 julia_command   = joinpath(root_path, "deps", "julia")
 
 const exception_pattern = AntiTestPattern(
