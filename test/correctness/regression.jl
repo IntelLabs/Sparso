@@ -128,7 +128,7 @@ const context_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
                      "Test if mknobA is added to a function knob (for SpMV)"
         ),
-        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(1,A.*,p.*,.*fknob.*\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
@@ -247,8 +247,24 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*?R = .*\(SparseAccelerator,:cholfact_int32\)\)\(B.*,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_int32"
         ),
-        TestPattern(r"New AST:(.|\n)*?dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2,##fknob#",
+        TestPattern(r"New AST:(.|\n)*?dy = .*\(SparseAccelerator,:cholfact_inverse_divide\)\)\(R.*,t2.*,##fknob#",
                      "Test if accelerated ipm-ref generates cholfact_inverse_divide"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.set_derivative\)\(.*mknobA.*,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,.*mknob__AT.*\)",
+                     "Test if accelerated ipm-ref generates a derivative between A and A'"
+        ),
+        # TODO: enable these patterns
+#        TestPattern(r"New AST:(.|\n)*?Rd = .*\(SparseAccelerator,:SpMV\)\)\(1,__AT__,y,1,s-p,fknob_spmv.*\)",
+#                     "Test call replacement. Currently cannot match as we need to handle AT specially."
+#        ),
+        TestPattern(r"New AST:(.|\n)*?Rp = .*?\(SparseAccelerator,:SpMV\)\)\(1,A.*?,x.*?,-1,b.*?,0,.*?fknob.*?\)",
+                     "Test call replacement."
+        ),
+        TestPattern(r"New AST:(.|\n)*?Rc = .*?SparseAccelerator,:element_wise_multiply\)\)\(x.*?,s.*?\)",
+                     "Test call replacement."
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPB!\)\)\(Rc,1,Rc,-\(\(Main.min\)\(0.1,100 \* mu",
+                     "Test call replacement."
         ),
         TestPattern(r"Original sum of x=715375.98850000",
                      "Test original ipm-ref"
@@ -326,7 +342,7 @@ const context_test5 = Test(
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
                      "Test if mknobA is added to a function knob (for SpMV)"
         ),
-        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(1,A.*,p.*,.*fknob.*\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",

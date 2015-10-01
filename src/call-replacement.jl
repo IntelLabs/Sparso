@@ -189,6 +189,34 @@ const number_times_vector_pattern = ExprPattern(
     ()
 )
 
+const vector_minus_number_pattern = ExprPattern(
+    "vector_minus_number_pattern",
+    (:call, GlobalRef(Main, :-), Vector, Number),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:NO_CHANGE, ),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+const vector_add_number_pattern = ExprPattern(
+    "vector_add_number_pattern",
+    (:call, GlobalRef(Main, :+), Vector, Number),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:NO_CHANGE, ),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 const WAXPBY_4_parameters_pattern = ExprPattern(
     "WAXPBY_4_parameters_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
@@ -245,6 +273,24 @@ const sum_pattern1 = ExprPattern(
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum)),
      :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ mean(x) ==> SparseAccelerator.sum(x)/length(x)"""
+const mean_pattern1 = ExprPattern(
+    "mean_pattern1",
+    (:call, GlobalRef(Main, :mean), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(Main, :(/)),
+      TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum), :arg2),
+      TypedExprNode(Function, :call, TopNode(:getfield), :Base, QuoteNode(:arraylen), :arg2)
+    ),
     do_nothing,
     "",
     "",
@@ -522,6 +568,36 @@ const WAXPBY!_pattern1 = ExprPattern(
     ()
 )
 
+const WAXPB!_pattern1 = ExprPattern(
+    "WAXPB!_pattern1",
+    (:(=), Vector, Vector),
+    (nothing, nothing, vector_minus_number_pattern),
+    LHS_in_RHS,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+     :arg1, 1, :arg1, :naarg23),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+const WAXPB!_pattern2 = ExprPattern(
+    "WAXPB!_pattern2",
+    (:(=), Vector, Vector),
+    (nothing, nothing, vector_add_number_pattern),
+    LHS_in_RHS,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+     :arg1, 1, :arg1, :aarg23),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 @doc """ w = x.*y => w = element_wise_multiply(x, y) """
 const element_wise_multiply_pattern1 = ExprPattern(
     "element_wise_multiply_pattern1",
@@ -557,7 +633,8 @@ const element_wise_divide_pattern1 = ExprPattern(
 expr_patterns = [
     dot_pattern1,
     norm_pattern1,
-    sum_pattern1, 
+    sum_pattern1,
+    #mean_pattern1, #ISSUE: this pattern requires replacement of arguments in a sub-tree. #TODO: enalble matching and replacing a tree with multiple levels.
     minimum_pattern1, 
     abs!_pattern1, 
     exp!_pattern1, 
@@ -576,6 +653,8 @@ expr_patterns = [
     WAXPBY_pattern1,
     WAXPBY_pattern2,
     WAXPBY!_pattern1,
+    WAXPB!_pattern1,
+    WAXPB!_pattern2,
     element_wise_multiply_pattern1,
     element_wise_divide_pattern1
     #WAXPBY!_pattern,

@@ -112,9 +112,12 @@ function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: ob
 # set initial point, based on largest element in (A,b,p)
   bigM = maximum(A)
   bigM = maximum([norm(b, Inf) norm(p, Inf) bigM])
-  x = 100*bigM*ones(n)
-  s = x
-  y = zeros(m)
+  
+  # Do not know why, Julia cannot automatically figure out the types of x, s and y,
+  # for which we miss some patterns. Here manually annotate the types.
+  x::Vector{Float64} = 100*bigM*ones(n)
+  s::Vector{Float64} = x
+  y::Vector{Float64} = zeros(m)
 
   bc = 1 + maximum([norm(b) norm(p)])
 
