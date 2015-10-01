@@ -556,7 +556,8 @@ void SpMV(
                 fknob->reordering_info.col_perm,
                 fknob->reordering_info.col_inverse_perm);
             if (LOG_REORDERING) {
-                clog << "SpMV: matrix is rectangular. bfsBipartite takes " << omp_get_wtime() - t << endl;
+                t = omp_get_wtime() - t;
+                clog << "SpMV: matrix is rectangular. bfsBipartite takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9 << " gbps)" << endl;
             }
         }
         else {
@@ -569,7 +570,7 @@ void SpMV(
             }
             t = omp_get_wtime() - t;
             if (LOG_REORDERING) {
-                clog << "SpMV: matrix is square. bfs takes " << t << "(" << (mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                clog << "SpMV: matrix is square. bfs takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
             }
         }
 
@@ -590,7 +591,7 @@ void SpMV(
         if (LOG_REORDERING) {
             printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
             t = omp_get_wtime() - t;
-            clog << "SpMV: permutation takes " << t << "(" << (mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+            clog << "SpMV: permutation takes " << t << " (" << ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
         }
     }
 
