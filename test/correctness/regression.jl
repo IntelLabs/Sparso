@@ -11,7 +11,7 @@ a friendly message when the pattern does not match.
 """
 immutable TestPattern
     pattern :: Regex
-    comment :: String
+    comment :: AbstractString
 end
 
 @doc """"
@@ -21,13 +21,13 @@ a friendly message when the pattern does match.
 """
 immutable AntiTestPattern
     pattern :: Regex
-    comment :: String
+    comment :: AbstractString
 end
 
 immutable Test
-    name     :: String
-    command  :: String
-    patterns :: Vector{Union(TestPattern, AntiTestPattern)}
+    name     :: AbstractString
+    command  :: AbstractString
+    patterns :: Vector{Union{TestPattern, AntiTestPattern}}
 end
 
 
@@ -549,7 +549,7 @@ const set_matrix_property_test1 = Test(
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
@@ -588,11 +588,11 @@ const set_matrix_property_test3 = Test(
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Func Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Func Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Func Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Func Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
 
@@ -600,11 +600,11 @@ const set_matrix_property_test3 = Test(
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
@@ -718,6 +718,18 @@ const symmetric_structure_test1 = Test(
     ]
 )
 
+const lower_upper_test1 = Test(
+    "lower-upper-test1",
+    "lower-upper-test1.jl",
+    [
+        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A B are recognized as symmetric in structure."
+        ),
+        exception_pattern
+    ]
+)
+
+
 const all_tests = [
     sanity_test1,
     sanity_test2,
@@ -757,7 +769,8 @@ const all_tests = [
     symmetric_value_test2,
     symmetric_value_test3,
     symmetric_value_test4,
-    symmetric_structure_test1
+#    symmetric_structure_test1,
+    lower_upper_test1,
 ]
 
 const fast_tests = [
@@ -896,6 +909,7 @@ else
     for test in tests
         push!(tasks, @schedule(run_test(test)))
         task_map[last(tasks)] = test
+        sleep(0.5)
     end
     finished = []
     running = []
@@ -922,7 +936,7 @@ else
                 end
             end
         end
-        sleep(1)
+        sleep(0.5)
     end
 end
 
