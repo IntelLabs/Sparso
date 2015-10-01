@@ -10,12 +10,8 @@ type LowerUpperProperty <: MatrixProperty
     """
     function get_property_val(
         call_sites  :: CallSites,
-        sym_name    :: Union{GenSym, Symbol, Expr, SymbolNode}
+        sym_name    :: Symexpr
     )
-        if typeof(sym_name) == SymbolNode
-            sym_name = sym_name.name
-        end
-
         if in(typeof(sym_name), [Expr])
             pmap = call_sites.extra.local_map 
         else
@@ -30,13 +26,9 @@ type LowerUpperProperty <: MatrixProperty
 
     function set_property_val(
         call_sites  :: CallSites,
-        sym_name    :: Union{GenSym, Symbol, Expr, SymbolNode},
+        sym_name    :: Symexpr,
         value       :: Any
     )
-        if typeof(sym_name) == SymbolNode
-            sym_name = sym_name.name
-        end
-
         if in(typeof(sym_name), [ Expr])
             pmap = call_sites.extra.local_map 
         else
@@ -46,7 +38,6 @@ type LowerUpperProperty <: MatrixProperty
                 dprintln(1, 1, "val changed: ", sym_name, value)
             end
         end
-        
         pmap[sym_name] = value
     end
 
@@ -75,7 +66,7 @@ type LowerUpperProperty <: MatrixProperty
         reordering_power  :: Int,
         reordering_FAR    :: Tuple
     )
-        A = last(ast.args)
+        A = get_symexpr(last(ast.args))
         set_property_val(call_sites, ast, get_property_val(call_sites, A))
         return true
     end
@@ -107,9 +98,11 @@ type LowerUpperProperty <: MatrixProperty
         reordering_FAR    :: Tuple
     )
         LHS = ast.args[1]
-        RHS = ast.args[2]
+        assert(typeof(LHS) <: Sym)
+        RHS = get_symexpr(ast.args[2])
         vRHS = get_property_val(call_sites, RHS) 
         vLHS = get_property_val(call_sites, LHS)
+
         if vRHS !=0 && vLHS != vRHS
             set_property_val(call_sites, LHS, vRHS)
         end
@@ -127,7 +120,7 @@ type LowerUpperProperty <: MatrixProperty
         reordering_FAR    :: Tuple
     )
         args = ast.args[2:end]
-        prop_vals = map(x -> get_property_val(call_sites, x), args)
+        prop_vals = map(x -> get_property_val(call_sites, get_symexpr(x)), args)
         vR = get_property_val(call_sites, ast)
         if any(x -> x < 0, prop_vals) && vR >= 0 
             # TODO: check conflicts
@@ -157,13 +150,13 @@ type LowerUpperProperty <: MatrixProperty
             type_map[arg] = types[idx]
         end
 
-        # remove all scales so that only matrics/vectors are left in args
-        is_scale_type = x -> isa(x, SymbolNode)&&in(x.typ, [Int32, Int64, Float64]) || in(x, [Int32, Int64, Float64])
-        args = filter(x -> !is_scale_type(x), ast.args[2:end])
+        # remove all scalars so that only matrics/vectors are left in args
+        is_scalar_type = x -> (type_of_ast_node(x, symbol_info) <: Number)
+        args = filter(x -> !is_scalar_type(x), ast.args[2:end])
         len = length(args)
         
         if len == 1
-            v = get_property_val(call_sites, args[1])
+            v = get_property_val(call_sites, get_symexpr(args[1]))
             set_property_val(call_sites, ast, v) 
         elseif len == 2
         elseif len == 3
@@ -399,13 +392,13 @@ type LowerUpperProperty <: MatrixProperty
         end
 
         # reverse dependence map: k -> symbols that depends on k 
-        reverse_depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
+        reverse_depend_map = Dict{Sym, Set{Sym}}()
 
         # fill reverse dependence map
         for (k, s) in depend_map
             for v in s
                 if !haskey(reverse_depend_map, v)
-                    reverse_depend_map[v] = Set{Union{GenSym,Symbol}}()
+                    reverse_depend_map[v] = Set{Sym}()
                 end
                 push!(reverse_depend_map[v], k)
             end
@@ -413,10 +406,10 @@ type LowerUpperProperty <: MatrixProperty
 
         single_defs = find_single_defs(region, liveness, cfg)
 
-        property_upper_map = Dict{Union{GenSym,Symbol}, Any}()
+        property_upper_map = Dict{Sym, Any}()
         property_upper_map[:NEGATIVE_PROPERTY] = :NEGATIVE_PROPERTY
 
-        property_lower_map = Dict{Union{GenSym,Symbol}, Any}()
+        property_lower_map = Dict{Sym, Any}()
         property_lower_map[:NEGATIVE_PROPERTY] = :NEGATIVE_PROPERTY
 
         for k in keys(depend_map)
@@ -444,8 +437,9 @@ type LowerUpperProperty <: MatrixProperty
             end
         end
 
-        for (pname, property_map, CS_propagation_patterns) in [("lower_of", property_lower_map, CS_lower_propagation_patterns),
-                                                        ("upper_of", property_upper_map, CS_upper_propagation_patterns)]
+        for (pname, property_map, CS_propagation_patterns) in 
+            [("lower_of", property_lower_map, CS_lower_propagation_patterns),
+             ("upper_of", property_upper_map, CS_upper_propagation_patterns)]
             dprintln(1, 1, "\nBefore " * pname * " anaylsis:")
             #print_property_map(1, property_map, depend_map)
 

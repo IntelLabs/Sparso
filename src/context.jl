@@ -83,11 +83,10 @@ function CS_fwdBwdTriSolve!_check(
     
     # Check it is lower or upper part of a symmetric matrix.
     if call_sites.extra.matrix_properties[L_or_U].lower_of != nothing
-        M = call_sites.extra.matrix_properties[L_or_U].lower_of
+        M = get_symexpr(call_sites.extra.matrix_properties[L_or_U].lower_of)
     else
-        M = call_sites.extra.matrix_properties[L_or_U].upper_of
+        M = get_symexpr(call_sites.extra.matrix_properties[L_or_U].upper_of)
     end
-    assert(typeof(M) <: Symexpr)
 
     if !haskey(call_sites.extra.matrix_properties, M) ||
        !call_sites.extra.matrix_properties[M].constant_structured
