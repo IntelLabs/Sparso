@@ -394,9 +394,9 @@ function find_properties_of_matrices(
 
     all_structure_properties = [
         ConstantStructureProperty(),
-        SymmetricValueProperty(),
-        SymmetricStructureProperty(),
-        LowerUpperProperty()
+        #SymmetricValueProperty(),
+        #SymmetricStructureProperty(),
+        #LowerUpperProperty()
     ]
 
     dprintln(1, 0, "\nProperty anylsis passes:")
