@@ -44,8 +44,145 @@ const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
 
 abstract MatrixProperty
 
+# data types shared by analysis passes 
+typealias PropertyMap Dict{Union{GenSym,Symbol}, Int}
+#  
+type ASTContextArgs
+    changed         :: Bool
+    property_map    :: Dict
+    local_map       :: Dict
+end
+
+# symbol types unimportant to analysis
+const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString]
+
+
+@doc """
+"""
+function build_depend_set_from_args(
+    args    :: Array,
+    call_sites :: CallSites,
+    level      :: Int
+)
+    dep_set = Set{Union{GenSym,Symbol}}()
+    
+    for arg in args
+        arg_tp = typeof(arg)
+        if arg_tp <: Expr 
+            union!(dep_set, build_dependence(arg, call_sites, level+1))
+        elseif arg_tp <: Symbol || typeof(arg) <: GenSym 
+            push!(dep_set, arg)
+        elseif arg_tp <: SymbolNode  
+            push!(dep_set, arg.name)
+        elseif in(arg_tp, skip_types)
+            # skip GlobalRef
+        else
+            dprintln(1, 2, typeof(arg), "\n")
+            dump(arg)
+            error("Unknown type")
+        end
+    end
+
+    dep_set
+end
+
+@doc """
+Build dependence map for all symbols in a region
+"""
+function build_dependence(
+    ast        :: Any,
+    call_sites :: CallSites,
+    level      :: Int
+)
+    symbol_info = call_sites.symbol_info
+    patterns    = call_sites.patterns
+    depend_sets = call_sites.extra
+
+    ret_set = Set{Union{GenSym,Symbol}}()
+
+    if typeof(ast) <: Expr
+        dprintln(1, level, "-> ", ast)
+        if ast.head == :(=)
+            if ast.head == :(=)
+                # must be at top level?
+                if level != 1
+                    error("Non-top level assignment")
+                end
+            end
+            k =  ast.args[1]
+
+            if typeof(k) != Symbol && typeof(k) != GenSym
+                dprintln(1, 2, k, "\n")
+                dump(k)
+                error("LHS is not symbol")
+            end
+
+            if !haskey(depend_sets, k)
+                depend_sets[k] = Set{Union{GenSym,Symbol}}() 
+            end 
+            
+            union!(depend_sets[k],
+                build_depend_set_from_args(ast.args[2:end], call_sites, level))
+
+            dprintln(1, 1, k, " : ", depend_sets[k], "\n")
+        elseif ast.head == :call 
+            m, func_name = resolve_call_names(ast.args)
+
+            # this is not direct type of args
+            args_real_types = expr_skeleton(ast, symbol_info)[2:end]
+
+            # a quick hack for setfield! call
+            if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
+                @assert(ast.args[2].typ == args_real_types[2])
+                m = ast.args[2].name
+                if ast.args[3].value != :nzval
+                    dump(ast.args[3])
+                    if !haskey(depend_sets, m)
+                        depend_sets[m] = Set{Union{GenSym,Symbol}}()
+                    end
+                    push!(depend_sets[m], :NEGATIVE_PROPERTY)
+                end
+                return ret_set 
+            end
+
+            ret_set = build_depend_set_from_args(ast.args[2:end], call_sites, level)
+
+            # check function's output set
+            # an arg depends on all other args (including itself?) if it's an ouput
+            func_desc = look_for_function_description(m, func_name, args_real_types[2:end])
+            if func_desc != nothing
+                for o in func_desc.output
+                    k = ast.args[o]
+                    if !haskey(depend_sets, k)
+                    #    depend_sets[k] = Set{Union{GenSym,Symbol}}() 
+                    end
+                    #union!(depend_sets[k], ret_set)
+                end
+            end
+        elseif in(ast.head, [:gotoifnot, :return])
+            # skip
+        else
+            dump(ast)
+            error("Unhandled expr type")
+        end
+    end
+
+    return ret_set
+end
+
+@doc """
+This function is called by analysis passes (ASTWalker) 
+to build an dependance map for symbols
+"""
+function build_dependence(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
+    return build_dependence(ast, call_sites, 1)
+end
+
+
 include("property-constant-structure.jl")
-#include("property-symmetric-value.jl")
+include("property-symmetric-value.jl")
+include("property-symmetric-structure.jl")
+include("property-lowerupper.jl")
 
 @doc "print out the content of property proxies"
 function dprint_property_proxies(
@@ -54,10 +191,10 @@ function dprint_property_proxies(
     dprintln(1, 1, "Sym : CV CS SV SS Lo Up")
     for (k, v) in pmap
         dprintln(1, 1, k, " : ", 
-                    v.constant_valued, " ", 
-                    v.constant_structured, " ",
-                    v.symmetric_valued, " ",
-                    v.symmetric_structured, " ",
+                    v.constant_valued, "  ", 
+                    v.constant_structured, "  ",
+                    v.symmetric_valued, "  ",
+                    v.symmetric_structured, "  ",
                     v.lower_of, " ",
                     v.upper_of)
     end
@@ -169,8 +306,10 @@ function find_properties_of_matrices(
     if isa(region, LoopRegion)
         first_bb_idx = sort(collect(region.loop.members))[1]
         region_name = "Loop" * string(first_bb_idx)
+        bb_idxs = region.loop.members
     else
         region_name = "Func"
+        bb_idxs = keys(cfg.basic_blocks)
     end
 
     dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_name * " -----\n")
@@ -224,17 +363,45 @@ function find_properties_of_matrices(
         end
     end
 
+    # collect all statements in this region
+    stmts = []
+    for bb_idx in bb_idxs
+        bb = cfg.basic_blocks[bb_idx]
+        append!(stmts, bb.statements)
+    end
+
+    const sym_negative_property = Symbol(:NEGATIVE_PROPERTY)
+
+    # dependence map: k -> symbols that k depends on
+    depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
+    depend_map[sym_negative_property] = Set{Union{GenSym, Symbol}}()
+
+    call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
+                        [],
+                        Vector{Action}(), depend_map)
+
+    # fill the dependence map by walking through all statements in the region
+    for stmt in stmts
+        expr = stmt.expr
+        if typeof(expr) != Expr
+            continue
+        end
+        CompilerTools.AstWalker.AstWalk(expr, build_dependence, call_sites)
+    end
+
     dprintln(1, 0, "\nStructure proxies:")
     dprint_property_proxies(structure_proxies)
 
     all_structure_properties = [
-        ConstantStructureProperty()
-    #    SymmetricValueProperty()
+        ConstantStructureProperty(),
+        #SymmetricValueProperty(),
+        #SymmetricStructureProperty(),
+        #LowerUpperProperty()
     ]
 
     dprintln(1, 0, "\nProperty anylsis passes:")
     for one_property in all_structure_properties
-        one_property.set_property_for(structure_proxies, region, liveness, symbol_info, cfg)
+        one_property.set_property_for(structure_proxies, depend_map, region, liveness, symbol_info, cfg)
     end
 
     # sort by keys 

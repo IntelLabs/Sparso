@@ -1,5 +1,5 @@
 @doc """ Set is_constant_structured perperty for mat_property in a region """
-type SymmetricValueProperty <: MatrixProperty 
+type SymmetricStructureProperty <: MatrixProperty 
 
     @doc """ set_property_for method"""
     set_property_for    :: Function
@@ -375,6 +375,16 @@ type SymmetricValueProperty <: MatrixProperty
         symbol_info :: Sym2TypeMap,
         cfg         :: CFG
     )
+        # symmetric structure is a superset of symmetric value
+        for (sym, v) in mat_property
+            if v.symmetric_valued > 0 && v.symmetric_structured == 0
+                v.symmetric_structured = v.symmetric_valued
+            end
+        end
+
+        # TODO: real analysis 
+        return
+
         if isa(region, LoopRegion)
             bb_idxs = region.loop.members
         else
@@ -477,7 +487,7 @@ type SymmetricValueProperty <: MatrixProperty
     end 
 
     @doc """ Constructor """
-    function SymmetricValueProperty()
+    function SymmetricStructureProperty()
         instance = new()
         instance.set_property_for = set_property_for
         return instance 

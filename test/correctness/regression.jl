@@ -11,7 +11,7 @@ a friendly message when the pattern does not match.
 """
 immutable TestPattern
     pattern :: Regex
-    comment :: String
+    comment :: AbstractString
 end
 
 @doc """"
@@ -21,13 +21,13 @@ a friendly message when the pattern does match.
 """
 immutable AntiTestPattern
     pattern :: Regex
-    comment :: String
+    comment :: AbstractString
 end
 
 immutable Test
-    name     :: String
-    command  :: String
-    patterns :: Vector{Union(TestPattern, AntiTestPattern)}
+    name     :: AbstractString
+    command  :: AbstractString
+    patterns :: Vector{Union{TestPattern, AntiTestPattern}}
 end
 
 
@@ -253,7 +253,13 @@ const context_test3 = Test(
         TestPattern(r"Original sum of x=715375.98850000",
                      "Test original ipm-ref"
         ),
+        TestPattern(r"Original iter 26, resid =  3.93e-15",
+                     "Test original ipm-ref"
+        ),
         TestPattern(r"Accelerated sum of x=715375.98850000",
+                     "Test ipm-ref with context-sensitve optimization"
+        ),
+        TestPattern(r"Accelerated iter 26, resid =  3.93e-15",
                      "Test ipm-ref with context-sensitve optimization"
         ),
         exception_pattern
@@ -269,6 +275,102 @@ const context_test4 = Test(
         ),
         TestPattern(r"Manual_context sum of x=715375.988500001",
                      "Test ipm-ref with context-sensitve optimization"
+        ),
+        exception_pattern
+    ]
+)
+
+const context_test5 = Test(
+    "context-test5",
+    "context-test5.jl lap3d_4x4x4.mtx",
+    [
+        TestPattern(r"Original k=5",
+                     "Test original pcg_symgs_ilu0 "
+        ),
+        TestPattern(r"Original rel_err=4.398690\d*e-9",
+                     "Test original pcg_symgs_ilu0 "
+        ),
+        TestPattern(r"Accelerated k=5",
+                     "Test iterations"
+        ),
+        TestPattern(r"Accelerated rel_err=4.398690\d*e-9",
+                     "Test rel_err"
+        ),
+        TestPattern(r"Constant structures discovered:\n.*\[:A,:L,:U\]",
+                     "Test constant structures"
+        ),
+        TestPattern(r"Structure symmetry discovered:\n.*\[:A\]",
+                     "Test structure symmetry"
+        ),
+        TestPattern(r"L is lower of A",
+                     "Test L and A"
+        ),
+        TestPattern(r"U is upper of A",
+                     "Test U and A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
+                     "Test if mknobA is generated and is constant valued, constant structured, symmetric valued and structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(SparseAccelerator.new_matrix_knob\)\(L,true,true,false,false,false,false\)",
+                     "Test if mknobL is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(SparseAccelerator.new_matrix_knob\)\(U,true,true,false,false,false,false\)",
+                     "Test if mknobL is generated and is constant valued and constant structured"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobL.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+                    "Test if L is found as part of A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobU.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+                    "Test if U is found as part of A"
+        ),
+        TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
+                     "Test if mknobA is added to a function knob (for SpMV)"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Ap = .*:SpMV\)\)\(A.*,p.*,.*fknob.*\)",
+                     "Test if Ap = A * p has been replaced with SpMV with context info"
+        ),
+        TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
+                     "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(##fknob#\d*?,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+                     "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+                     "Test reordering"
+        ),
+        TestPattern(r"New AST:(.|\n)*?r = b.* - .*SparseAccelerator,:SpMV\)\)\(A.*,x.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?normr0 = .*SparseAccelerator,:norm\)\)\(r.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?rz = .*SparseAccelerator,:dot\)\)\(r.*,z.*\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?alpha = old_rz.*?/.*?SparseAccelerator,:dot\)\)\(p.*?,Ap.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(x,1,x.*?,alpha.*?,p.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(r,1,r.*?,-alpha.*?,Ap.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?rel_err = .*?SparseAccelerator,:norm\)\)\(r.*?\).*?/ normr0",
+                     "Test call replacement"
+        ),
+# TODO: enable this test.
+#        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:copy!\)\)\(z.*?,r.*?\)",
+#                     "Test call replacement"
+#        )
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:fwdTriSolve!\)\)\(L.*?,z.*?,.*?fknob.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:bwdTriSolve!\)\)\(U.*?,z.*?,.*?fknob.*?\)",
+                     "Test call replacement"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY!\)\)\(p,1,z.*?,beta.*?,p.*?\)",
+                     "Test call replacement"
         ),
         exception_pattern
     ]
@@ -549,7 +651,7 @@ const set_matrix_property_test1 = Test(
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
@@ -588,11 +690,11 @@ const set_matrix_property_test3 = Test(
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Func Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Func Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Func Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Func Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
 
@@ -600,11 +702,11 @@ const set_matrix_property_test3 = Test(
                      "Test ipm-ref that A B are recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test ipm-ref that A is recognized as constant in structure."
         ),
 
-        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Loop0 Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that R is recognized as constant in structure."
         ),
         exception_pattern
@@ -662,9 +764,20 @@ const constant_structure_test1 = Test(
     ]
 )
 
-const value_symmetry_test1 = Test(
-    "value-symmetry-test1",
-    "value-symmetry-test1.jl",
+const symmetric_value_test1 = Test(
+    "symmetric-value-test1",
+    "symmetric-value-test1.jl",
+    [
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :E, :F, :G, :S])),
+                     "Test ipm-ref that B E F G S is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+const symmetric_value_test2 = Test(
+    "symmetric-value-test2",
+    "symmetric-value-test2.jl",
     [
         TestPattern(r"Value symmetry discovered:.*\n.*\[.*:A.*\]",
                      "Test ipm-ref that A is recognized as symmetric in value."
@@ -673,9 +786,32 @@ const value_symmetry_test1 = Test(
     ]
 )
 
-const structure_symmetry_test1 = Test(
-    "structure-symmetry-test1",
-    "structure-symmetry-test1.jl",
+const symmetric_value_test3 = Test(
+    "symmetric-value-test3",
+    "symmetric-value-test3.jl",
+    [
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :C, :G, :S])),
+                     "Test ipm-ref that B E F G S is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+const symmetric_value_test4 = Test(
+    "symmetric-value-test4",
+    "symmetric-value-test4.jl",
+    [
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
+                     "Test ipm-ref that B E F G S is recognized as symmetric in value."
+        ),
+        exception_pattern
+    ]
+)
+
+
+const symmetric_structure_test1 = Test(
+    "symmetric-structure-test1",
+    "symmetric-structure-test1.jl",
     [
         TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test ipm-ref that A B are recognized as symmetric in structure."
@@ -683,6 +819,18 @@ const structure_symmetry_test1 = Test(
         exception_pattern
     ]
 )
+
+const lower_upper_test1 = Test(
+    "lower-upper-test1",
+    "lower-upper-test1.jl",
+    [
+        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A B are recognized as symmetric in structure."
+        ),
+        exception_pattern
+    ]
+)
+
 
 const all_tests = [
     sanity_test1,
@@ -695,6 +843,7 @@ const all_tests = [
     context_test2_ilu0,
     context_test3,
     context_test4,
+    context_test5,
     pagerank_test1,
     liveness_test1,
     liveness_test2,
@@ -711,31 +860,39 @@ const all_tests = [
     call_replacement_test11,
     call_replacement_test12,
     name_resolution_test1,
-    constant_value_test1,
     single_def_test1,
+    constant_value_test1,
     set_matrix_property_test1,
     set_matrix_property_test2,
     set_matrix_property_test3,
     set_matrix_property_test4,
     set_matrix_property_test5,
     constant_structure_test1,
-    value_symmetry_test1,
-    structure_symmetry_test1
+    symmetric_value_test1,
+    symmetric_value_test2,
+    symmetric_value_test3,
+    symmetric_value_test4,
+#    symmetric_structure_test1,
+    lower_upper_test1,
 ]
 
 const fast_tests = [
     pagerank_test1,
-    context_test1,
+#    context_test1,
     context_test2,
     context_test2_without_reordering,
     context_test3,
     context_test4,
+    context_test5
 ]
 
 # If true, use pcregrep for regular expression match. 
 # If false, use Julia (If PCRE JIT stack overflow: enlarge JIT_STACK_MAX_SIZE in
 # julia/base/pcre.jl (times it with 10) and retry).
 const USE_PCREGREP_REGEX_MATCH = true
+
+# Run tests with multiple threads?
+const USE_THREADS = true
 
 function get_julia_ver()
     s, p = open(`$julia_command -v`)
@@ -744,8 +901,8 @@ end
 
 if !isreadable(julia_command)
     error("Plase install (softlink) julia command to \"" * julia_command  * "\".")
-elseif !ismatch(r"\.*0.4.0-rc1", get_julia_ver())
-    error("Wrong julia version! 0.4.0-rc1 is required!")
+elseif !ismatch(r"\.*0.4.0-rc*", get_julia_ver())
+    error("Wrong julia version! 0.4.0-rc is required!")
 end
 
 if isreadable("regression.conf")
@@ -771,6 +928,8 @@ if length(ARGS) > 0
         end
         if !isempty(matched_tests)
             tests = matched_tests
+        else
+            print("No testing group matched.\n")
         end
     end  
     print(length(tests), " test(s).\n")
@@ -828,7 +987,7 @@ function run_test(
     end
 
     if successful
-        rm(log)
+        #rm(log)
     end
 
     successful
@@ -836,36 +995,63 @@ end
 
 total = length(tests)
 succ = 0
-tasks = []
-for test in tests
-    print("Testing ", test.name)
-    s = run_test(test)
-    if s
-        succ = succ + 1
-        println(": Pass")
-    else
-        println(": FAIL. See ", test.name * ".log")
+
+if USE_THREADS == false
+    for test in tests
+        print("Testing ", test.name)
+        s = run_test(test)
+        if s
+            succ = succ + 1
+            println(": Pass")
+        else
+            println(": FAIL. See ", test.name * ".log")
+        end
     end
-#    push!(tasks, @schedule(run_test(test)))
+else
+    tasks = []
+    task_map = Dict()
+    for test in tests
+        push!(tasks, @schedule(run_test(test)))
+        task_map[last(tasks)] = test
+        sleep(0.5)
+    end
+    finished = []
+    running  = []
+    passed   =  Dict()
+    while length(finished) < total
+        for t in tasks
+            if istaskdone(t)
+                if !in(t, finished)
+                    push!(finished, t)
+                    name = task_map[t].name
+                    ret = wait(t)
+                    print(length(finished), "/", total, " ")
+                    if ret 
+                        println(name, ": Pass")
+                        passed[name] = true
+                    else
+                        println(name, ": FAIL. See ", name * ".log")
+                        passed[name] = false
+                    end
+                    succ = succ + ret
+                end
+            elseif istaskstarted(t)
+                if !in(t, running)
+                    push!(running, t)
+                    name = task_map[t].name
+                    println("Testing ", name)
+                end
+            end
+        end
+        sleep(0.5)
+    end
+
+    # Print out the results in a fixed order for easier checking
+    println("\nFinal report:")
+    for test in tests
+        println(test.name, ": ", passed[test.name] ? "Pass" : "FAIL. See $(test.name).log")
+    end
 end
-
-#finished = 0
-#while finished < total
-#    finished = 0
-#    running = 0
-#    for t in tasks
-#        if istaskdone(t)
-#            finished = finished + 1
-#        end
-#    end
-#    print("{}\rDone: ", finished, "/", total) 
-#    sleep(1)
-#end
-
-#fail = 0
-#for t in tasks
-#    succ = succ + wait(t)
-#end
 
 println("Total: ", total)
 println("Pass : ", succ)

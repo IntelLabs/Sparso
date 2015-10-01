@@ -82,7 +82,7 @@ type Factor <: Factorization{Float64}
   end
 end
 
-function cholfact_int32(B :: SparseMatrixCSC{Float64, Int32}; kws...)
+function cholfact_int32(B :: SparseMatrixCSC{Float64, Int32})
     R = Factor(dss_analyze(B))
     dss_factor(R.p, B)
     R
