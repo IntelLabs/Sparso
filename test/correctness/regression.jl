@@ -27,7 +27,7 @@ end
 immutable Test
     name     :: AbstractString
     command  :: AbstractString
-    patterns :: Vector{Union(TestPattern, AntiTestPattern)}
+    patterns :: Vector{Union{TestPattern, AntiTestPattern}}
 end
 
 

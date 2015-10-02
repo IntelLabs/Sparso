@@ -138,8 +138,8 @@ the AST of a function call.
 """
 function build_inter_dependence_graph_for_call(
     ast           :: Any,
-    module_name   :: String,
-    function_name :: String,
+    module_name   :: AbstractString,
+    function_name :: AbstractString,
     arg_types     :: Tuple,
     args          :: Vector,
     call_sites    :: CallSites
