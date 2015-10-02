@@ -312,13 +312,19 @@ assert(issym(X))
 
 # currently, something wrong with spmatmul_witheps used in CoSP2_ref.
 # So, ignore the results of CoSP2_ref
+println("\nOriginal:")
 CoSP2_ref(X)
 CoSP2_ref(X)
+println("End original.")
 
 # Expected results: D Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991
 # Number of iterations = 25
+println("\nCoSP2_call_replacement:")
 CoSP2_call_replacement(X)
 CoSP2_call_replacement(X)
+println("End CoSP2_call_replacement.")
 
+println("\nCoSP2_call_replacement_and_context_opt:")
 CoSP2_call_replacement_and_context_opt(X)
 CoSP2_call_replacement_and_context_opt(X)
+println("End CoSP2_call_replacement_and_context_opt.")

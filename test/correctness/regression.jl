@@ -418,6 +418,23 @@ const pagerank_test1 = Test(
     ]
 )
 
+const cosp2_test1 = Test(
+    "cosp2-test1",
+    "cosp2.jl",
+    [
+        TestPattern(r"Original:\nD Sparsity AAN = 27050.134369218962, fraction = 0.0001791459611337646 avg = 2.2013455704116995, max = 2.0122570097076777\nNumber of iterations = 39(.|\n)*?End original.",
+                     "Test original"
+        ),
+        TestPattern(r"CoSP2_call_replacement:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549982\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
+                     "Test CoSP2_call_replacement"
+        ),
+        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt",
+                     "Test CoSP2_call_replacement_and_context_opt"
+        ),
+        exception_pattern
+    ]
+)
+
 const liveness_test1 = Test(
     "liveness-test1",
     "liveness-test1.jl small-diag.mtx",
@@ -861,6 +878,7 @@ const all_tests = [
     context_test4,
     context_test5,
     pagerank_test1,
+    cosp2_test1,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,
@@ -893,13 +911,14 @@ const all_tests = [
 ]
 
 const fast_tests = [
-    pagerank_test1,
 #    context_test1,
     context_test2,
     context_test2_without_reordering,
     context_test3,
     context_test4,
-    context_test5
+    context_test5,
+    pagerank_test1,
+    cosp2_test1
 ]
 
 # If true, use pcregrep for regular expression match. 
