@@ -251,7 +251,7 @@ type LowerUpperProperty <: MatrixProperty
 
     const CS_apply_type_pattern = ExprPattern(
         "CS_apply_type_pattern",
-        (:call, TypedExprNode(Function, :call, TopNode(:apply_type)), SparseMatrixCSC),
+        (:call, Expr(:call, TopNode(:apply_type), Any, Any, Any), SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         CS_apply_type_check,
         (:NO_CHANGE, ),
