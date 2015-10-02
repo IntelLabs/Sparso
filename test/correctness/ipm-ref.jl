@@ -1,8 +1,99 @@
+include("ipm/dss.jl")
+
 function speye_int32(m::Integer)
   rowval = [Int32(x) for x in [1:m;]]
   colptr = [Int32(x) for x in [rowval; m + 1]]
   nzval = ones(Float64, m)
   return SparseMatrixCSC(m, m, colptr, rowval, nzval)
+end
+
+function canonicalize_ipm_input(A, b, p, lo, hi)
+  m = size(A, 1)
+  n = size(A, 2)
+  A = full(A)
+
+  nlo = 0
+  for i = 1:length(lo)
+    if lo[i] > 0
+      nlo += 1
+    end
+  end
+  nhi = 0
+  for i = 1:length(hi)
+    if hi[i] < 1e300
+      nhi += 1
+    end
+  end
+
+  A = [A; zeros(nlo + nhi, n)]
+  b = [b; zeros(nlo + nhi)]
+
+  nlo = 0
+  for i = 1:length(lo)
+    if lo[i] > 0
+      nlo += 1
+      A[m + nlo, i] = 1
+      b[m + nlo] = lo[i]
+    end
+  end
+
+  nhi = 0
+  for i = 1:length(hi)
+    if hi[i] < 1e300
+      nhi += 1
+      A[m + nlo + nhi, i] = 1
+      b[m + nlo + nhi] = hi[i]
+    end
+  end
+
+  new_n = length(b)
+  A = [A [zeros(m, nlo + nhi); -eye(nlo) zeros(nlo, nhi); zeros(nhi, nlo) eye(nhi)]]
+  A = SparseMatrixCSC{Float64, Int32}(sparse(A))
+  p = [p; zeros(nlo + nhi)]
+
+  A, b, p
+end
+
+function load_ipm_input(name)
+  A = full(matrix_market_read(string(name, ".mtx")))'
+  b = matrix_market_read(string(name, "_b.mtx"))
+  p = matrix_market_read(string(name, "_c.mtx"))
+
+  n = string(name, "_lo.mtx")
+  if isfile(n)
+    lo = matrix_market_read(string(name, "_lo.mtx"))
+  else
+    lo = zeros(0)
+  end
+  n = string(name, "_hi.mtx")
+  if isfile(n)
+    hi = matrix_market_read(string(name, "_hi.mtx"))
+  else
+    hi = zeros(0)
+  end
+
+  canonicalize_ipm_input(A, b, p, lo, hi)
+end
+
+type Factor <: Factorization{Float64}
+  p::Vector{Int}
+  function Factor(p::Vector{Int})
+    new(p)
+  end
+end
+
+function cholfact_int32(B :: SparseMatrixCSC{Float64, Int32})
+    R = Factor(dss_analyze(B))
+    dss_factor(R.p, B)
+    R
+end
+
+import Base.LinAlg: (\)
+
+function (\)(L::Factor, b::Vector)
+    y = zeros(b)
+    dss_solve!(L.p, b, y)
+    y
 end
 
 # Compared to the Jongsoo's original ipm_ref(), the following changes are made
@@ -11,9 +102,8 @@ end
 #(2) No print
 #(3) cholfact_int32(B) instead of cholfact(SparseMatrixCSC{Float64, Int64}(B))
 
-function cholfact_int32(B :: SparseMatrixCSC{Float64, Int32})
-    return cholfact(SparseMatrixCSC{Float64, Int64}(B))
-end
+# primal-dual interior-point method for problem
+# min p'*x s.t. Ax = b, x >= 0
 
 function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: objective
   t0 = time()
@@ -22,9 +112,12 @@ function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: ob
 # set initial point, based on largest element in (A,b,p)
   bigM = maximum(A)
   bigM = maximum([norm(b, Inf) norm(p, Inf) bigM])
-  x = 100*bigM*ones(n)
-  s = x
-  y = zeros(m)
+  
+  # Do not know why, Julia cannot automatically figure out the types of x, s and y,
+  # for which we miss some patterns. Here manually annotate the types.
+  x::Vector{Float64} = 100*bigM*ones(n)
+  s::Vector{Float64} = x
+  y::Vector{Float64} = zeros(m)
 
   bc = 1 + maximum([norm(b) norm(p)])
 

@@ -34,7 +34,59 @@ struct ReorderingInfo {
     { }
 };
 
+// set this true to see important decisions on matrix reordering
 static const bool LOG_REORDERING = false;
+// set this true to see if we're doing transposes which is not cheap.
+// we'd like to avoid transpose as much as possible if matrix
+// is symmetric or a transposed version of the matrix is already
+// available in the application context
+static const bool LOG_TRANSPOSE = false;
+
+static double spmp_spmv_time = 0;
+static double spmp_trsv_time = 0;
+
+static double knob_spmv_time = 0;
+static double knob_trsv_time = 0;
+
+double GetSpMPSpMVTime()
+{
+    return spmp_spmv_time;
+}
+
+void ResetSpMPSpMVTime()
+{
+    spmp_spmv_time = 0;
+}
+
+double GetSpMPTriangularSolveTime()
+{
+    return spmp_trsv_time;
+}
+
+void ResetSpMPTriangularSolveTime()
+{
+    spmp_trsv_time = 0;
+}
+
+double GetKnobSpMVTime()
+{
+    return knob_spmv_time;
+}
+
+void ResetKnobSpMVTime()
+{
+    knob_spmv_time = 0;
+}
+
+double GetKnobTriangularSolveTime()
+{
+    return knob_trsv_time;
+}
+
+void ResetKnobTriangularSolveTime()
+{
+    knob_trsv_time = 0;
+}
 
 // Julia variables' scope is function-wise at AST level, even though in the source
 // level, it may appears to have nested scopes. Our Julia compiler creates matrix 
@@ -68,6 +120,19 @@ struct MatrixKnob {
         }
     }
 
+    ~MatrixKnob() 
+    {
+        // Delete only the data owned by this matrix knob.
+        // ISSUE: it seems that the fields in one matrix knob may be shared
+        // by other matrix knobs. And deleting the fields causing segementation
+        // fault when deleting the other matrix knobs.
+        // TODO: maybe each knob should know which fields it owns, and which it
+        // shares and does not own? Then each knob can safely releases the owned
+        // fields. But we do not need this functionality for now.
+        // if (schedule != NULL) delete schedule;
+        // if (A != NULL) DeleteOptimizedRepresentation(this)
+    }
+    
     // auxiliary data structure
     LevelSchedule     *schedule;
     _MKL_DSS_HANDLE_t dss_handle; 
@@ -99,6 +164,11 @@ struct FunctionKnob {
     ReorderingInfo reordering_info;
 
     FunctionKnob() : is_reordering_decision_maker(false) { }
+    ~FunctionKnob() 
+    {
+        // This does not affect the knobs themselves.
+        mknobs.clear();
+    } 
 };
 
 /**************************** Usage of knobs *****************************/
@@ -131,12 +201,7 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
 
 void DeleteMatrixKnob(MatrixKnob* mknob)
 {
-    //DeleteOptimizedRepresentation(mknob);
-    if (mknob->schedule) {
-        delete mknob->schedule;
-        mknob->schedule = NULL;
-    }
-    delete mknob;
+    if (mknob != NULL) delete mknob;
 }
 
 static bool CheckMatrixKnobConsistency(MatrixKnob *m)
@@ -280,6 +345,9 @@ static void CreateOptimizedRepresentation(
 
     if (needTranspose) {
         m->A = AT->transpose();
+        if (LOG_TRANSPOSE) {
+            clog << "Transposing a matrix" << endl;
+        }
 
 #ifndef NDEBUG
         AT->make0BasedIndexing();
@@ -445,7 +513,7 @@ FunctionKnob* NewFunctionKnob()
 
 void DeleteFunctionKnob(FunctionKnob* fknob)
 {
-    delete fknob;
+    if (fknob != NULL) delete fknob;
 }
 
 void SpMV(
@@ -459,6 +527,8 @@ void SpMV(
     double gamma,
     FunctionKnob *fknob)
 {
+    knob_spmv_time -= omp_get_wtime();
+
     assert(fknob);
     MatrixKnob *mknob = GetMatrixKnob(fknob, 0);
     assert(mknob);
@@ -486,21 +556,25 @@ void SpMV(
                 fknob->reordering_info.col_perm,
                 fknob->reordering_info.col_inverse_perm);
             if (LOG_REORDERING) {
-                clog << "SpMV: matrix is rectangular. bfsBipartite takes " << omp_get_wtime() - t << endl;
+                t = omp_get_wtime() - t;
+                clog << "SpMV: matrix is rectangular. bfsBipartite takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9 << " gbps)" << endl;
             }
         }
         else {
-            mknob->A->getRCMPermutation(fknob->reordering_info.col_perm, fknob->reordering_info.row_inverse_perm);
+            double t = omp_get_wtime();
+            mknob->A->getBFSPermutation(fknob->reordering_info.col_perm, fknob->reordering_info.row_inverse_perm);
 #pragma omp parallel for
             for (int i = 0; i < m; i++) {
                 fknob->reordering_info.row_perm[i] = fknob->reordering_info.col_perm[i];
                 fknob->reordering_info.col_inverse_perm[i] = fknob->reordering_info.row_inverse_perm[i];
             }
+            t = omp_get_wtime() - t;
+            if (LOG_REORDERING) {
+                clog << "SpMV: matrix is square. bfs takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+            }
         }
 
-        if (LOG_REORDERING) {
-            printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
-        }
+        double t = omp_get_wtime();
 
         mknob->A = mknob->A->permute(
             fknob->reordering_info.col_perm,
@@ -513,9 +587,19 @@ void SpMV(
         if (y)
             reorderVectorWithInversePerm(
                 y, fknob->reordering_info.row_perm, m);
+
+        if (LOG_REORDERING) {
+            printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
+            t = omp_get_wtime() - t;
+            clog << "SpMV: permutation takes " << t << " (" << ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+        }
     }
 
+    spmp_spmv_time -= omp_get_wtime();
     mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+    spmp_spmv_time += omp_get_wtime();
+
+    knob_spmv_time += omp_get_wtime();
 }
 
 static void TriangularSolve_(
@@ -524,6 +608,8 @@ static void TriangularSolve_(
     void (*solveFunction)(CSR&, double *, const double *, const LevelSchedule&),
     void (*solveFunctionWithReorderedMatrix)(CSR&, double *, const double *, const LevelSchedule&))
 {
+    knob_trsv_time -= omp_get_wtime();
+
     CSR* L = NULL;
     bool needToDeleteL = false;
 
@@ -638,6 +724,10 @@ static void TriangularSolve_(
             L = LT->transpose();
             delete LT;
 
+            if (LOG_TRANSPOSE) {
+                clog << "Transposing a matrix" << endl;
+            }
+
             if (m && m->constant_structured) {
                 MatrixKnob *symKnob = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
                 if (!symKnob) {
@@ -675,6 +765,11 @@ static void TriangularSolve_(
             CSR *LT = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
             L = LT->transpose();
             delete LT;
+
+            if (LOG_TRANSPOSE) {
+                clog << "Transposing a matrix" << endl;
+            }
+
             needToDeleteL = true;
         }
     }
@@ -712,6 +807,7 @@ static void TriangularSolve_(
     assert(L != NULL);
     assert(schedule != NULL);
     
+    spmp_trsv_time -= omp_get_wtime();
     if (fknob->reordering_info.row_inverse_perm == m->reordering_info.row_inverse_perm) {
         (*solveFunctionWithReorderedMatrix)(*L, y, b, *schedule);
     }
@@ -719,6 +815,7 @@ static void TriangularSolve_(
         assert(m->reordering_info.row_inverse_perm == NULL);
         (*solveFunction)(*L, y, b, *schedule);
     }
+    spmp_trsv_time += omp_get_wtime();
 
     if (needToDeleteSchedule) {
         delete schedule;
@@ -726,6 +823,8 @@ static void TriangularSolve_(
     if (needToDeleteL) {
         delete L;
     }
+
+    knob_spmv_time += omp_get_wtime();
 }
 
 void ForwardTriangularSolve(
@@ -904,6 +1003,10 @@ void SpSquareWithEps(
     }
     else {
         A = AT.transpose();
+
+        if (LOG_TRANSPOSE) {
+            clog << "Transposing a matrix" << endl;
+        }
     }
 
     CSR *C = SpGEMMWithEps(A, &AT, eps);

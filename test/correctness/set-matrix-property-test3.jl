@@ -7,14 +7,13 @@ include("utils.jl")
 
 function foo()
     set_matrix_property(Dict(
-        :A => SA_CONST_VALUED | SA_SYMM_VALUED | SA_SYMM_STRUCTURED, 
-        :B => SA_CONST_VALUED | SA_CONST_STRUCTURED | SA_SYMM_VALUED
+        :A => SA_CONST_VALUED | SA_SYMM_VALUED, 
+        :B => SA_CONST_VALUED | SA_CONST_STRUCTURED | SA_SYMM_STRUCTURED
         )
     )
 
     m = 10
     A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-
 
     for i = 1:2
         B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)

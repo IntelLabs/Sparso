@@ -113,7 +113,8 @@ const element_wise_divide!_Desc = FunctionDescription(
     ])
 )
 
-const SpMV_Desc = FunctionDescription(
+@doc """ A*x """
+const SpMV_2_parameters_Desc = FunctionDescription(
     "SparseAccelerator", 
     "SpMV",                           # SparseAccelerator.SpMV(A::SparseMatrixCSC, x::Vector)
     (SparseMatrixCSC, Vector),        # The arguments must be vectors
@@ -121,6 +122,77 @@ const SpMV_Desc = FunctionDescription(
     true,                             # The function is distributive
     Set([ (0, 1, ROW_ROW),
           (1, 2, COLUMN_ROW_INVERSE)
+    ])
+)
+
+@doc """ alpha*A*x """
+const SpMV_3_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV",
+    (Number, SparseMatrixCSC, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE)
+    ])
+)
+
+@doc """ alpha*A*x + y """
+const SpMV_4_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV",
+    (Number, SparseMatrixCSC, Vector, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE),
+          (0, 4, ROW_ROW),
+          (2, 4, ROW_ROW)
+    ])
+)
+
+@doc """ alpha*A*x + beta*y """
+const SpMV_5_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV",
+    (Number, SparseMatrixCSC, Vector, Number, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE),
+          (0, 5, ROW_ROW),
+          (2, 5, ROW_ROW)
+    ])
+)
+
+@doc """ alpha*A*x + beta*y + gamma """
+const SpMV_6_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV",
+    (Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE),
+          (0, 5, ROW_ROW),
+          (2, 5, ROW_ROW)
+    ])
+)
+
+@doc """ w = alpha*A*x + beta*y + gamma """
+const SpMV!_7_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV!",
+    (Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    Set(1),                           # Argument 1 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 3, ROW_ROW),
+          (0, 6, ROW_ROW),
+          (1, 3, ROW_ROW),
+          (1, 6, ROW_ROW),
+          (3, 4, COLUMN_ROW_INVERSE),
+          (3, 6, ROW_ROW)
     ])
 )
 
@@ -411,7 +483,18 @@ const fwdTriSolve!_Desc = FunctionDescription(
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
     true,                             # The function is distributive
-    Set([ (1, 0, COLUMN_ROW_INVERSE),
+    Set([ (1, 2, COLUMN_ROW_INVERSE),
+          (1, 2, ROW_ROW)
+    ])
+)
+
+const fwdTriSolve!1_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "fwdTriSolve!",                              
+    (AbstractSparseMatrix, Vector),
+    Set(2),                           # Argument 2 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (1, 2, COLUMN_ROW_INVERSE),
           (1, 2, ROW_ROW)
     ])
 )
@@ -422,7 +505,18 @@ const bwdTriSolve!_Desc = FunctionDescription(
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
     true,                             # The function is distributive
-    Set([ (1, 0, COLUMN_ROW_INVERSE),
+    Set([ (1, 2, COLUMN_ROW_INVERSE),
+          (1, 2, ROW_ROW)
+    ])
+)
+
+const bwdTriSolve!1_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "bwdTriSolve!",                              
+    (AbstractSparseMatrix, Vector),
+    Set(2),                           # Argument 2 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (1, 2, COLUMN_ROW_INVERSE),
           (1, 2, ROW_ROW)
     ])
 )
@@ -431,7 +525,7 @@ const bwdTriSolve!_Desc = FunctionDescription(
 const asignment_Desc = FunctionDescription(
     "", 
     ":=",
-    (AbstractSparseMatrix, AbstractSparseMatrix),
+    (Any, AbstractMatrix),            # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
     Set(1),                           # Argument 1 (the left hand side) is updated
     true,                             # The function is distributive
     Set([ (1, 2, ROW_ROW),
@@ -442,7 +536,7 @@ const asignment_Desc = FunctionDescription(
 const asignment1_Desc = FunctionDescription(
     "", 
     ":=",
-    (Vector, Vector),
+    (Any, Vector),                    # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
     Set(1),                           # Argument 1 (the left hand side) is updated
     true,                             # The function is distributive
     Set([ (1, 2, ROW_ROW) ])
@@ -455,7 +549,12 @@ function_descriptions  = [
     element_wise_divide1_Desc,
     element_wise_divide2_Desc,
     element_wise_divide!_Desc,
-    SpMV_Desc,
+    SpMV_2_parameters_Desc,
+    SpMV_3_parameters_Desc,
+    SpMV_4_parameters_Desc,
+    SpMV_5_parameters_Desc,
+    SpMV_6_parameters_Desc,
+    SpMV!_7_parameters_Desc,
     star_Desc,
     star1_Desc,
     star2_Desc,
@@ -485,7 +584,9 @@ function_descriptions  = [
     eltype_Desc,
     inverse_divide_Desc,
     fwdTriSolve!_Desc,
+    fwdTriSolve!1_Desc,
     bwdTriSolve!_Desc,
+    bwdTriSolve!1_Desc,
     asignment_Desc,
     asignment1_Desc
 ]

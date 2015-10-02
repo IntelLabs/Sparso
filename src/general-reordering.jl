@@ -51,8 +51,8 @@ type ReorderingExtra
     decider_ast            :: Expr
     decider_bb             :: Any # BasicBlock
     decider_stmt_idx       :: Int
-    current_bb             :: Any # BasicBlock
-    current_stmt_idx       :: Int
+    bb                     :: Any # BasicBlock
+    stmt_idx               :: StatementIndex
     inter_dependence_graph :: InterDependenceGraph
 
     ReorderingExtra(_seed, _decider_ast) = new(_seed, _decider_ast,
@@ -109,8 +109,12 @@ function build_vertices_and_edge(
     args         :: Vector,
     graph        :: InterDependenceGraph
 )
-    array1 = (array_index1 == 0) ? ast : args[array_index1]
-    array2 = (array_index2 == 0) ? ast : args[array_index2]
+    array1 = (array_index1 == 0) ? ast : 
+             (typeof(args[array_index1]) == SymbolNode ?
+              args[array_index1].name : args[array_index1])
+    array2 = (array_index2 == 0) ? ast : 
+             (typeof(args[array_index2]) == SymbolNode ?
+              args[array_index2].name : args[array_index2])
 
     if relation == ROW_ROW
         vertex1 = build_vertex(array1, true, graph)
@@ -130,6 +134,49 @@ end
 
 @doc """
 Build inter-dependence graph with the inter-dependence information drawn from
+the AST of a function call.
+"""
+function build_inter_dependence_graph_for_call(
+    ast           :: Any,
+    module_name   :: String,
+    function_name :: String,
+    arg_types     :: Tuple,
+    args          :: Vector,
+    call_sites    :: CallSites
+)
+    # Recursively handle each argument 
+    for arg in args
+        build_inter_dependence_graph(arg, call_sites)
+    end
+    
+    # Now handle the call itself
+    all_numbers, some_arrays = numbers_or_arrays(ast.typ, arg_types)
+    if all_numbers || !some_arrays
+        # The function call's result and arguments are all numbers, or 
+        # some are non-numbers (like Range{UInt64}) but not regular arrays. 
+        # No arrays to care about.
+        return nothing
+    end
+
+    if function_name == ""
+        throw(UnresolvedFunction(head, args[1]))
+    end
+    fd = look_for_function_description(module_name, function_name, arg_types)
+    if fd == nothing
+        throw(UndescribedFunction(module_name, function_name, arg_types, ast))
+    end
+    if !fd.distributive
+        throw(NonDistributiveFunction(module_name, function_name, arg_types))
+    end
+    graph = call_sites.extra.inter_dependence_graph
+    for (array_index1, array_index2, relation) in fd.IA
+        build_vertices_and_edge(array_index1, array_index2, relation, ast, args, graph)
+    end
+    return nothing
+end
+    
+@doc """
+Build inter-dependence graph with the inter-dependence information drawn from
 the AST (of a statement or part of a statement).
 """
 function build_inter_dependence_graph(
@@ -139,98 +186,107 @@ function build_inter_dependence_graph(
     if ast == call_sites.extra.decider_ast
         assert(call_sites.extra.decider_bb == nothing)
         assert(call_sites.extra.decider_stmt_idx == 0)
-        call_sites.extra.decider_bb       = call_sites.extra.current_bb
-        call_sites.extra.decider_stmt_idx = call_sites.extra.current_stmt_idx
+        call_sites.extra.decider_bb       = call_sites.extra.bb
+        call_sites.extra.decider_stmt_idx = call_sites.extra.stmt_idx
     end
- 
-    if typeof(ast) == Expr
+
+    local asttyp = typeof(ast)
+    if asttyp <: Tuple
+        for i = 1:length(ast)
+            build_inter_dependence_graph(ast[i], call_sites)
+        end
+        return nothing
+    elseif asttyp == Expr
         symbol_info = call_sites.symbol_info
         head        = ast.head
         args        = ast.args
-
-        module_name, function_name = "", ""
-        if head == :call || head == :call1
+        if head == :return
+            return build_inter_dependence_graph(args, call_sites)
+        elseif head == :gotoifnot
+            if_clause = args[1]
+            return build_inter_dependence_graph(if_clause, call_sites)
+        elseif head == :line
+            return nothing
+        elseif head == :call || head == :call1
+            if type_of_ast_node(args[end], symbol_info) == FunctionKnob
+                # Ignore the fknob added to the call.
+                num_args = length(args) - 2
+            else
+                num_args = length(args) - 1
+            end
             module_name, function_name = resolve_call_names(args)
             arg_types                  = ntuple(i-> type_of_ast_node(args[i+1],
-                                                symbol_info), length(args) - 1)
-            arguments                  = args[2 : end]
+                                                symbol_info), num_args)
+            arguments                  = args[2 : num_args + 1]
+            return build_inter_dependence_graph_for_call(ast, module_name,
+                                function_name, arg_types, arguments, call_sites)
         elseif head == :(=)
+            rhs_type = type_of_ast_node(args[2], symbol_info)
+            if !(rhs_type <: Vector) && !(rhs_type <: AbstractMatrix)
+                # This statement has nothing to do with matrices
+                return nothing
+            end
+            lhs_type = type_of_ast_node(args[1], symbol_info)
+            module_name   = ""
             function_name = ":="
-            arg_types     = ntuple(i-> type_of_ast_node(args[i],
-                                   symbol_info), length(args))
+            arg_types     = (lhs_type, rhs_type)
             arguments     = args
+            return build_inter_dependence_graph_for_call(ast, module_name,
+                                function_name, arg_types, arguments, call_sites)
         else
             throw(UnhandledExpr(head, args))
         end
-
-        if function_name == ""
-            throw(UnresolvedFunction(head, args[1]))
-        end
-        fd = look_for_function_description(module_name, function_name, arg_types)
-        if fd == nothing
-            throw(UndescribedFunction(module_name, function_name, arg_types))
-        end
-        if !fd.distributive
-            throw(NonDistributiveFunction(module_name, function_name, arg_types))
-        end
-        for (array_index1, array_index2, relation) in fd.IA
-            build_vertices_and_edge(array_index1, array_index2, relation, ast, arguments, graph)
-        end
+    elseif asttyp == SymbolNode  || asttyp == Symbol   || asttyp == GenSym ||
+           asttyp == LabelNode   || asttyp == GotoNode || asttyp == LineNumberNode ||
+           asttyp == ASCIIString || asttyp == LambdaStaticData ||
+           asttyp <: Number      || asttyp == NewvarNode
+        return nothing
+    else
+        throw(UnknownASTDistributivity(ast))
     end
     return nothing
 end
 
-
-@doc """ 
-Build inter-dependence graph for the loop region.
-"""
-function build_inter_dependence_graph(
-    region      :: LoopRegion,
-    liveness    :: Liveness, 
-    cfg         :: CFG,
-    call_sites  :: CallSites
-)
-    blocks = cfg.basic_blocks
-    for bb_index in region.loop.members
-        bb                          = blocks[bb_index]
-        statements                  = bb.statements
-        call_sites.extra.current_bb = bb
-        for stmt_idx in 1 : length(statements)
-            call_sites.extra.current_stmt_idx = stmt_idx
-            stmt                              = statements[stmt_idx]
-            expr                              = stmt.expr
-            if typeof(expr) != Expr
-                continue
-            end
-            
-            # Try to pattern match and replace this expression with ExprPatterns.
-            CompilerTools.AstWalker.AstWalk(expr, build_inter_dependence_graph, call_sites)
-        end
-    end
-
-    call_sites.extra.inter_dependence_graph
-end
+@doc """ A handler to visit_expressions(). """
+build_inter_dependence_graph(ast, call_sites :: CallSites, top_level_number, is_top_level, read) =
+    build_inter_dependence_graph(ast, call_sites)
 
 @doc """
 Color the inter-dependence graph, starting with given vertex, which has been
 colored itself.
 """
 function color_inter_dependence_graph(
-    graph :: InterDependenceGraph,
-    from  :: InterDependenceGraphVertex
+    graph   :: InterDependenceGraph,
+    from    :: InterDependenceGraphVertex,
+    visited :: Set{InterDependenceGraphVertex}
 )
-    assert(from.color != NO_PERM)
+    if in(from, visited)
+        return
+    end    
+    push!(visited, from)
     for (vertex, inverse) in from.neighbours
-        color = inverse ? inverse_color_map[from.color] : from.color
+        color = inverse ? inverse_color_map[from.color] : from.color       
         if vertex.color != NO_PERM
             if vertex.color != color
                 # Already colored, but in a different color. A conflict exists
-                throw(ConflictPermutation(from, vertex, color))
+                # But this can indicate that some colors are equal. For example,
+                # from p = A * p, we know p.rowPermutation = A.rowPermutation=
+                # A.colInversePermutation. Thus p's rowPermutation can have two
+                # results (A.rowPermutation and A.colInversePermutation) but that
+                # just means that A's rows and columns must be permuted in an
+                # inverse relationship: P1 * A * P2, where P1 must equal P2'.
+                # This is a nice constraint that compiler should tell libraries
+                # so that rows and columns of A won't be reordered independently. 
+                # throw(ConflictPermutation(from, vertex, color))
+                dprintln(1, 0, "\nPermutation constraints found: ",
+                         permutation_color_to_str(vertex.color),
+                         " must equal ", 
+                         permutation_color_to_str(color))
             end
         else
             vertex.color = color
         end
-        color_inter_dependence_graph(graph, vertex)
+        color_inter_dependence_graph(graph, vertex, visited)
     end
 end
 
@@ -245,8 +301,9 @@ function color_inter_dependence_graph(
     seed_columns_vertex       = graph.columns[seed]
     seed_rows_vertex.color    = ROW_PERM
     seed_columns_vertex.color = COL_PERM
-    color_inter_dependence_graph(graph, seed_rows_vertex)
-    color_inter_dependence_graph(graph, seed_columns_vertex)
+    visited                   = Set{InterDependenceGraphVertex}()
+    color_inter_dependence_graph(graph, seed_rows_vertex, visited)
+    color_inter_dependence_graph(graph, seed_columns_vertex, visited)
 end
 
 @doc """
@@ -307,10 +364,22 @@ function add_arrays_to_reorder(
     symbol_info   :: Sym2TypeMap, 
     liveness      :: Liveness, 
     graph         :: InterDependenceGraph,
+    FAR           :: Vector, # Vector{Symbol},
     matrices_done :: Bool
 )
     live_out = LivenessAnalysis.live_out(decider_stmt, liveness)
-    for A in live_out
+    def      = LivenessAnalysis.def(decider_stmt, liveness)
+#    use      = LivenessAnalysis.use(decider_stmt, liveness)
+    
+    # FAR (the symbols defined and used in the decider function call) have already
+    # been reordered during the execution of that call. We expect a decide call
+    # f happens in this way: 
+    #   f(...)  or  x = f(...)
+    # In the secon case, the defininition of x has also been reordered.
+    # Reorder all the live-out symbols except them.
+    # ISSUE: how to make sure f() is the only call happens in the statement it 
+    # is called? What if for a statement like  x= f(...) * g(...)? 
+    for A in setdiff(live_out, union(FAR, def))
         add_array(new_expr, A, symbol_info, graph, matrices_done)
     end
 end
@@ -326,6 +395,7 @@ function add_arrays_to_reversely_reorder(
     new_expr      :: Expr,
     from_bb       :: BasicBlock,
     to_bb         :: BasicBlock,
+    symbol_info   :: Sym2TypeMap, 
     liveness      :: Liveness, 
     graph         :: InterDependenceGraph,
     matrices_done :: Bool
@@ -347,9 +417,9 @@ function create_reorder_actions(
     liveness         :: Liveness, 
     graph            :: InterDependenceGraph,
     cfg              :: CFG, 
-    FAR              :: Vector{Symbol},
+    FAR              :: Vector, # Vector{Symbol},
     fknob            :: Symbol,
-    decider_bb       :: BasicBlock,
+    decider_bb       :: Any,   # BasicBlock,
     decider_stmt_idx :: StatementIndex
 )
     # Create an action that would insert new statements before the region
@@ -381,10 +451,11 @@ function create_reorder_actions(
                  fknob, reordering_status)
     push!(inside_loop_action.new_stmts,  Statement(0, stmt))
 
-    add_arrays_to_reorder(stmt, liveness, false)
-    push!(stmt.args, :__delimitor__)
-    add_arrays_to_reorder(stmt, liveness, true)
-
+    decider_stmt = decider_bb.statements[decider_stmt_idx]
+    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, false)
+    push!(stmt.args, QuoteNode(:__delimitor__))
+    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, true)
+    
     # At each loop exit, insert reverse reordering of array.
     # Create statements that will delete the function knob at region exits
     for exit in region.exits
@@ -392,12 +463,12 @@ function create_reorder_actions(
         push!(actions, action)
 
         stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
-                       reordering_status)
+                     reordering_status)
         push!(action.new_stmts,  Statement(0, stmt))
-
-        add_arrays_to_reversely_reorder(stmt, liveness, false)
-        push!(stmt.args, :__delimitor__)
-        add_arrays_to_reversely_reorder(stmt, liveness, true)
+    
+        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, false)
+        push!(stmt.args, QuoteNode(:__delimitor__))
+        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, true)
     end
 end
 
@@ -412,31 +483,47 @@ function reordering(
     cfg         :: CFG,
     call_sites  :: CallSites
 )
-    old_actions = copy(actions)
     old_extra   = call_sites.extra
     try
-        decider = call_sites.extra.reordering_decider
-        if decider == nothing
+        fknob = call_sites.extra.reordering_decider_fknob
+        if !in(fknob, call_sites.extra.function_knobs)
+            # The AST that can decides reordering was probably removed due to,
+            # for example, parent tree being changed.
             return actions
         end
-
+        decider          = call_sites.extra.fknob2expr[fknob]
         FAR              = call_sites.extra.reordering_FAR
         seed             = FAR[1]
-        fknob            = call_sites.extra.function_knobs[decider]
         call_sites.extra = ReorderingExtra(seed, decider)
         
-        graph = build_inter_dependence_graph(region, liveness, cfg, call_sites)
+        # An empty inter-dependence graph has been built. Build a row and a 
+        # column vertex for the seed.
+        graph = call_sites.extra.inter_dependence_graph
+        build_vertex(seed, true, graph)
+        build_vertex(seed, false, graph)
+        
+        recursive  = false
+        vist_expressions(region, cfg, call_sites, recursive, build_inter_dependence_graph)
+
+        dprintln(1, 0, "\nInter-dependence graph:")
+        dprintln(1, 1, liveness, graph)
+
         color_inter_dependence_graph(graph)
 
         dprintln(1, 0, "\nColored inter-dependence graph:")
         dprintln(1, 1, liveness, graph)
 
-        create_reorder_actions(actions, region, symbol_info, liveness, graph, 
+	new_actions = Vector{Action}()
+        create_reorder_actions(new_actions, region, symbol_info, liveness, graph, 
                                cfg, FAR, fknob, 
                                call_sites.extra.decider_bb,
                                call_sites.extra.decider_stmt_idx)
 
-        dprintln(1, 0, "\nReordering actions to take:", actions)
+        dprintln(1, 0, "\nReordering actions to take:", new_actions)
+	
+	for action in new_actions
+		push!(actions, action)
+	end
     catch ex
         # In case any exception happen in the printing, try
         try
@@ -450,8 +537,6 @@ function reordering(
         catch
             # Do nothing
         end
-
-        actions = old_actions
     finally
         call_sites.extra = old_extra
         return actions

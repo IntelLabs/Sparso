@@ -115,6 +115,7 @@ end
 # Below are the expr_patterns we care about.
 
 # Patterns that are used only for matching (sub-expressions).
+@doc """ SpMV(a, A, x) """
 const SpMV_3_parameters_pattern = ExprPattern(
     "SpMV_3_parameters_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
@@ -188,6 +189,34 @@ const number_times_vector_pattern = ExprPattern(
     ()
 )
 
+const vector_minus_number_pattern = ExprPattern(
+    "vector_minus_number_pattern",
+    (:call, GlobalRef(Main, :-), Vector, Number),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:NO_CHANGE, ),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+const vector_add_number_pattern = ExprPattern(
+    "vector_add_number_pattern",
+    (:call, GlobalRef(Main, :+), Vector, Number),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:NO_CHANGE, ),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 const WAXPBY_4_parameters_pattern = ExprPattern(
     "WAXPBY_4_parameters_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
@@ -204,13 +233,159 @@ const WAXPBY_4_parameters_pattern = ExprPattern(
 )
 
 # Patterns that do transformation
-
+@doc """ dot(x, y) ==> SparseAccelerator.dot(x, y)"""
 const dot_pattern1 = ExprPattern(
     "dot_pattern1",
     (:call, GlobalRef(Main, :dot), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ norm(x) ==> SparseAccelerator.norm(x)"""
+const norm_pattern1 = ExprPattern(
+    "norm_pattern1",
+    (:call, GlobalRef(Main, :norm), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:norm)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ sum(x) ==> SparseAccelerator.sum(x)"""
+const sum_pattern1 = ExprPattern(
+    "sum_pattern1",
+    (:call, GlobalRef(Main, :sum), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ mean(x) ==> SparseAccelerator.sum(x)/length(x)"""
+const mean_pattern1 = ExprPattern(
+    "mean_pattern1",
+    (:call, GlobalRef(Main, :mean), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(Main, :(/)),
+      TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum), :arg2),
+      TypedExprNode(Function, :call, TopNode(:getfield), :Base, QuoteNode(:arraylen), :arg2)
+    ),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ minimum(x) ==> SparseAccelerator.minimum(x)"""
+const minimum_pattern1 = ExprPattern(
+    "minimum_pattern1",
+    (:call, GlobalRef(Main, :minimum), Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:minimum)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ abs!(w, x) ==> SparseAccelerator.abs!(w, x)"""
+const abs!_pattern1 = ExprPattern(
+    "abs!_pattern1",
+    (:call, GlobalRef(Main, :abs!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:abs!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ exp!(w, x) ==> SparseAccelerator.exp!(w, x)"""
+const exp!_pattern1 = ExprPattern(
+    "exp!_pattern1",
+    (:call, GlobalRef(Main, :exp!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:exp!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ log1p!(w, x) ==> SparseAccelerator.log1p!(w, x)"""
+const log1p!_pattern1 = ExprPattern(
+    "log1p!_pattern1",
+    (:call, GlobalRef(Main, :log1p!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:log1p!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ min!(w, x) ==> SparseAccelerator.min!(w, x)"""
+const min!_pattern1 = ExprPattern(
+    "min!_pattern1",
+    (:call, GlobalRef(Main, :min!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:min!)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x)"""
+const copy!_pattern1 = ExprPattern(
+    "copy!_pattern1",
+    (:call, GlobalRef(Main, :copy!), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:copy!)),
      :arg2, :arg3),
     do_nothing,
     "",
@@ -393,6 +568,37 @@ const WAXPBY!_pattern1 = ExprPattern(
     ()
 )
 
+const WAXPB!_pattern1 = ExprPattern(
+    "WAXPB!_pattern1",
+    (:(=), Vector, Vector),
+    (nothing, nothing, vector_minus_number_pattern),
+    LHS_in_RHS,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+     :arg1, 1, :arg1, :naarg23),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+const WAXPB!_pattern2 = ExprPattern(
+    "WAXPB!_pattern2",
+    (:(=), Vector, Vector),
+    (nothing, nothing, vector_add_number_pattern),
+    LHS_in_RHS,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+     :arg1, 1, :arg1, :aarg23),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ w = x.*y => w = element_wise_multiply(x, y) """
 const element_wise_multiply_pattern1 = ExprPattern(
     "element_wise_multiply_pattern1",
     (:call, GlobalRef(Main, :.*), Vector, Vector),
@@ -408,8 +614,33 @@ const element_wise_multiply_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ w = x ./ y => w = element_wise_divide(x, y) """
+const element_wise_divide_pattern1 = ExprPattern(
+    "element_wise_divide_pattern1",
+    (:call, GlobalRef(Main, :./), Vector, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_divide)),
+     :arg2, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 expr_patterns = [
     dot_pattern1,
+    norm_pattern1,
+    sum_pattern1,
+    #mean_pattern1, #ISSUE: this pattern requires replacement of arguments in a sub-tree. #TODO: enalble matching and replacing a tree with multiple levels.
+    minimum_pattern1, 
+    abs!_pattern1, 
+    exp!_pattern1, 
+    log1p!_pattern1, 
+    min!_pattern1,
+    copy!_pattern1,
     #WAXPBY_pattern,
     SpMV_pattern1,
     SpMV_pattern2,
@@ -422,8 +653,10 @@ expr_patterns = [
     WAXPBY_pattern1,
     WAXPBY_pattern2,
     WAXPBY!_pattern1,
-    element_wise_multiply_pattern1
-    #SpMV_pattern2,
+    WAXPB!_pattern1,
+    WAXPB!_pattern2,
+    element_wise_multiply_pattern1,
+    element_wise_divide_pattern1
     #WAXPBY!_pattern,
 ]
 
@@ -472,13 +705,13 @@ The real arg to replace the symbolic arg (like :arg1) in the patterns.
 function replacement_arg(
     arg         :: Any, 
     args        :: Vector,
-    result      :: Any,       # For in_place update pattern only
+    result      :: Any,
     symbol_info :: Sym2TypeMap
 )
     if typeof(arg) == Symbol
         arg_string = string(arg)
         if length(arg_string) == 6 && arg_string[1 : 6] == "result" 
-            # This refers to the result arg of expr in an in_place update pattern.
+            # This refers to the result arg of expr.
             assert(result != nothing)
             arg = result
         elseif length(arg_string) > 3 && arg_string[1 : 3] == "arg" 
@@ -507,7 +740,9 @@ end
 replacement_arg(arg :: Any, args :: Vector, symbol_info :: Sym2TypeMap) =
     replacement_arg(arg, args, nothing, symbol_info)
 
-@doc """ Replace the AST based on the expression pattern. """
+@doc """
+Replace the AST based on the expression pattern. Return true if AST is replaced.
+"""
 function replace(
     pattern     :: ExprPattern,
     ast         :: Expr,
@@ -515,7 +750,7 @@ function replace(
 )
     substitute = pattern.substitute
     if length(substitute) == 1 && substitute[1] == :NO_CHANGE
-        return
+        return false
     end
 
     orig_ast = copy(ast)
@@ -525,6 +760,7 @@ function replace(
         arg = replacement_arg(substitute[i], orig_ast.args, symbol_info)
         push!(ast.args, arg)
     end
+    return true
 end
 
 @doc """ 
@@ -602,7 +838,7 @@ function match_replace(
         dprintln(1, 0, "replace")
         dsprintln(1, 1, symbol_info, ast)
 
-        replace(pattern, ast, symbol_info)
+        ast_changed = replace(pattern, ast, symbol_info)
         
         if pattern.post_processing != do_nothing
             if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
@@ -618,9 +854,13 @@ function match_replace(
             end
         end
         
-        dprintln(1, 0, "to")
-        dsprintln(1, 1, symbol_info, ast)
-
+        if ast_changed
+            dprintln(1, 0, "to")
+            dsprintln(1, 1, symbol_info, ast)
+        else
+            dprintln(1, 0, "No change.")
+        end
+        
         return true
     end
     return false

@@ -1,4 +1,11 @@
 @doc """
+A function knob is a symbol in compile time. For this symbol, we would like to
+record a type for it in the Sym2TypeMap. This abstract type is for this purpose
+only.
+"""
+abstract FunctionKnob
+
+@doc """
 The CallSites' extra field for context info discovery.
 """
 type ContextExtra
@@ -11,7 +18,7 @@ type ContextExtra
     ast_may_change           :: Bool
 
     # Infomration gathered when AST is walked the first time
-    reordering_decider       :: Any    # It should be expr, but then cannot be initialized with nothing
+    reordering_decider_fknob :: Symbol # Remember fknob instead of AST here as AST may change due to call replacement, etc.
     reordering_decider_power :: Int    # 0 is no power: not to make reordering decision
     reordering_FAR           :: Vector # First Arrays Reordered by the decider
     expr2fknob               :: Dict{Expr, Symbol}
@@ -31,7 +38,7 @@ type ContextExtra
     stmt_idx                 :: StatementIndex
     
     ContextExtra(_matrix_properties, _ast_may_change) = new(
-            _matrix_properties, _ast_may_change, nothing, 0, [],
+            _matrix_properties, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
@@ -76,17 +83,22 @@ function CS_fwdBwdTriSolve!_check(
     
     # Check it is lower or upper part of a symmetric matrix.
     if call_sites.extra.matrix_properties[L_or_U].lower_of != nothing
-        M = call_sites.extra.matrix_properties[L_or_U].lower_of
+        M = get_symexpr(call_sites.extra.matrix_properties[L_or_U].lower_of)
     else
-        M = call_sites.extra.matrix_properties[L_or_U].upper_of
+        M = get_symexpr(call_sites.extra.matrix_properties[L_or_U].upper_of)
     end
-    assert(typeof(M) <: Symexpr)
 
     if !haskey(call_sites.extra.matrix_properties, M) ||
        !call_sites.extra.matrix_properties[M].constant_structured
        !call_sites.extra.matrix_properties[M].is_structure_symmetric
         return false
     end
+
+
+    if typeof(L_or_U) == Symbol && typeof(M) == Symbol
+        push!(call_sites.extra.derivatives, (L_or_U, DERIVATIVE_TYPE_SYMMETRIC, M))
+    end
+
     return true
 end
 
@@ -112,9 +124,13 @@ function gather_context_sensitive_info(
     call_sites.extra.fknob2ctor_dtor[fknob] = (fknob_creator, fknob_deletor)
     call_sites.extra.fknob2mknobs[fknob]    = []
     
+    # Record the new symbol with a FunctionKnob type so that we may distinguish
+    # it from a normal argument. 
+    symbol_info        = call_sites.symbol_info
+    symbol_info[fknob] = FunctionKnob
+
     # Create matrix-specific knobs for the matrices inputs.
-    symbol_info = call_sites.symbol_info
-    args        = ast.args
+    args = ast.args
     for arg in matrices_to_track
         if arg == :result
             M = ast
@@ -133,13 +149,12 @@ function gather_context_sensitive_info(
     end
 
     if call_sites.extra.reordering_decider_power < reordering_power
-        call_sites.extra.reordering_decider       = ast
+        call_sites.extra.reordering_decider_fknob = fknob
         call_sites.extra.reordering_decider_power = reordering_power
         call_sites.extra.reordering_FAR           = []
         for arg in reordering_FAR
-            new_arg = replacement_arg(arg, args, nothing, symbol_info)
-            assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
-                   typeof(new_arg) == GenSym)
+            new_arg = replacement_arg(arg, args, ast, symbol_info)
+            assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
             push!(call_sites.extra.reordering_FAR, M)
         end
@@ -354,7 +369,7 @@ const CS_cholfact_int32_pattern = ExprPattern(
 
 const CS_cholsolve_pattern = ExprPattern(
     "CS_cholsolve_pattern",
-    (:call, GlobalRef(Main, :\), Base.SparseMatrix.CHOLMOD.Factor{Float64}, Any),
+    (:call, GlobalRef(Main, :\), Factorization{Float64}, Any),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_inverse_divide)),
@@ -366,6 +381,7 @@ const CS_cholsolve_pattern = ExprPattern(
     0,
     ()
 )
+
 
 @doc """ 
 Pattern for foward triangular solver.
@@ -410,20 +426,20 @@ The following patterns are for SpMV. The difference from the SpMV patterns in
 call-replacement.jl is that here we will add mknobs and fknob to SpMV.
 """
 
-@doc """ A * x => SpMV(A, x) """
+@doc """ A * x => SpMV(1, A, x) """
 const CS_SpMV_pattern1 = ExprPattern(
     "CS_SpMV_pattern1",
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :arg2, :arg3),
+     1, :arg2, :arg3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:arg3,),
     40,
-    (:arg2, :arg3)
+    (:arg3, :arg4, :result)
 )
 
 @doc """ a * A * x + g => SpMV(a, A, x, 0, x, g) """
@@ -439,7 +455,7 @@ const CS_SpMV_pattern2 = ExprPattern(
     "DeleteFunctionKnob",
     (:arg3,),
     40,
-    (:arg3, :arg4)
+    (:arg3, :arg4, :result)
 )
 
 @doc """ a * A * x => SpMV(a, A, x) """
@@ -455,10 +471,17 @@ const CS_SpMV_pattern3 = ExprPattern(
     "DeleteFunctionKnob",
     (:arg3,),
     40,
-    (:arg3, :arg4)
+    (:arg3, :arg4, :result)
 )
 
-@doc """ SpMV(a, A, x) + g => SpMV(a, A, x, 0, x, g) """
+@doc """
+SpMV(a, A, x) + g => SpMV(a, A, x, 0, x, g)
+Note: its reordering power is bigger than CS_SpMV_pattern3, because
+CS_SpMV_pattern3 generates a SpMV_3_parameters_pattern, which is a sub-pattern
+of this pattern. Making reordering power of this pattern bigger ensures that 
+when the sub-pattern is replaced, the reordering decider becomes the AST
+generated by this pattern, and no more being that by the sub-pattern.
+"""
 const CS_SpMV_pattern4 = ExprPattern(
     "CS_SpMV_pattern4",
     (:call, GlobalRef(Main, :+), Vector, Number),
@@ -470,11 +493,143 @@ const CS_SpMV_pattern4 = ExprPattern(
     "NewFunctionKnob",
     "DeleteFunctionKnob",
     (:arg3,),
-    40,
-    (:arg3,)
+    50,
+    (:arg3, :arg4, :result)
 )
 
-@doc """ A_mul_B!(y, A, x) = SpMV!(y, A, x) """
+@doc """
+SpMV(a, A, x) + b => SpMV(a, A, x, 1, b, 0)
+Note: its reordering power is bigger than CS_SpMV_pattern3, because
+CS_SpMV_pattern3 generates a SpMV_3_parameters_pattern, which is a sub-pattern
+of this pattern. Making reordering power of this pattern bigger ensures that 
+when the sub-pattern is replaced, the reordering decider becomes the AST
+generated by this pattern, and no more being that by the sub-pattern.
+"""
+const CS_SpMV_pattern5 = ExprPattern(
+    "CS_SpMV_pattern5",
+    (:call, GlobalRef(Main, :+), Vector, Vector),
+    (nothing, nothing, SpMV_3_parameters_pattern, nothing),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+     :aarg22, :aarg23, :aarg24, 1, :arg3, 0),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg3,),
+    50,
+    (:arg3, :arg4, :arg6, :result)
+)
+
+@doc """
+SpMV(a, A, x) - b => SpMV(a, A, x, -1, b, 0)
+Note: its reordering power is bigger than CS_SpMV_pattern3, because
+CS_SpMV_pattern3 generates a SpMV_3_parameters_pattern, which is a sub-pattern
+of this pattern. Making reordering power of this pattern bigger ensures that 
+when the sub-pattern is replaced, the reordering decider becomes the AST
+generated by this pattern, and no more being that by the sub-pattern.
+"""
+const CS_SpMV_pattern6 = ExprPattern(
+    "CS_SpMV_pattern6",
+    (:call, GlobalRef(Main, :-), Vector, Vector),
+    (nothing, nothing, SpMV_3_parameters_pattern, nothing),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+     :aarg22, :aarg23, :aarg24, -1, :arg3, 0),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg3,),
+    50,
+    (:arg3, :arg4, :arg6, :result)
+)
+
+@doc """
+The following patterns are potentially related with SpMV!. In SpMP library, SpMV!
+is implemented in such a way that the result and the inputs are written and read
+in parallel. Thus the result and the inputs cannot share space to avoid any race
+condition.
+
+There are 3 cases:
+
+(Case 1): y = A *x ==> y = SpMV(A, x)
+
+This is equivalent to
+        result = allocate memory of size(A, 1)
+        SpMV!(result, A, x)
+        y = result
+The first two statements have been realized by SpMV. Thus we can simply generate
+code like this
+        y = SpMV(A, x)
+
+One might think it is great to hoist the allocation out of the current region (
+a loop). However, that can cause subtle issues. Consider a simplified pagerank:
+        y = A * x
+        if |y - x| < err exit
+        x = y
+
+If we hoist the allocation out, the code becomes:
+    Before the loop:
+        result = allocate memory of size(A, 1)
+    In the loop
+        SpMV!(result, A, x)
+        y = result
+        if |y - x| < err exit
+        x = y
+After the first iteration, x, y, and result share the same memory. Thus |y-x|
+is always 0 afterwards.
+
+(Case 2) x = A * x  ==> x = SpMV(A, x) or SpMV!(x, A, x) with library extension.
+
+Here we are sure that x has been allocated memory. There are three ways we can 
+generate code: 
+
+CodeGen 21: generate 
+        x = SpMV(A, x)
+The overhead is: memory allocation and copy every time SpMV! is called.
+
+CodeGen 22: generate 
+        SpMV!(x, A, x)
+This requires that the library is extended to allow that the result and 
+the input are aliased. To do that, library identifies such an alias, and 
+creates a temporary memory space t as result of A * x, and run SpMV!(t, A, x),
+where it can write and read inputs in parallel, and finally copy t's content to
+x. The overhead is the same: memory allocation and copy every time SpMV! is
+called.
+
+CodeGen 23: generate
+    Before the loop:
+        result = allocate memory of size(A, 1)
+        assert(result and x have different spaces)
+    In the loop:
+        SpMV!(result, A, x)
+        tmp = x
+        x = result
+        result = tmp
+        assert(result and x have different spaces)
+This has 1 allocation, and no copy back.
+
+So far, we do not have Case 2 in any benchmark yet. So let us leave it for future.
+Simply follow CodeGen 21 or 22 for now.
+
+(Case 3) A_mul_B!(y, A, x) ==> SpMV!(y, A, x) with library extension.
+
+This is equivalent to y = A * x, but y is sure to have been allocated memory
+before.
+
+If y is lexically x, it is a special case A_mul_B!(x, A, x). Same as Case 2.
+
+Otherwise, we need to know if y and x are aliased (share the same memory). 
+If they are aliased, that is Case 2.
+If they are not, simply call SpMV!(y, A, x) as usual.
+
+So far, we do not rely on static alias analysis. So probably we should extend
+libary to identify and allow the result and the input being aliased. See notes 
+for CodeGen 22.
+"""
+
+@doc """
+A_mul_B!(y, A, x) = SpMV!(y, A, x)
+"""
 const CS_SpMV!_pattern1 = ExprPattern(
     "CS_SpMV!_pattern1",
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
@@ -549,10 +704,12 @@ CS_transformation_patterns = [
     CS_SpMV_pattern2,
     CS_SpMV_pattern3,
     CS_SpMV_pattern4,
+    CS_SpMV_pattern5,
+    CS_SpMV_pattern6,
     CS_SpMV!_pattern1,
     CS_SpMV!_pattern2,
-    CS_SpMV!_pattern3,
-    CS_SpMV!_pattern4
+    # CS_SpMV!_pattern3, # Do not handle x = A * x case for now
+    # CS_SpMV!_pattern4] # Do not handle y = A * x + y case for now
 ]
 
 @doc """
@@ -855,6 +1012,13 @@ function add_function_knobs_to_calls(
     for fknob in call_sites.extra.function_knobs
         expr = call_sites.extra.fknob2expr[fknob]
         push!(expr.args, fknob)
+        
+        # It seems that Julia looks up a dictionary's key by value, not by
+        # address (It does not have the concept of pointer anyway), and thus
+        # expr is considered changed with the new fknob added. So update the
+        # mappings between the expr and the fknob:
+        call_sites.extra.expr2fknob[expr]  = fknob
+        call_sites.extra.fknob2expr[fknob] = expr
     end
 end
 
@@ -960,7 +1124,6 @@ function AST_context_sensitive_transformation(
     liveness    :: Liveness, 
     cfg         :: CFG
 )
-    # 
     func_region.symbol_property = find_properties_of_matrices(func_region, symbol_info, liveness, cfg)
 
     # Discover context info for each loop region

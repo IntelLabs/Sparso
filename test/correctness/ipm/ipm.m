@@ -28,7 +28,7 @@ fprintf('%s\n', Af);
 
 A = mmread([Af '-A.mtx']);
 b = mmread([Af '-b.mtx']);
-p = mmread([Af '-p.mtx'])';
+p = mmread([Af '-p.mtx']);
 if size(p, 1) == 0
   p = ones(size(A,2),1);
 end

@@ -1,64 +1,49 @@
-Testing sanity-test1: Pass
-Testing sanity-test2: Pass
-Testing sanity-test3: Pass
-Testing spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
-Testing context-test1: FAIL. See context-test1.log
-    There only change in the AST is replacing A*p with SpMV with a fknob. It runs
-    and gives the correct sum. However, it takes 71 iterations, instead of 4
-    iterations like the original code. Some details:
-        Context-sensitive actions to take:
-            Insert action:
-                ##mknobA#8217 = (SparseAccelerator.new_matrix_knob)(A,true,true,false,false,false,false)
-                ##fknob#8212 = (SparseAccelerator.new_function_knob)()
-            outisde loop of BBs [0, 2, 1] before loop head BB 0
-            
-            Insert action:
-                (SparseAccelerator.delete_matrix_knob)(##mknobA#8217)
-                (SparseAccelerator.delete_function_knob)(##fknob#8212)
-            on the edge BB 0 --> BB -4
-            
-            Insert action:
-                (SparseAccelerator.delete_matrix_knob)(##mknobA#8217)
-                (SparseAccelerator.delete_function_knob)(##fknob#8212)
-            on the edge BB 2 --> BB -5
-            
-            Insert action:
-                (SparseAccelerator.add_mknob_to_fknob)(##mknobA#8217,##fknob#8212)
-            outisde loop of BBs [0, 2, 1] before loop head BB 0
+Final report:
+sanity-test1: Pass
+sanity-test2: Pass
+sanity-test3: Pass
+spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
+    Need to fix the library to handle SpMV!(x, A, x, ...) case
+context-test1: Pass
+context-test2: Pass
+context-test2-without-reordering: Pass
+context-test2-ilu0: Pass
+context-test3: Pass
+context-test4: Pass
+context-test5: Pass
+pagerank-test1: Pass
+liveness-test1: Pass
+liveness-test2: Pass
+call-replacement-test1: Pass
+call-replacement-test2: Pass
+call-replacement-test3: Pass
+call-replacement-test4: Pass
+call-replacement-test5: Pass
+call-replacement-test6: Pass
+call-replacement-test7: Pass
+call-replacement-test8: Pass
+call-replacement-test9: Pass
+call-replacement-test10: Pass
+call-replacement-test11: Pass
+call-replacement-test12: Pass
+name-resolution-test1: Pass
+single-def-test1: Pass
+constant-value-test1: Pass
+set-matrix-property-test1: Pass
+set-matrix-property-test2: Pass
+set-matrix-property-test3: Pass
+set-matrix-property-test4: FAIL. See set-matrix-property-test4.log
+    B is renamed and thus the annotation does not work.
+set-matrix-property-test5: Pass
+constant-structure-test1: FAIL. See constant-structure-test1.log
+    R is not found as loop constant structured.
+symmetric-value-test1: Pass
+symmetric-value-test2: FAIL. See symmetric-value-test2.log
+    Need annotation.
+symmetric-value-test3: Pass
+symmetric-value-test4: Pass
+lower-upper-test1: FAIL. See lower-upper-test1.log
+Total: 40
+Pass : 35
+Fail : 5
 
-        New AST:
-            Ap = ((top(getfield))(SparseAccelerator,:SpMV))(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32},p::Array{Float64,1},##fknob#8212)::Array{Float64,1} # line 20:
-        
-        Accelerated sum of x=-1.577312043352408e-5
-        Accelerated k=71
-        Accelerated rel_err=6.597433591294558e-11
-
-Testing context-test2: Pass
-Testing context-test2-without-reordering: Pass
-Testing context-test3: Pass
-Testing context-test4: Pass
-Testing liveness-test1: Pass
-Testing liveness-test2: Pass
-Testing call-replacement-test1: Pass
-Testing call-replacement-test2: Pass
-Testing call-replacement-test3: Pass
-Testing call-replacement-test4: Pass
-Testing call-replacement-test5: Pass
-Testing call-replacement-test6: Pass
-Testing call-replacement-test7: Pass
-Testing call-replacement-test8: Pass
-Testing call-replacement-test9: Pass
-Testing call-replacement-test10: Pass
-Testing call-replacement-test11: Pass
-Testing call-replacement-test12: Pass
-Testing name-resolution-test1: Pass
-Testing constant-value-test1: Pass
-Testing single-def-test1: FAIL. See single-def-test1.log
-Testing set-matrix-property-test1: Pass
-Testing set-matrix-property-test2: FAIL. See set-matrix-property-test2.log
-Testing constant-structure-test1: Pass
-Testing value-symmetry-test1: FAIL. See value-symmetry-test1.log
-Testing structure-symmetry-test1: FAIL. See structure-symmetry-test1.log
-Total: 31
-Pass : 25
-Fail : 6

@@ -9,9 +9,9 @@ typealias Loop            CompilerTools.Loops.Loop
 typealias GenSymId        Int
 typealias BasicBlockIndex Int
 typealias StatementIndex  Int
-typealias Sym             Union(Symbol, GenSym) # A Symbol or GenSym.
+typealias Sym             Union{Symbol, GenSym} # A Symbol or GenSym.
 typealias Sym2TypeMap     Dict{Sym, Type}
-typealias Symexpr         Union(Symbol, GenSym, Expr) # A Symbol, GenSym or Expr
+typealias Symexpr         Union{Symbol, GenSym, Expr} # A Symbol, GenSym or Expr
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
@@ -47,7 +47,7 @@ const SA_REORDER = 56
 
 # The internal booleans corresponding to the above options, and their default values
 sparse_acc_enabled            = false
-verbosity                     = 0
+show_level                    = 256
 use_Julia                     = false
 use_MKL                       = false
 use_SPMP                      = true
@@ -74,8 +74,7 @@ function set_options(args...)
             end
             global sparse_acc_enabled = true
         elseif arg == SA_VERBOSE 
-            global verbosity = 1
-            #OptFramework.set_debug_level(3)
+            global show_level = 1
         elseif arg == SA_USE_JULIA 
             global use_Julia = true; global use_MKL = false; global use_SPMP = false
         elseif arg == SA_USE_MKL 
@@ -243,6 +242,13 @@ function look_for_function(
     return nothing
 end
 
+@doc """
+For a SymbolNode, return its symbol (So that, for example, in building a dictionary,
+a variable can be indexed by only a Symbol, instead of by a Symbol sometimes,
+and SymbolNode sometimes). Otherwise, return the original input.
+"""
+get_symexpr(s) = (typeof(s) == SymbolNode) ? s.name : s
+
 @doc """ Abstract type for a pattern to match and/or replace AST nodes. """
 abstract Pattern
 
@@ -266,7 +272,8 @@ type CallSite
 end
 
 @doc """"
-Properties of a matrix. 
+Properties of a matrix in a region (The properties may be different in another
+region). 
 
 constant_valued       : The matrix is a constant in value(and thus of course 
                         constant in structure).
