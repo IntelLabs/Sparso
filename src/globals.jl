@@ -242,6 +242,13 @@ function look_for_function(
     return nothing
 end
 
+@doc """
+For a SymbolNode, return its symbol (So that, for example, in building a dictionary,
+a variable can be indexed by only a Symbol, instead of by a Symbol sometimes,
+and SymbolNode sometimes). Otherwise, return the original input.
+"""
+get_symexpr(s) = (typeof(s) == SymbolNode) ? s.name : s
+
 @doc """ Abstract type for a pattern to match and/or replace AST nodes. """
 abstract Pattern
 
