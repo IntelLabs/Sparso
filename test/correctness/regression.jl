@@ -916,7 +916,7 @@ function get_julia_ver()
 end
 
 if !isreadable(julia_command)
-    error("Plase install (softlink) julia command to \"" * julia_command  * "\".")
+    error("Please install (softlink) julia command to \"" * julia_command  * "\".")
 elseif !ismatch(r"\.*0.4.0-rc3", get_julia_ver())
     error("Wrong julia version! 0.4.0-rc3 is required!")
 end
