@@ -60,7 +60,7 @@ function loop_region_formation(
         is_outermost = true
         for L1 in loop_info.loops
             assert(L == L1 || L.members != L1.members)
-            if L != L && L.members < L1.members
+            if L != L1 && L.members < L1.members
                 is_outermost = false
                 break
             end
