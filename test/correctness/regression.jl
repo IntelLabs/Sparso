@@ -431,6 +431,27 @@ const cosp2_test1 = Test(
         TestPattern(r"CoSP2_call_replacement_and_context_opt:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt",
                      "Test CoSP2_call_replacement_and_context_opt"
         ),
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(false,.*?,true,true,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.add_mknob_to_fknob\)\(.*?mknobX.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?trX = \(\(top\(getfield\)\)\(SparseAccelerator,:trace\)\)\(X.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?X2 = \(\(top\(getfield\)\)\(SparseAccelerator,:SpSquareWithEps\)\)\(X.*?,eps.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?trX2 = \(\(top\(getfield\)\)\(SparseAccelerator,:trace\)\)\(X2.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?X = \(\(top\(getfield\)\)\(SparseAccelerator,:SpAdd\)\)\(2,X.*?,-1,X2.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?D Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End accelerated",
+                     "Test accelerated"
+        ),
         exception_pattern
     ]
 )

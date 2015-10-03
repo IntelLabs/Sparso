@@ -1,6 +1,8 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+
 function spmatmul_witheps{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}, eps;
                          sortindices::Symbol = :sortcols)
     mA, nA = size(A)
@@ -65,6 +67,7 @@ function spmatmul_witheps{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{T
     return C
 end
 
+@doc """ Using Gershgorin disc to estimate the bounds of eigen value. """
 function gershgorin(A :: SparseMatrixCSC)
   hsize = size(A, 1)
   eMin = 10000
@@ -89,6 +92,11 @@ function gershgorin(A :: SparseMatrixCSC)
 end
 
 function CoSP2_ref(X)
+  set_matrix_property(Dict(
+      :S => SA_SYMM_VALUED, 
+    )
+  )
+
   m = size(X, 1)
   occ = m/2
   idemTol = 1e-14
@@ -328,3 +336,8 @@ println("\nCoSP2_call_replacement_and_context_opt:")
 CoSP2_call_replacement_and_context_opt(X)
 CoSP2_call_replacement_and_context_opt(X)
 println("End CoSP2_call_replacement_and_context_opt.")
+
+println("\nAccelerated:")
+@acc CoSP2_ref(X)
+CoSP2_ref(X)
+println("End accelerated.")

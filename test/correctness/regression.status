@@ -12,6 +12,7 @@ context-test3: Pass
 context-test4: Pass
 context-test5: Pass
 pagerank-test1: Pass
+cosp2-test1: Pass
 liveness-test1: Pass
 liveness-test2: Pass
 call-replacement-test1: Pass
@@ -43,7 +44,6 @@ symmetric-value-test2: FAIL. See symmetric-value-test2.log
 symmetric-value-test3: Pass
 symmetric-value-test4: Pass
 lower-upper-test1: FAIL. See lower-upper-test1.log
-Total: 40
-Pass : 35
+Total: 41
+Pass : 36
 Fail : 5
-
