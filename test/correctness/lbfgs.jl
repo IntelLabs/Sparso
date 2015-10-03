@@ -1,6 +1,8 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)#, SA_REORDER, SA_REPLACE_CALLS)
+
 function mylogsumexp(b)
   # does logsumexp across column
   log(1 + exp(-abs(b)))+max(b,0)
@@ -550,13 +552,18 @@ println("n=$n p=$p nnz=$(nnz(X)) stored as sparse=$sparsity")
 
 w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
 w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
-@printf("L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+@printf("Original L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 
 w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3)
 w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3)
-@printf("L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+@printf("Opt L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 
 w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
 w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
-@printf("L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+@printf("Opt_with_reordering L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 # Expected output: L-BFGS: 33 iterations f = 0.33390367349181
+
+xinit, tol, k = zeros(p), 1e-10, 3
+@acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
+w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
+@printf("Accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])

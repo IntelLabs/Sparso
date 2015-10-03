@@ -53,8 +53,20 @@ const element_wise_multiply_Desc = FunctionDescription(
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
     Set([ (0, 1, ROW_ROW),
-          (0, 2, ROW_ROW)
-         # No need to describe 1 and 2's relationship: the relationship is transitive.
+          (0, 2, ROW_ROW),
+          (1, 2, ROW_ROW)
+    ])
+)
+
+const element_wise_multiply1_Desc = FunctionDescription(
+    "Main", 
+    ".*",
+    (Vector, Vector),                 # The arguments must be vectors
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 2, ROW_ROW),
+          (1, 2, ROW_ROW)
     ])
 )
 
@@ -544,6 +556,7 @@ const asignment1_Desc = FunctionDescription(
 
 function_descriptions  = [
     element_wise_multiply_Desc,
+    element_wise_multiply1_Desc,
     element_wise_multiply!_Desc,
     element_wise_divide_Desc,
     element_wise_divide1_Desc,

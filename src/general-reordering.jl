@@ -334,19 +334,21 @@ function add_array(
     graph         :: InterDependenceGraph,
     matrices_done :: Bool
 )
-    if !matrices_done && type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix
-        Pr = graph.rows[A].color
-        Pc = graph.columns[A].color
-        if Pr != NO_PERM || Pc != NO_PERM
-            push!(new_expr.args, A)
-            add_permutation_vector(new_expr, Pr)
-            add_permutation_vector(new_expr, Pc)
-        end
-    elseif  matrices_done && type_of_ast_node(A, symbol_info) <: Vector
-        Pr = graph.rows[A].color
-        if Pr != NO_PERM
-            push!(new_expr.args, A)
-            add_permutation_vector(new_expr, Pr)
+    if haskey(graph.rows, A) # If no key, the array does not appear in the loop at all
+        if !matrices_done && type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix
+            Pr = graph.rows[A].color
+            Pc = graph.columns[A].color
+            if Pr != NO_PERM || Pc != NO_PERM
+                push!(new_expr.args, A)
+                add_permutation_vector(new_expr, Pr)
+                add_permutation_vector(new_expr, Pc)
+            end
+        elseif  matrices_done && type_of_ast_node(A, symbol_info) <: Vector
+            Pr = graph.rows[A].color
+            if Pr != NO_PERM
+                push!(new_expr.args, A)
+                add_permutation_vector(new_expr, Pr)
+            end
         end
     end
 end
@@ -513,17 +515,17 @@ function reordering(
         dprintln(1, 0, "\nColored inter-dependence graph:")
         dprintln(1, 1, liveness, graph)
 
-	new_actions = Vector{Action}()
+        new_actions = Vector{Action}()
         create_reorder_actions(new_actions, region, symbol_info, liveness, graph, 
                                cfg, FAR, fknob, 
                                call_sites.extra.decider_bb,
                                call_sites.extra.decider_stmt_idx)
 
         dprintln(1, 0, "\nReordering actions to take:", new_actions)
-	
-	for action in new_actions
-		push!(actions, action)
-	end
+
+        for action in new_actions
+            push!(actions, action)
+        end
     catch ex
         # In case any exception happen in the printing, try
         try
