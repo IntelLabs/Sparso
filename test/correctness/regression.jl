@@ -32,7 +32,7 @@ end
 
 
 root_path       = joinpath(dirname(@__FILE__), "../..")
-load_path       = joinpath(root_path, "dpes")
+load_path       = joinpath(root_path, "deps")
 julia_command   = joinpath(root_path, "deps", "julia")
 
 # The following patterns often contains "(.|n)*?something". This is to let
@@ -413,6 +413,44 @@ const pagerank_test1 = Test(
         ),
         TestPattern(r"err = .*?\(SparseAccelerator,:norm\)\)\(Ap.*? - p.*?\).*? / .*?\(SparseAccelerator,:norm\)\)\(p.*?\)",
                      "Test pagerank if call replacement of norm happens"
+        ),
+        exception_pattern
+    ]
+)
+
+const cosp2_test1 = Test(
+    "cosp2-test1",
+    "cosp2.jl",
+    [
+        TestPattern(r"Original:\nD Sparsity AAN = 27050.134369218962, fraction = 0.0001791459611337646 avg = 2.2013455704116995, max = 2.0122570097076777\nNumber of iterations = 39(.|\n)*?End original.",
+                     "Test original"
+        ),
+        TestPattern(r"CoSP2_call_replacement:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549982\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
+                     "Test CoSP2_call_replacement"
+        ),
+        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt",
+                     "Test CoSP2_call_replacement_and_context_opt"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(false,.*?,true,true,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.add_mknob_to_fknob\)\(.*?mknobX.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?trX = \(\(top\(getfield\)\)\(SparseAccelerator,:trace\)\)\(X.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?X2 = \(\(top\(getfield\)\)\(SparseAccelerator,:SpSquareWithEps\)\)\(X.*?,eps.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?trX2 = \(\(top\(getfield\)\)\(SparseAccelerator,:trace\)\)\(X2.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?X = \(\(top\(getfield\)\)\(SparseAccelerator,:SpAdd\)\)\(2,X.*?,-1,X2.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?D Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End accelerated",
+                     "Test accelerated"
         ),
         exception_pattern
     ]
@@ -861,6 +899,7 @@ const all_tests = [
     context_test4,
     context_test5,
     pagerank_test1,
+    cosp2_test1,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,
@@ -893,13 +932,14 @@ const all_tests = [
 ]
 
 const fast_tests = [
-    pagerank_test1,
 #    context_test1,
     context_test2,
     context_test2_without_reordering,
     context_test3,
     context_test4,
-    context_test5
+    context_test5,
+    pagerank_test1,
+    cosp2_test1
 ]
 
 # If true, use pcregrep for regular expression match. 
@@ -916,7 +956,7 @@ function get_julia_ver()
 end
 
 if !isreadable(julia_command)
-    error("Plase install (softlink) julia command to \"" * julia_command  * "\".")
+    error("Please install (softlink) julia command to \"" * julia_command  * "\".")
 elseif !ismatch(r"\.*0.4.0-rc3", get_julia_ver())
     error("Wrong julia version! 0.4.0-rc3 is required!")
 end
