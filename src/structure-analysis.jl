@@ -45,7 +45,7 @@ const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
 abstract MatrixProperty
 
 # data types shared by analysis passes 
-typealias PropertyMap Dict{Union{GenSym,Symbol}, Int}
+typealias PropertyMap Dict{Sym, Int}
 #  
 type ASTContextArgs
     changed         :: Bool
@@ -64,7 +64,7 @@ function build_depend_set_from_args(
     call_sites :: CallSites,
     level      :: Int
 )
-    dep_set = Set{Union{GenSym,Symbol}}()
+    dep_set = Set{Sym}()
     
     for arg in args
         arg_tp = typeof(arg)
@@ -98,7 +98,7 @@ function build_dependence(
     patterns    = call_sites.patterns
     depend_sets = call_sites.extra
 
-    ret_set = Set{Union{GenSym,Symbol}}()
+    ret_set = Set{Sym}()
 
     if typeof(ast) <: Expr
         dprintln(1, level, "-> ", ast)
@@ -118,7 +118,7 @@ function build_dependence(
             end
 
             if !haskey(depend_sets, k)
-                depend_sets[k] = Set{Union{GenSym,Symbol}}() 
+                depend_sets[k] = Set{Sym}() 
             end 
             
             union!(depend_sets[k],
@@ -138,7 +138,7 @@ function build_dependence(
                 if ast.args[3].value != :nzval
                     dump(ast.args[3])
                     if !haskey(depend_sets, m)
-                        depend_sets[m] = Set{Union{GenSym,Symbol}}()
+                        depend_sets[m] = Set{Sym}()
                     end
                     push!(depend_sets[m], :NEGATIVE_PROPERTY)
                 end
@@ -154,7 +154,7 @@ function build_dependence(
                 for o in func_desc.output
                     k = ast.args[o]
                     if !haskey(depend_sets, k)
-                    #    depend_sets[k] = Set{Union{GenSym,Symbol}}() 
+                    #    depend_sets[k] = Set{Sym}() 
                     end
                     #union!(depend_sets[k], ret_set)
                 end
@@ -247,11 +247,11 @@ function find_predefined_properties(
                     structure_proxies[sym] = StructureProxy()
                 end
                 if ast.args[3].name == :SA_LOWER_OF
-                    structure_proxies[sym].lower_of = psym
+                    structure_proxies[sym].lower_of = get_symexpr(psym)
                     dprintln(1, 1, "Predef: ", sym, " is lower of ", psym)
                 else
                     assert(ast.args[3].name == :SA_UPPER_OF)
-                    structure_proxies[sym].upper_of = psym
+                    structure_proxies[sym].upper_of = get_symexpr(psym)
                     dprintln(1, 1, "Predef: ", sym, " is upper of ", psym)
                 end
             else # set other properties
@@ -373,7 +373,7 @@ function find_properties_of_matrices(
     const sym_negative_property = Symbol(:NEGATIVE_PROPERTY)
 
     # dependence map: k -> symbols that k depends on
-    depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
+    depend_map = Dict{Sym, Set{Sym}}()
     depend_map[sym_negative_property] = Set{Union{GenSym, Symbol}}()
 
     call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
@@ -395,7 +395,7 @@ function find_properties_of_matrices(
     all_structure_properties = [
         ConstantStructureProperty(),
         SymmetricValueProperty(),
-        #SymmetricStructureProperty(),
+        SymmetricStructureProperty(),
         #LowerUpperProperty()
     ]
 

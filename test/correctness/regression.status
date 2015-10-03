@@ -12,6 +12,7 @@ context-test3: Pass
 context-test4: Pass
 context-test5: Pass
 pagerank-test1: Pass
+cosp2-test1: Pass
 liveness-test1: Pass
 liveness-test2: Pass
 call-replacement-test1: Pass
@@ -29,18 +30,20 @@ call-replacement-test12: Pass
 name-resolution-test1: Pass
 single-def-test1: Pass
 constant-value-test1: Pass
-set-matrix-property-test1: FAIL. See set-matrix-property-test1.log
+set-matrix-property-test1: Pass
 set-matrix-property-test2: Pass
-set-matrix-property-test3: FAIL. See set-matrix-property-test3.log
+set-matrix-property-test3: Pass
 set-matrix-property-test4: FAIL. See set-matrix-property-test4.log
     B is renamed and thus the annotation does not work.
 set-matrix-property-test5: Pass
 constant-structure-test1: FAIL. See constant-structure-test1.log
-symmetric-value-test1: FAIL. See symmetric-value-test1.log
+    R is not found as loop constant structured.
+symmetric-value-test1: Pass
 symmetric-value-test2: FAIL. See symmetric-value-test2.log
-symmetric-value-test3: FAIL. See symmetric-value-test3.log
-symmetric-value-test4: FAIL. See symmetric-value-test4.log
+    Need annotation.
+symmetric-value-test3: Pass
+symmetric-value-test4: Pass
 lower-upper-test1: FAIL. See lower-upper-test1.log
-Total: 40
-Pass : 30
-Fail : 10
+Total: 41
+Pass : 36
+Fail : 5

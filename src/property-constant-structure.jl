@@ -48,13 +48,13 @@ type ConstantStructureProperty <: MatrixProperty
         end
 
         # reverse dependence map: k -> symbols that depends on k 
-        reverse_depend_map = Dict{Union{GenSym,Symbol}, Set{Union{GenSym,Symbol}}}()
+        reverse_depend_map = Dict{Sym, Set{Sym}}()
 
         # fill reverse dependence map
         for (k, s) in depend_map
             for v in s
                 if !haskey(reverse_depend_map, v)
-                    reverse_depend_map[v] = Set{Union{GenSym,Symbol}}()
+                    reverse_depend_map[v] = Set{Sym}()
                 end
                 push!(reverse_depend_map[v], k)
             end
@@ -69,7 +69,7 @@ type ConstantStructureProperty <: MatrixProperty
         #  2: external(constant)
         #  3: specified by set_matrix_property statement
         #  4: inherited from parent region (constant)
-        property_map = Dict{Union{GenSym,Symbol}, Int}()
+        property_map = Dict{Sym, Int}()
         property_map[:NEGATIVE_PROPERTY] = -1
 
         single_defs = find_single_defs(region, liveness, cfg)
