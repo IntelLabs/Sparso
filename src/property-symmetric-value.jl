@@ -148,7 +148,7 @@ type SymmetricValueProperty <: MatrixProperty
         # remove all scalars so that only matrics/vectors are left in args
         is_scalar_type = x -> (type_of_ast_node(x, symbol_info) <: Number)
         args = filter(x -> !is_scalar_type(x), ast.args[2:end])
-        dump(args)
+        #dump(args)
         len = length(args)
         
         if len == 1
