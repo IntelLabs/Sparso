@@ -420,15 +420,15 @@ const pagerank_test1 = Test(
 
 const cosp2_test1 = Test(
     "cosp2-test1",
-    "cosp2.jl",
+    "cosp2.jl hmatrix.512.mtx",
     [
-        TestPattern(r"Original:\nD Sparsity AAN = 27050.134369218962, fraction = 0.0001791459611337646 avg = 2.2013455704116995, max = 2.0122570097076777\nNumber of iterations = 39(.|\n)*?End original.",
+        TestPattern(r"Original:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End original.",
                      "Test original"
         ),
-        TestPattern(r"CoSP2_call_replacement:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549982\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
+        TestPattern(r"CoSP2_call_replacement:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
                      "Test CoSP2_call_replacement"
         ),
-        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt",
+        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt.",
                      "Test CoSP2_call_replacement_and_context_opt"
         ),
         TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(false,.*?,true,true,false,false\)",
@@ -449,7 +449,7 @@ const cosp2_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?X = \(\(top\(getfield\)\)\(SparseAccelerator,:SpAdd\)\)\(2,X.*?,-1,X2.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?D Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End accelerated",
+        TestPattern(r"New AST:(.|\n)*?X sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End accelerated",
                      "Test accelerated"
         ),
         exception_pattern
@@ -948,7 +948,7 @@ const fast_tests = [
 const USE_PCREGREP_REGEX_MATCH = true
 
 # Run tests with multiple threads?
-const USE_THREADS = true
+const USE_THREADS = false
 
 function get_julia_ver()
     s, p = open(`$julia_command -v`)
