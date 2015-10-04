@@ -456,6 +456,50 @@ const cosp2_test1 = Test(
     ]
 )
 
+const lbfgs_test1 = Test(
+    "lbfgs-test1",
+    "lbfgs.jl covtype.mtx",
+    [
+        TestPattern(r"Original L-BFGS:      32 iterations f = 0.00000000004134",
+                     "Test original"
+        ),
+        TestPattern(r"Opt L-BFGS:      32 iterations f = 0.00000000004134",
+                     "Test optimized version"
+        ),
+        TestPattern(r"Opt_with_reordering L-BFGS:",
+                     "Test Opt_with_reordering"
+        ),
+        TestPattern(r"Accelerated L-BFGS:      32 iterations f = 0.000000000041",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(Xt,true,true,false,false,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(X,true,true,false,false,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Xw = \(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,X.*?,x.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(.*?fknob.*?,.*?reordering_status.*?,Xt,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,:__delimitor__,y,SparseAccelerator.ROW_PERM\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?dfk = -\(\(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,Xt.*?,temp.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Xw = \(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,X.*?,w.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?dfkp1 = -\(\(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,Xt.*?,temp.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(.*?reordering_status.*?,:__delimitor__,x,SparseAccelerator.COL_INV_PERM\)",
+                     "Test accelerated"
+        ),        
+        exception_pattern
+    ]
+)
+
 const liveness_test1 = Test(
     "liveness-test1",
     "liveness-test1.jl small-diag.mtx",
@@ -900,6 +944,7 @@ const all_tests = [
     context_test5,
     pagerank_test1,
     cosp2_test1,
+    lbfgs_test1,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,
@@ -939,7 +984,8 @@ const fast_tests = [
     context_test4,
     context_test5,
     pagerank_test1,
-    cosp2_test1
+    cosp2_test1,
+    lbfgs_test1
 ]
 
 # If true, use pcregrep for regular expression match. 
