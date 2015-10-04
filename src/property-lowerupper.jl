@@ -206,8 +206,8 @@ type LowerUpperProperty <: MatrixProperty
         A = ast.args[2]
         dia = call_sites.extra.local_map[:SA_DIAGONAL] 
         print("****************")
-        dump(A)
-        dump(dia)
+        #dump(A)
+        #dump(dia)
         return in(A, dia)
     end
 

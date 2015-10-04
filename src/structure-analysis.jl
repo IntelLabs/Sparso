@@ -78,7 +78,7 @@ function build_depend_set_from_args(
             # skip GlobalRef
         else
             dprintln(1, 2, typeof(arg), "\n")
-            dump(arg)
+            #dump(arg)
             error("Unknown type")
         end
     end
@@ -113,7 +113,7 @@ function build_dependence(
 
             if typeof(k) != Symbol && typeof(k) != GenSym
                 dprintln(1, 2, k, "\n")
-                dump(k)
+                #dump(k)
                 error("LHS is not symbol")
             end
 
@@ -136,7 +136,7 @@ function build_dependence(
                 @assert(ast.args[2].typ == args_real_types[2])
                 m = ast.args[2].name
                 if ast.args[3].value != :nzval
-                    dump(ast.args[3])
+                    #dump(ast.args[3])
                     if !haskey(depend_sets, m)
                         depend_sets[m] = Set{Sym}()
                     end
@@ -162,7 +162,7 @@ function build_dependence(
         elseif in(ast.head, [:gotoifnot, :return])
             # skip
         else
-            dump(ast)
+            #dump(ast)
             error("Unhandled expr type")
         end
     end

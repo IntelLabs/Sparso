@@ -44,7 +44,8 @@ x = pagerank(A, p, r, maxiter)
 println("Original: ")
 x = pagerank(A, p, r, maxiter)
 
-@acc x= pagerank(A, p, r, maxiter)
+A2 = copy(A) # workaround that we change A in-place
+@acc x= pagerank(A2, p, r, maxiter)
 
 println("\nAccelerated: ")
 SparseAccelerator.reset_spmp_spmv_time()
