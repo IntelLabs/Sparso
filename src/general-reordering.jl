@@ -24,7 +24,7 @@ type InterDependenceGraphVertex
     color      :: Int
     neighbours :: Set{Tuple{InterDependenceGraphVertex, Bool}}
     
-    InterDependenceGraphVertex(_array, _row_perm) = new(_array, _row_perm, NO_PERM,
+    InterDependenceGraphVertex(_array, _row_perm) = new(_array, _row_perm, NOT_PERM_YET,
                                Set{Tuple{InterDependenceGraphVertex, Bool}}())
 end
 
@@ -58,6 +58,60 @@ type ReorderingExtra
     ReorderingExtra(_seed, _decider_ast) = new(_seed, _decider_ast,
              nothing, 0, nothing, 0, InterDependenceGraph(_seed))
 end
+
+@doc """
+Argument types of setindex!.
+
+A matrix has the following access patterns: [:, j], [i, :], [:, :], and [i, j] 
+A vector has the following access patterns: [i], and [:]. 
+"""
+const setindex!_arg_types1 = (AbstractMatrix, Any, GlobalRef(Main, :(:)), Number)
+const setindex!_arg_types2 = (AbstractMatrix, Any, Number, GlobalRef(Main, :(:)))
+const setindex!_arg_types3 = (AbstractMatrix, Any, GlobalRef(Main, :(:)), GlobalRef(Main, :(:)))
+const setindex!_arg_types4 = (AbstractMatrix, Any, Number, Number)
+const setindex!_arg_types5 = (AbstractVector, Any, Number)
+const setindex!_arg_types6 = (AbstractVector, Any, GlobalRef(Main, :(:)))
+
+@doc """
+For setindex!(A, x, I), map from the setindex! skeleton to the relation
+between A and  x. If a dimension of A should not be permuted, then map to
+NEVER_PERM.
+"""
+const setindex!2relations = Dict(
+    setindex!_arg_types1 => (ROW_ROW,    NEVER_PERM   ),
+    setindex!_arg_types2 => (NEVER_PERM, COLUMN_ROW   ),
+    setindex!_arg_types3 => (ROW_ROW,    COLUMN_COLUMN),
+    setindex!_arg_types4 => (NEVER_PERM, NEVER_PERM   ),
+    setindex!_arg_types5 => (NEVER_PERM,              ),
+    setindex!_arg_types6 => (ROW_ROW,                 ),
+)
+
+@doc """
+Argument types of getindex.
+
+A matrix has the following access patterns: [:, j], [i, :], [:, :], and [i, j] 
+A vector has the following access patterns: [i], and [:]. 
+"""
+const getindex_arg_types1  = (AbstractMatrix, GlobalRef(Main, :(:)), Number)
+const getindex_arg_types2  = (AbstractMatrix, Number, GlobalRef(Main, :(:)))
+const getindex_arg_types3  = (AbstractMatrix, GlobalRef(Main, :(:)), GlobalRef(Main, :(:)))
+const getindex_arg_types4  = (AbstractMatrix, Number, Number)
+const getindex_arg_types5  = (AbstractVector, Number)
+const getindex_arg_types6  = (AbstractVector, GlobalRef(Main, :(:)))
+
+@doc """
+For getindex(A, I), map from the getindex skeleton to the relation
+between A and getindex(A, I). If a dimension of A should not be permuted, 
+then map to NEVER_PERM.
+"""
+const getindex2relations = Dict(
+    getindex_arg_types1  => (ROW_ROW,    NEVER_PERM   ),
+    getindex_arg_types2  => (NEVER_PERM, COLUMN_ROW   ),
+    getindex_arg_types3  => (ROW_ROW,    COLUMN_COLUMN),
+    getindex_arg_types4  => (NEVER_PERM, NEVER_PERM   ),
+    getindex_arg_types5  => (NEVER_PERM,              ),
+    getindex_arg_types6  => (ROW_ROW,                 )
+)
 
 @doc """"
 Build an edge between the two vertices for the inter-dependence graph.
@@ -102,20 +156,11 @@ end
 Build two vertices and and an edge between them in the inter-dependence graph.
 """
 function build_vertices_and_edge(
-    array_index1 :: Int,
-    array_index2 :: Int,
-    relation     :: Int,
-    ast          :: Expr,
-    args         :: Vector,
-    graph        :: InterDependenceGraph
+    array1   :: Any,
+    array2   :: Any,
+    relation :: Int,
+    graph    :: InterDependenceGraph
 )
-    array1 = (array_index1 == 0) ? ast : 
-             (typeof(args[array_index1]) == SymbolNode ?
-              args[array_index1].name : args[array_index1])
-    array2 = (array_index2 == 0) ? ast : 
-             (typeof(args[array_index2]) == SymbolNode ?
-              args[array_index2].name : args[array_index2])
-
     if relation == ROW_ROW
         vertex1 = build_vertex(array1, true, graph)
         vertex2 = build_vertex(array2, true, graph)
@@ -124,12 +169,166 @@ function build_vertices_and_edge(
         vertex1 = build_vertex(array1, false, graph)
         vertex2 = build_vertex(array2, false, graph)
         build_edge(vertex1, vertex2, false)
-    else
-        assert(relation == COLUMN_ROW_INVERSE)
+    elseif relation == COLUMN_ROW_INVERSE
         vertex1 = build_vertex(array1, false, graph)
         vertex2 = build_vertex(array2, true, graph)
         build_edge(vertex1, vertex2, true)
+    else
+        assert(relation == COLUMN_ROW)
+        vertex1 = build_vertex(array1, false, graph)
+        vertex2 = build_vertex(array2, true, graph)
+        build_edge(vertex1, vertex2, false)
     end
+end
+
+@doc """
+Build two vertices and and an edge between them in the inter-dependence graph.
+"""
+function build_vertices_and_edge(
+    array_index1 :: Int,
+    array_index2 :: Int,
+    relation     :: Int,
+    ast          :: Expr,
+    args         :: Vector,
+    graph        :: InterDependenceGraph
+)
+    array1 = (array_index1 == 0) ? ast :
+             (typeof(args[array_index1]) == SymbolNode ?
+              args[array_index1].name : args[array_index1])
+    array2 = (array_index2 == 0) ? ast :
+             (typeof(args[array_index2]) == SymbolNode ?
+              args[array_index2].name : args[array_index2])
+
+    build_vertices_and_edge(array1, array2, relation, graph)
+end
+
+@doc """
+Build inter-dependence graph with the inter-dependence information drawn from
+the AST of a function call to setindex!.
+"""
+function build_inter_dependence_graph_for_setindex!(
+    ast       :: Any,
+    arg_types :: Tuple,
+    args      :: Vector,
+    relations :: Tuple,
+    graph     :: InterDependenceGraph,
+)
+    assert(arg_types[1] <: AbstractMatrix || arg_types[1] <: AbstractVector)
+      
+    A = get_symexpr(args[1])
+
+    # Build dependence between A and the AST, which represents the result of
+    # setindex!(). Since setindex!(A, x, I) returns the updated A, the relations
+    # between them are simply ROW_ROW and COLUMN_COLUMN.
+    build_vertices_and_edge(A, ast, ROW_ROW, graph)
+    if arg_types[1] <: AbstractMatrix
+        build_vertices_and_edge(A, ast, COLUMN_COLUMN, graph)
+    end
+
+    # Now build dependence between A and x.
+    x = get_symexpr(args[2])
+    for i in 1 : length(relations)
+        relation = relations[i]
+        if relation == NEVER_PERM
+            # This is not actually a relation between A and x. Instead, it says
+            # the first/second dimension of A (A's rows/columns) cannot be permuted.
+            if i == 1
+                graph.rows[A].color    = NEVER_PERM
+            else 
+                graph.columns[A].color = NEVER_PERM
+            end
+        else
+            assert(relation == ROW_ROW || relation == COLUMN_ROW || relation == COLUMN_COLUMN)
+            build_vertices_and_edge(A, x, relation, graph)
+        end
+    end
+end
+
+@doc """
+Build inter-dependence graph with the inter-dependence information drawn from
+the AST of a function call to getindex.
+"""
+function build_inter_dependence_graph_for_getindex(
+    ast       :: Any,
+    arg_types :: Tuple,
+    args      :: Vector,
+    relations :: Tuple,
+    graph     :: InterDependenceGraph,
+)
+    assert(arg_types[1] <: AbstractMatrix || arg_types[1] <: AbstractVector)
+      
+    A = get_symexpr(args[1])
+
+    # Build dependence between A and the AST, which represents the result of
+    # getindex().
+    for i in 1 : length(relations)
+        relation = relations[i]
+        if relation == NEVER_PERM
+            # This is not actually a relation between A and x. Instead, it says
+            # the first/second dimension of A (A's rows/columns) cannot be permuted.
+            if i == 1
+                graph.rows[A].color    = NEVER_PERM
+            else 
+                graph.columns[A].color = NEVER_PERM
+            end
+        else
+            assert(relation == ROW_ROW || relation == COLUMN_ROW || relation == COLUMN_COLUMN)
+            build_vertices_and_edge(A, ast, relation, graph)
+        end
+    end
+end
+
+@doc """
+Build inter-dependence graph with the inter-dependence information drawn from
+the AST of a function call, if the call is setindex! or getindex.
+"""
+function build_inter_dependence_graph_for_set_get_index(
+    ast             :: Any,
+    module_name     :: AbstractString,
+    function_name   :: AbstractString,
+    arg_types       :: Tuple,
+    args            :: Vector,
+    graph           :: InterDependenceGraph,
+    handle_getindex :: Bool
+)
+    if module_name != "Main" || (function_name != "setindex!" && function_name != "getindex") 
+        return false
+    end
+
+    index2relations = handle_getindex ? getindex2relations : setindex!2relations 
+    for (skeleton, relations) in index2relations
+        # We cannot use match_skeletons(arg_types, skeleton), since arg_types
+        # contains a GlobalRef type, not a GlobalRef(Main, :(:)) (which is not a
+        # type, but an instantiation of the type).
+        matched = true
+        if length(args) == length(skeleton)
+            for i in 1 : length(skeleton)
+                if skeleton[i] == GlobalRef(Main, :(:))
+                    if args[i] != GlobalRef(Main, :(:))
+                        matched = false
+                        break
+                    end
+                else
+                    if !(arg_types[i] <: skeleton[i])
+                        matched = false
+                        break
+                    end
+                end
+            end
+        else
+            matched = false        
+        end
+
+        if matched
+            if handle_getindex 
+                build_inter_dependence_graph_for_getindex(ast, arg_types, args, relations, graph)
+            else
+                build_inter_dependence_graph_for_setindex!(ast, arg_types, args, relations, graph)
+            end
+            return true
+        end
+    end
+    return false
 end
 
 @doc """
@@ -161,6 +360,23 @@ function build_inter_dependence_graph_for_call(
     if function_name == ""
         throw(UnresolvedFunction(head, args[1]))
     end
+
+    graph = call_sites.extra.inter_dependence_graph
+    
+    # Special handling to setindex! and getindex: so far, we do not generate code
+    # for individual array element access. Thus we need to indicate that the
+    # index of the array element is not subject to reordering (Set the rows 
+    # or columns as NEVER_PERMUTE).
+    # Try setindex!
+    if build_inter_dependence_graph_for_set_get_index(ast, module_name, function_name, arg_types, args, graph, false)
+        return nothing
+    end
+
+    # Try getindex
+    if build_inter_dependence_graph_for_set_get_index(ast, module_name, function_name, arg_types, args, graph, true)
+        return nothing
+    end
+
     fd = look_for_function_description(module_name, function_name, arg_types)
     if fd == nothing
         throw(UndescribedFunction(module_name, function_name, arg_types, ast))
@@ -168,7 +384,6 @@ function build_inter_dependence_graph_for_call(
     if !fd.distributive
         throw(NonDistributiveFunction(module_name, function_name, arg_types))
     end
-    graph = call_sites.extra.inter_dependence_graph
     for (array_index1, array_index2, relation) in fd.IA
         build_vertices_and_edge(array_index1, array_index2, relation, ast, args, graph)
     end
@@ -239,10 +454,10 @@ function build_inter_dependence_graph(
     elseif asttyp == SymbolNode  || asttyp == Symbol   || asttyp == GenSym ||
            asttyp == LabelNode   || asttyp == GotoNode || asttyp == LineNumberNode ||
            asttyp == ASCIIString || asttyp == LambdaStaticData ||
-           asttyp <: Number      || asttyp == NewvarNode
+           asttyp <: Number      || asttyp == NewvarNode || asttyp == GlobalRef
         return nothing
     else
-        throw(UnknownASTDistributivity(ast))
+        throw(UnknownASTDistributivity(ast, typeof(ast)))
     end
     return nothing
 end
@@ -266,7 +481,7 @@ function color_inter_dependence_graph(
     push!(visited, from)
     for (vertex, inverse) in from.neighbours
         color = inverse ? inverse_color_map[from.color] : from.color       
-        if vertex.color != NO_PERM
+        if vertex.color != NOT_PERM_YET
             if vertex.color != color
                 # Already colored, but in a different color. A conflict exists
                 # But this can indicate that some colors are equal. For example,
@@ -277,11 +492,22 @@ function color_inter_dependence_graph(
                 # inverse relationship: P1 * A * P2, where P1 must equal P2'.
                 # This is a nice constraint that compiler should tell libraries
                 # so that rows and columns of A won't be reordered independently. 
-                # throw(ConflictPermutation(from, vertex, color))
-                dprintln(1, 0, "\nPermutation constraints found: ",
-                         permutation_color_to_str(vertex.color),
-                         " must equal ", 
-                         permutation_color_to_str(color))
+                if vertex.color == NEVER_PERM
+                    vertex2index = sort_inter_dependence_graph_vertices(graph)
+                    dprintln(1, 0, "\nReordering cannot proceed: vertex ",
+                             vertex2index[vertex], " in the inter-dependence ",
+                             "graph cannot be reordered, as it might have array ",
+                             "element access that the current implementation ", 
+                             "does not support. However, its neighbour, vertex ",
+                             vertex2index[from], " requires its color to be ",
+                             permutation_color_to_str(color), ".")
+                    throw(ConflictPermutation(from, vertex, color))                    
+                else
+                    dprintln(1, 0, "\nPermutation constraints found: ",
+                             permutation_color_to_str(vertex.color),
+                             " must equal ", 
+                             permutation_color_to_str(color))
+                end
             end
         else
             vertex.color = color
@@ -314,10 +540,10 @@ function add_permutation_vector(
     new_expr :: Expr,
     perm     :: Int
 )
-    assert(perm == NO_PERM || perm == ROW_PERM || perm == ROW_INV_PERM || 
+    assert(perm == NOT_PERM_YET || perm == ROW_PERM || perm == ROW_INV_PERM || 
            perm == COL_PERM || perm == COL_INV_PERM)
     push!(new_expr.args, 
-          perm == NO_PERM ? GlobalRef(SparseAccelerator, :NO_PERM) : 
+          perm == NOT_PERM_YET ? GlobalRef(SparseAccelerator, :NOT_PERM_YET) : 
           perm == ROW_PERM ? GlobalRef(SparseAccelerator, :ROW_PERM) :
           perm == ROW_INV_PERM ? GlobalRef(SparseAccelerator, :ROW_INV_PERM) :
           perm == COL_PERM ? GlobalRef(SparseAccelerator, :COL_PERM) :
@@ -338,14 +564,14 @@ function add_array(
         if !matrices_done && type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix
             Pr = graph.rows[A].color
             Pc = graph.columns[A].color
-            if Pr != NO_PERM || Pc != NO_PERM
+            if Pr != NOT_PERM_YET || Pc != NOT_PERM_YET
                 push!(new_expr.args, A)
                 add_permutation_vector(new_expr, Pr)
                 add_permutation_vector(new_expr, Pc)
             end
         elseif  matrices_done && type_of_ast_node(A, symbol_info) <: Vector
             Pr = graph.rows[A].color
-            if Pr != NO_PERM
+            if Pr != NOT_PERM_YET
                 push!(new_expr.args, A)
                 add_permutation_vector(new_expr, Pr)
             end

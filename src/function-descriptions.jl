@@ -11,6 +11,7 @@
 const ROW_ROW            = 0 # A's row permutation vector is the same as B's row permutation vector.
 const COLUMN_COLUMN      = 1 # A's column permutation vector is the same as B's column permutation vector.
 const COLUMN_ROW_INVERSE = 2 # A's column permutation vector is the inverse of B's row permutation vector.
+const COLUMN_ROW         = 3 # A's column permutation vector is B's row permutation vector.
 
 # A function is assumed to have the following form
 #      f(argument1, argument2, ...)
@@ -382,6 +383,15 @@ const add_matrix2_Desc = FunctionDescription(
     ])
 )
 
+const exp_Desc = FunctionDescription(
+    "Main", 
+    "exp",                              
+    (Vector, ),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW) ])
+)
+
 const norm_Desc = FunctionDescription(
     "Main", 
     "norm",                              
@@ -533,6 +543,36 @@ const bwdTriSolve!1_Desc = FunctionDescription(
     ])
 )
 
+const negative_Desc = FunctionDescription(
+    "Main", 
+    "-",
+    (Vector,),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW) ])
+)
+
+const divide_Desc = FunctionDescription(
+    "Main", 
+    "/",
+    (Vector, Number),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW) ])
+)
+
+const lbfgs_compute_direction_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "lbfgs_compute_direction",
+    (Int64, Int64, Int64, Array{Float64,2}, Array{Float64,2}, Array{Float64,1}),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 4, ROW_ROW),
+          (0, 5, ROW_ROW),
+          (0, 6, ROW_ROW)
+    ])
+)
+
 # Make assignment a special function
 const asignment_Desc = FunctionDescription(
     "", 
@@ -585,6 +625,7 @@ function_descriptions  = [
     add_matrix_Desc,
     add_matrix1_Desc,
     add_matrix2_Desc,
+    exp_Desc,
     norm_Desc,
     spones_Desc,
     size_Desc,
@@ -600,8 +641,11 @@ function_descriptions  = [
     fwdTriSolve!1_Desc,
     bwdTriSolve!_Desc,
     bwdTriSolve!1_Desc,
+    negative_Desc,
+    divide_Desc,
     asignment_Desc,
-    asignment1_Desc
+    asignment1_Desc,
+    lbfgs_compute_direction_Desc
 ]
 
 function look_for_function_description(
