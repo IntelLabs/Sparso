@@ -1037,11 +1037,12 @@ function cholfact_inverse_divide(
 end
 
 # Some symbolic names for each permutation vector.
-const NO_PERM      = 0
+const NOT_PERM_YET = 0 # Maybe permute, but the color is not decided yet.
 const ROW_PERM     = 1
 const ROW_INV_PERM = 2
 const COL_PERM     = 3
 const COL_INV_PERM = 4
+const NEVER_PERM   = 5 # Never permute. This state can not change to any other.
 
 const LOG_REORDERING = false
 

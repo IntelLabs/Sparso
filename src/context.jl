@@ -148,15 +148,28 @@ function gather_context_sensitive_info(
         push!(call_sites.extra.fknob2mknobs[fknob], call_sites.extra.matrix2mknob[M])
     end
 
-    if call_sites.extra.reordering_decider_power < reordering_power
-        call_sites.extra.reordering_decider_fknob = fknob
-        call_sites.extra.reordering_decider_power = reordering_power
-        call_sites.extra.reordering_FAR           = []
-        for arg in reordering_FAR
-            new_arg = replacement_arg(arg, args, ast, symbol_info)
-            assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
-            M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
-            push!(call_sites.extra.reordering_FAR, M)
+    if reorder_enabled && call_sites.extra.reordering_decider_power < reordering_power
+        # The decider should be in a basic block that is an immediate member of
+        # a loop region. That is, it should be contained in the outermost loop, not
+        # in any inner loop, because doing reordering and reverse reordering
+        # in an inner loop seems too expensive.
+        # The decider should not be in the function region either: we want one
+        # reordering of data to impact many loop iterations, not sequential code.
+        region = call_sites.region
+        if typeof(region) == LoopRegion
+            region_immediate_members = region.immediate_members
+            bb                       = call_sites.extra.bb
+            if in(bb.label, region_immediate_members)
+                call_sites.extra.reordering_decider_fknob = fknob
+                call_sites.extra.reordering_decider_power = reordering_power
+                call_sites.extra.reordering_FAR           = []
+                for arg in reordering_FAR
+                    new_arg = replacement_arg(arg, args, ast, symbol_info)
+                    assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
+                    M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
+                    push!(call_sites.extra.reordering_FAR, M)
+                end
+            end
         end
     end
 

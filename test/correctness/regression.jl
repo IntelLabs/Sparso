@@ -420,15 +420,15 @@ const pagerank_test1 = Test(
 
 const cosp2_test1 = Test(
     "cosp2-test1",
-    "cosp2.jl",
+    "cosp2.jl hmatrix.512.mtx",
     [
-        TestPattern(r"Original:\nD Sparsity AAN = 27050.134369218962, fraction = 0.0001791459611337646 avg = 2.2013455704116995, max = 2.0122570097076777\nNumber of iterations = 39(.|\n)*?End original.",
+        TestPattern(r"Original:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End original.",
                      "Test original"
         ),
-        TestPattern(r"CoSP2_call_replacement:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549982\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
+        TestPattern(r"CoSP2_call_replacement:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
                      "Test CoSP2_call_replacement"
         ),
-        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nD Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt",
+        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt.",
                      "Test CoSP2_call_replacement_and_context_opt"
         ),
         TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(false,.*?,true,true,false,false\)",
@@ -449,9 +449,53 @@ const cosp2_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?X = \(\(top\(getfield\)\)\(SparseAccelerator,:SpAdd\)\)\(2,X.*?,-1,X2.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?D Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991\nNumber of iterations = 25(.|\n)*?End accelerated",
+        TestPattern(r"New AST:(.|\n)*?X sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End accelerated",
                      "Test accelerated"
         ),
+        exception_pattern
+    ]
+)
+
+const lbfgs_test1 = Test(
+    "lbfgs-test1",
+    "lbfgs.jl covtype.mtx",
+    [
+        TestPattern(r"Original L-BFGS:      32 iterations f = 0.00000000004134",
+                     "Test original"
+        ),
+        TestPattern(r"Opt L-BFGS:      32 iterations f = 0.00000000004134",
+                     "Test optimized version"
+        ),
+        TestPattern(r"Opt_with_reordering L-BFGS:",
+                     "Test Opt_with_reordering"
+        ),
+        TestPattern(r"Accelerated L-BFGS:      32 iterations f = 0.000000000041",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(Xt,true,true,false,false,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(X,true,true,false,false,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Xw = \(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,X.*?,x.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(.*?fknob.*?,.*?reordering_status.*?,Xt,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,:__delimitor__,y,SparseAccelerator.ROW_PERM\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?dfk = -\(\(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,Xt.*?,temp.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?Xw = \(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,X.*?,w.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?dfkp1 = -\(\(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1,Xt.*?,temp.*?,.*?fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(.*?reordering_status.*?,:__delimitor__,x,SparseAccelerator.COL_INV_PERM\)",
+                     "Test accelerated"
+        ),        
         exception_pattern
     ]
 )
@@ -900,6 +944,7 @@ const all_tests = [
     context_test5,
     pagerank_test1,
     cosp2_test1,
+    lbfgs_test1,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,
@@ -939,7 +984,8 @@ const fast_tests = [
     context_test4,
     context_test5,
     pagerank_test1,
-    cosp2_test1
+    cosp2_test1,
+    lbfgs_test1
 ]
 
 # If true, use pcregrep for regular expression match. 
@@ -948,7 +994,7 @@ const fast_tests = [
 const USE_PCREGREP_REGEX_MATCH = true
 
 # Run tests with multiple threads?
-const USE_THREADS = true
+const USE_THREADS = false
 
 function get_julia_ver()
     s, p = open(`$julia_command -v`)

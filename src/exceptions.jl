@@ -49,6 +49,7 @@ end
 
 type UnknownASTDistributivity <: Exception
     ast
+    typ
 end
 
 type UnknownTypeToReorder <: Exception

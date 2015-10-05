@@ -201,7 +201,11 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
 
 void DeleteMatrixKnob(MatrixKnob* mknob)
 {
-    if (mknob != NULL) delete mknob;
+    if (mknob != NULL)
+    {
+        mknob_map.erase(mknob->rowval);
+        delete mknob;
+    }
 }
 
 static bool CheckMatrixKnobConsistency(MatrixKnob *m)
@@ -1082,44 +1086,18 @@ int *GetColInverseReorderingVector(FunctionKnob *fknob, int *len)
     return fknob->reordering_info.col_inverse_perm;
 }
 
-// The first few parameters (numRows to v) represent the source matrix to be reordered. The next few
-// parameters (i1~v1) are the spaces that have been allocated to store the results. 
-// Perm and inversePerm are the spaces that have been allocated for permutation and inverse permutation
-// info; when getPermutation is true, this function computes and stores the info into them; otherwise,
-// they already contain the info, and this function just uses it.
 void ReorderMatrixInplace(int numRows, int numCols, int *colptr, int *rowval, double *nzval, 
                  int *perm, int *inversePerm)
 {
-    double t1, t2, t3, t4, t5;
-#ifdef PERF_TUNE
-    t1 = omp_get_wtime();
-#endif
-
-    CSR *AT = new CSR(numCols, numRows, colptr, rowval, nzval);
-
-#ifdef PERF_TUNE
-    int orig_bw = AT->getBandwidth();
-    t2 = omp_get_wtime();
-#endif
-
-#ifdef PERF_TUNE
-    t3 = omp_get_wtime();
-#endif
-
-    CSR *newAT = new CSR(*AT);
     assert(perm);
     assert(inversePerm);
-    newAT->permuteRowptr(AT, inversePerm);
-    newAT->permuteMain(AT, perm, inversePerm);
+
+    CSR AT(numCols, numRows, colptr, rowval, nzval);
+    CSR newAT(AT);
+
+    newAT.permuteRowptr(&AT, inversePerm);
+    newAT.permuteMain(&AT, perm, inversePerm);
     
-#ifdef PERF_TUNE
-    int rcm_bw = newAT->getBandwidth();
-    t4 = omp_get_wtime();
-#endif
-
-    delete newAT;
-    delete AT;
-
     if (LOG_REORDERING) {
         printf("CSR_ReorderMatrix: perm=%p inversePerm=%p\n", perm, inversePerm);
     }
@@ -1147,70 +1125,24 @@ void ReorderMatrixInplace(int numRows, int numCols, int *colptr, int *rowval, do
                 itr->second, numRows, numCols, colptr, rowval, nzval);
         }
     }
-
-#ifdef PERF_TUNE
-        t5 = omp_get_wtime();
-        double bytes = (double)i[numRows]*12;
-        if (stats) {
-          stats[0] += t5 - t1;
-          stats[1] += t3 - t2;
-          stats[2] += t4 - t3;
-        }
-    
-#if 0
-        printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
-        printf("\tCSR_GetRCMPermutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
-        printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
-        printf("\tBW changed: %d -> %d\n", orig_bw, rcm_bw);
-        fflush(stdout);
-#endif
-
-#endif
 }
 
-
-// The first few parameters (numRows to v) represent the source matrix to be reordered. The next few
-// parameters (i1~v1) are the spaces that have been allocated to store the results. 
-// Perm and inversePerm are the spaces that have been allocated for permutation and inverse permutation
-// info; when getPermutation is true, this function computes and stores the info into them; otherwise,
-// they already contain the info, and this function just uses it.
 void ReorderMatrix(int numRows, int numCols, int *colptr, int *rowval, double *nzval, int *colptr_out, int *rowval_out, double *nzval_out, 
                  int *perm, int *inversePerm)
 {
-    double t1, t2, t3, t4, t5;
-#ifdef PERF_TUNE
-    t1 = omp_get_wtime();
-#endif
-
     // The original and the result array space must be different
     assert(colptr != colptr_out);
     assert(rowval != rowval_out);    
     assert(nzval != nzval_out);
     
-    CSR *AT = new CSR(numCols, numRows, colptr, rowval, nzval);
-
-#ifdef PERF_TUNE
-    int orig_bw = AT->getBandwidth();
-    t2 = omp_get_wtime();
-#endif
-
-#ifdef PERF_TUNE
-    t3 = omp_get_wtime();
-#endif
-
-    CSR *newAT = new CSR(numCols, numRows, colptr_out, rowval_out, nzval_out);
     assert(perm);
     assert(inversePerm);
-    AT->permuteRowptr(newAT, inversePerm);
-    AT->permuteMain(newAT, perm, inversePerm);
     
-#ifdef PERF_TUNE
-    int rcm_bw = newAT->getBandwidth();
-    t4 = omp_get_wtime();
-#endif
+    CSR AT(numCols, numRows, colptr, rowval, nzval);
+    CSR newAT(numCols, numRows, colptr_out, rowval_out, nzval_out);
 
-    delete newAT;
-    delete AT;
+    AT.permuteRowptr(&newAT, inversePerm);
+    AT.permuteMain(&newAT, perm, inversePerm);
 
     if (LOG_REORDERING) {
         printf("CSR_ReorderMatrix: perm=%p inversePerm=%p\n", perm, inversePerm);
@@ -1245,26 +1177,6 @@ void ReorderMatrix(int numRows, int numCols, int *colptr, int *rowval, double *n
                 itr->second, numRows, numCols, colptr_out, rowval_out, nzval_out);
         }
     }
-
-#ifdef PERF_TUNE
-        t5 = omp_get_wtime();
-        double bytes = (double)colptr[numRows]*12;
-        if (stats) {
-          stats[0] += t5 - t1;
-          stats[1] += t3 - t2;
-          stats[2] += t4 - t3;
-        }
-    
-#if 0
-        printf("CSR_ReorderMatrix total: %f sec\n", t5 - t1);
-        printf("\tCSR_GetRCMPermutation: %f sec (%f GB/s)\n", t3 - t2, bytes/(t3 - t2)/1e9);
-        printf("\tCSR_Permute: %f sec (%f GB/s)\n", t4 - t3, bytes/(t4 - t3)/1e9);
-        printf("\tBW changed: %d -> %d\n", orig_bw, rcm_bw);
-        fflush(stdout);
-#endif
-
-#endif
 }
-
 
 /* vim: set tabstop=8 softtabstop=4 sw=4 expandtab: */
