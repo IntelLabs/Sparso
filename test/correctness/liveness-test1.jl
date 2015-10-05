@@ -16,7 +16,7 @@ function dump_liveness(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     func_ast
 end
 
-sparse_pass = OptFramework.optPass(dump_liveness, true)
+sparse_pass = OptFramework.OptPass(dump_liveness, true)
 OptFramework.setOptPasses([sparse_pass])
 #SparseAccelerator.set_debug_level(2)
 
