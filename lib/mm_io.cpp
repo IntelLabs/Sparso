@@ -86,4 +86,10 @@ void load_vector_matrix_market(const char *fileName, double **v, int *m, int *n)
   SpMP::loadVectorMatrixMarket(fileName, v, m, n);
 }
 
+void store_matrix_market(char *file, int m, int n, int *colptr, int *rowval, double *nzval)
+{
+  CSR A(m, n, colptr, rowval, nzval);
+  A.storeMatrixMarket(file);
+}
+
 } // extern "C"

@@ -148,15 +148,28 @@ function gather_context_sensitive_info(
         push!(call_sites.extra.fknob2mknobs[fknob], call_sites.extra.matrix2mknob[M])
     end
 
-    if call_sites.extra.reordering_decider_power < reordering_power
-        call_sites.extra.reordering_decider_fknob = fknob
-        call_sites.extra.reordering_decider_power = reordering_power
-        call_sites.extra.reordering_FAR           = []
-        for arg in reordering_FAR
-            new_arg = replacement_arg(arg, args, ast, symbol_info)
-            assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
-            M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
-            push!(call_sites.extra.reordering_FAR, M)
+    if reorder_enabled && call_sites.extra.reordering_decider_power < reordering_power
+        # The decider should be in a basic block that is an immediate member of
+        # a loop region. That is, it should be contained in the outermost loop, not
+        # in any inner loop, because doing reordering and reverse reordering
+        # in an inner loop seems too expensive.
+        # The decider should not be in the function region either: we want one
+        # reordering of data to impact many loop iterations, not sequential code.
+        region = call_sites.region
+        if typeof(region) == LoopRegion
+            region_immediate_members = region.immediate_members
+            bb                       = call_sites.extra.bb
+            if in(bb.label, region_immediate_members)
+                call_sites.extra.reordering_decider_fknob = fknob
+                call_sites.extra.reordering_decider_power = reordering_power
+                call_sites.extra.reordering_FAR           = []
+                for arg in reordering_FAR
+                    new_arg = replacement_arg(arg, args, ast, symbol_info)
+                    assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
+                    M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
+                    push!(call_sites.extra.reordering_FAR, M)
+                end
+            end
         end
     end
 
@@ -245,6 +258,31 @@ function CS_ADAT_post_replacement(
                                          reordering_power, reordering_FAR)
 end
 
+@doc """ 
+Pre-processing function of SpSquareWithEps_pattern1: check it is X*X',
+and X is symmetric valued. 
+"""
+function SpSquareWithEps_check(
+    ast           :: Expr,
+    call_sites    :: CallSites,
+    fknob_creator :: AbstractString,
+    fknob_deletor :: AbstractString
+)
+    X = ast.args[2]
+    assert(typeof(X) == SymbolNode)
+    assert(typeof(ast.args[3].args[2]) == SymbolNode)
+    if X.name != ast.args[3].args[2].name
+        return false
+    end
+
+    if !haskey(call_sites.extra.matrix_properties, X.name) ||
+        !call_sites.extra.matrix_properties[X.name].is_symmetric
+        return false
+    end
+
+    return true
+end
+
 @doc """
 The following patterns are to match the following source code
     for 
@@ -323,8 +361,8 @@ The above code is transformed into
         dy = cholmod_factor_inverse_divide(R, t2, fknob_cholmod_factor_inverse_divide)
 """
 
-const CS_ADAT_AT_pattern = ExprPattern(
-    "CS_ADAT_AT_pattern",
+const CS_transpose_pattern = ExprPattern(
+    "CS_transpose_pattern",
     (:call, GlobalRef(Main, :ctranspose), SparseMatrixCSC),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -340,7 +378,7 @@ const CS_ADAT_AT_pattern = ExprPattern(
 const CS_ADAT_pattern = ExprPattern(
     "CS_ADAT_pattern",
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
-    (nothing, nothing, nothing, nothing, CS_ADAT_AT_pattern),
+    (nothing, nothing, nothing, nothing, CS_transpose_pattern),
     CS_ADAT_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:ADB)),
      :arg2, :arg3, :arg2),
@@ -693,6 +731,24 @@ const CS_SpMV!_pattern4 = ExprPattern(
     (:arg4, :arg2, :arg5, :arg7) # Put seed (A) at the first
 )
 
+
+
+@doc """ spmatmul_witheps(X, X', eps), X is symmetric => SpSquareWithEps(X, eps) """
+const SpSquareWithEps_pattern1 = ExprPattern(
+    "SpSquareWithEps_pattern1",
+    (:call,   GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC,      Number),
+    (nothing, nothing,                            nothing,         CS_transpose_pattern, nothing),
+    SpSquareWithEps_check,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpSquareWithEps)),
+     :arg2, :arg4),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:arg2,),
+    0,
+    ()
+)
+
 @doc """" Patterns that will actually transform the code. """
 CS_transformation_patterns = [
     CS_ADAT_pattern,
@@ -710,6 +766,7 @@ CS_transformation_patterns = [
     CS_SpMV!_pattern2,
     # CS_SpMV!_pattern3, # Do not handle x = A * x case for now
     # CS_SpMV!_pattern4] # Do not handle y = A * x + y case for now
+    SpSquareWithEps_pattern1
 ]
 
 @doc """

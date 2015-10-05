@@ -1,6 +1,8 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+
 function spmatmul_witheps{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}, eps;
                          sortindices::Symbol = :sortcols)
     mA, nA = size(A)
@@ -45,7 +47,7 @@ function spmatmul_witheps{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{T
             idx = colptrC[i]
             for vp in colptrC[i]:(ip - 1)
                 col = rowvalC[vp]
-                if col == i || x[col] > eps
+                if col == i || abs(x[col]) > eps
                   nzvalC[idx] = x[col]
                   rowvalC[idx] = col
                   idx += 1
@@ -65,6 +67,7 @@ function spmatmul_witheps{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{T
     return C
 end
 
+@doc """ Using Gershgorin disc to estimate the bounds of eigen value. """
 function gershgorin(A :: SparseMatrixCSC)
   hsize = size(A, 1)
   eMin = 10000
@@ -89,6 +92,11 @@ function gershgorin(A :: SparseMatrixCSC)
 end
 
 function CoSP2_ref(X)
+  set_matrix_property(Dict(
+      :S => SA_SYMM_VALUED, 
+    )
+  )
+
   m = size(X, 1)
   occ = m/2
   idemTol = 1e-14
@@ -104,7 +112,7 @@ function CoSP2_ref(X)
   iter = 0
   trXOLD = 0
 
-  t0 = time()
+  total_time = -time()
   spgemm_time = 0
   spadd_time = 0
 
@@ -118,7 +126,6 @@ function CoSP2_ref(X)
 
     trX2 = trace(X2)
     trXOLD = trX
-    tempX = X
 
     limDiff = abs(trX2 - occ) - abs(2*trX - trX2 - occ)
     if limDiff > idemTol
@@ -150,9 +157,11 @@ function CoSP2_ref(X)
 
   X = 2*X
 
-  println("D Sparsity AAN = $(sum(X)), fraction = $(sum(X)/(m*m)) avg = $(sum(X)/m), max = $(maximum(X))")
+  total_time += time()
+
+  println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("Total time $(time() - t0), SpGEMM time $(spgemm_time), SpADD time $(spadd_time)")
+  println("Total time $total_time, SpGEMM time $spgemm_time, SpADD time $spadd_time")
 end
 
 function CoSP2_call_replacement(X)
@@ -171,7 +180,7 @@ function CoSP2_call_replacement(X)
   iter = 0
   trXOLD = 0
 
-  t0 = time()
+  total_time = -time()
   spgemm_time = 0
   spadd_time = 0
 
@@ -188,7 +197,6 @@ function CoSP2_call_replacement(X)
     # trX2 = trace(X2)
     trX2 = SparseAccelerator.trace(X2)
     trXOLD = trX
-    tempX = X
 
     limDiff = abs(trX2 - occ) - abs(2*trX - trX2 - occ)
     if limDiff > idemTol
@@ -221,9 +229,11 @@ function CoSP2_call_replacement(X)
 
   X = 2*X
 
-  println("D Sparsity AAN = $(sum(X)), fraction = $(sum(X)/(m*m)) avg = $(sum(X)/m), max = $(maximum(X))")
+  total_time += time()
+
+  println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("Total time $(time() - t0), SpGEMM time $(spgemm_time), SpADD time $(spadd_time)")
+  println("Total time $total_time, SpGEMM time $spgemm_time, SpADD time $spadd_time")
 end
 
 function CoSP2_call_replacement_and_context_opt(X)
@@ -242,7 +252,7 @@ function CoSP2_call_replacement_and_context_opt(X)
   iter = 0
   trXOLD = 0
 
-  t0 = time()
+  total_time = -time()
   spgemm_time = 0
   spadd_time = 0
 
@@ -264,7 +274,6 @@ function CoSP2_call_replacement_and_context_opt(X)
     # trX2 = trace(X2)
     trX2 = SparseAccelerator.trace(X2)
     trXOLD = trX
-    tempX = X
 
     limDiff = abs(trX2 - occ) - abs(2*trX - trX2 - occ)
     if limDiff > idemTol
@@ -297,12 +306,14 @@ function CoSP2_call_replacement_and_context_opt(X)
 
   X = 2*X
 
-  println("D Sparsity AAN = $(sum(X)), fraction = $(sum(X)/(m*m)) avg = $(sum(X)/m), max = $(maximum(X))")
+  total_time += time()
+
+  println("X sum = $(sum(X)), max = $(maximum(X))")
   println("Number of iterations = $iter")
-  println("Total time $(time() - t0), SpGEMM time $(spgemm_time), SpADD time $(spadd_time)")
+  println("Total time $total_time, SpGEMM time $spgemm_time, SpADD time $spadd_time")
 end
 
-file_name = "hmatrix.1024.mtx"
+file_name = "hmatrix.512.mtx"
 if length(ARGS) >= 1
   file_name = ARGS[1]
 end
@@ -312,13 +323,26 @@ assert(issym(X))
 
 # currently, something wrong with spmatmul_witheps used in CoSP2_ref.
 # So, ignore the results of CoSP2_ref
+println("\nOriginal:")
 CoSP2_ref(X)
 CoSP2_ref(X)
+println("End original.")
 
-# Expected results: D Sparsity AAN = 12212.785128790038, fraction = 8.088207992441149e-5 avg = 0.9938789981111684, max = 1.2808837088549991
+# Expected results for hmatrix.512.mtx: X sum = 6106.4049873666145, max = 1.280873477930676
 # Number of iterations = 25
+# Expected results for hmatrix.1024.mtx: X sum = 12212.785128790038, max = 1.2808837088549991
+# Number of iterations = 25
+println("\nCoSP2_call_replacement:")
 CoSP2_call_replacement(X)
 CoSP2_call_replacement(X)
+println("End CoSP2_call_replacement.")
 
+println("\nCoSP2_call_replacement_and_context_opt:")
 CoSP2_call_replacement_and_context_opt(X)
 CoSP2_call_replacement_and_context_opt(X)
+println("End CoSP2_call_replacement_and_context_opt.")
+
+println("\nAccelerated:")
+@acc CoSP2_ref(X)
+@acc CoSP2_ref(X)
+println("End accelerated.")

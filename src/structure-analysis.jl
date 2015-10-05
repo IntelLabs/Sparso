@@ -78,7 +78,7 @@ function build_depend_set_from_args(
             # skip GlobalRef
         else
             dprintln(1, 2, typeof(arg), "\n")
-            dump(arg)
+            #dump(arg)
             error("Unknown type")
         end
     end
@@ -113,7 +113,7 @@ function build_dependence(
 
             if typeof(k) != Symbol && typeof(k) != GenSym
                 dprintln(1, 2, k, "\n")
-                dump(k)
+                #dump(k)
                 error("LHS is not symbol")
             end
 
@@ -136,7 +136,7 @@ function build_dependence(
                 @assert(ast.args[2].typ == args_real_types[2])
                 m = ast.args[2].name
                 if ast.args[3].value != :nzval
-                    dump(ast.args[3])
+                    #dump(ast.args[3])
                     if !haskey(depend_sets, m)
                         depend_sets[m] = Set{Sym}()
                     end
@@ -162,7 +162,7 @@ function build_dependence(
         elseif in(ast.head, [:gotoifnot, :return])
             # skip
         else
-            dump(ast)
+            #dump(ast)
             error("Unhandled expr type")
         end
     end
@@ -174,8 +174,9 @@ end
 This function is called by analysis passes (ASTWalker) 
 to build an dependance map for symbols
 """
-function build_dependence(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
-    return build_dependence(ast, call_sites, 1)
+function build_dependence_cb(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
+    build_dependence(ast, call_sites, 1)
+    return nothing
 end
 
 
@@ -386,7 +387,7 @@ function find_properties_of_matrices(
         if typeof(expr) != Expr
             continue
         end
-        CompilerTools.AstWalker.AstWalk(expr, build_dependence, call_sites)
+        CompilerTools.AstWalker.AstWalk(expr, build_dependence_cb, call_sites)
     end
 
     dprintln(1, 0, "\nStructure proxies:")
