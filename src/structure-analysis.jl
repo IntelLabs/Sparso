@@ -174,8 +174,9 @@ end
 This function is called by analysis passes (ASTWalker) 
 to build an dependance map for symbols
 """
-function build_dependence(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
-    return build_dependence(ast, call_sites, 1)
+function build_dependence_cb(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
+    build_dependence(ast, call_sites, 1)
+    return nothing
 end
 
 
@@ -386,7 +387,7 @@ function find_properties_of_matrices(
         if typeof(expr) != Expr
             continue
         end
-        CompilerTools.AstWalker.AstWalk(expr, build_dependence, call_sites)
+        CompilerTools.AstWalker.AstWalk(expr, build_dependence_cb, call_sites)
     end
 
     dprintln(1, 0, "\nStructure proxies:")
