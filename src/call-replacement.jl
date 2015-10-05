@@ -175,6 +175,20 @@ const number_times_matrix_vector_pattern = ExprPattern(
     ()
 )
 
+const number_times_matrix_pattern = ExprPattern(
+    "number_times_matrix_pattern",
+    (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:NO_CHANGE,),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 const number_times_vector_pattern = ExprPattern(
     "number_times_vector_pattern",
     (:call, GlobalRef(Main, :*), Number, Vector),
@@ -630,6 +644,43 @@ const element_wise_divide_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ Main.trace(A) => SparseAccelerator.trace(A) """
+const trace_pattern1 = ExprPattern(
+    "trace_pattern1",
+    (:call, GlobalRef(Main, :trace), SparseMatrixCSC),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:trace)),
+     :arg2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """
+a * A - B => SpAdd(a, A, -1, B)
+TODO: make the pattern more general to cover cases like a * A +- b * B. This 
+requires a pattern to handle more than one shape (e.g. b = 1 and b != 1 cases,
+and + and - cases)
+"""
+const SpAdd_pattern1 = ExprPattern(
+    "SpAdd_pattern1",
+    (:call, GlobalRef(Main, :-), SparseMatrixCSC{Float64, Int32}, SparseMatrixCSC{Float64, Int32}),
+    (nothing, nothing,           number_times_matrix_pattern, nothing),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpAdd)),
+     :aarg22, :aarg23, -1, :arg3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
 expr_patterns = [
     dot_pattern1,
     norm_pattern1,
@@ -656,7 +707,9 @@ expr_patterns = [
     WAXPB!_pattern1,
     WAXPB!_pattern2,
     element_wise_multiply_pattern1,
-    element_wise_divide_pattern1
+    element_wise_divide_pattern1,
+    trace_pattern1,
+    SpAdd_pattern1
     #WAXPBY!_pattern,
 ]
 

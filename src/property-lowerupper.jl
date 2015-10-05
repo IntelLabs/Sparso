@@ -206,8 +206,8 @@ type LowerUpperProperty <: MatrixProperty
         A = ast.args[2]
         dia = call_sites.extra.local_map[:SA_DIAGONAL] 
         print("****************")
-        dump(A)
-        dump(dia)
+        #dump(A)
+        #dump(dia)
         return in(A, dia)
     end
 
@@ -244,7 +244,7 @@ type LowerUpperProperty <: MatrixProperty
 
     const CS_apply_type_pattern = ExprPattern(
         "CS_apply_type_pattern",
-        (:call, TypedExprNode(Function, :call, TopNode(:apply_type)), SparseMatrixCSC),
+        (:call, Expr(:call, TopNode(:apply_type), Any, Any, Any), SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         CS_apply_type_check,
         (:NO_CHANGE, ),

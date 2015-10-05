@@ -425,9 +425,9 @@ function entry(func_ref :: GlobalRef, func_ast :: Expr, func_arg_types :: Tuple)
         try
             Libc.flush_cstdio()
             flush(STDOUT)
-            dprintln(1, 0, "Exception! Sparse Accelerator skips optimizing the call.")
-            dprintln(1, 1, ex)
-            dprintln(1, 0, "********************************************************************************")
+            dprintln(256, 0, "Exception! Sparse Accelerator skips optimizing the call.")
+            dprintln(256, 1, ex)
+            dprintln(256, 0, "********************************************************************************")
             Libc.flush_cstdio()
             flush(STDOUT)
         catch

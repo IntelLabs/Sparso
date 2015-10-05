@@ -49,14 +49,15 @@ end
 function permutation_color_to_str(
     color :: Int
 )
-    color == NO_PERM ? "colorless " :
+    color == NOT_PERM_YET ? "colorless " :
                      color == ROW_PERM ? "Pr " :
                      color == ROW_INV_PERM ? "Pr' " :
                      color == COL_PERM ? "Pc " :
                      color == COL_INV_PERM ? "Pc' " :
+                     color == NEVER_PERM ? "alwaysColorless " :
                      "InvalidColor "
 end
-                     
+
 function show_inter_dependence_graph_vertex(
     vertex       :: InterDependenceGraphVertex,
     vertex2index :: Dict{InterDependenceGraphVertex, Int},
@@ -79,9 +80,7 @@ function show_inter_dependence_graph_vertex(
     end
 end
 
-function show_inter_dependence_graph(
-    symbol_info :: Sym2TypeMap, 
-    liveness    :: Liveness,
+function sort_inter_dependence_graph_vertices(
     graph       :: InterDependenceGraph
 )
     vertex2index = Dict{InterDependenceGraphVertex, Int}()
@@ -94,7 +93,15 @@ function show_inter_dependence_graph(
         vertex2index[vertex] = i
         i                    = i + 1
     end
+    return vertex2index
+end
 
+function show_inter_dependence_graph(
+    symbol_info :: Sym2TypeMap, 
+    liveness    :: Liveness,
+    graph       :: InterDependenceGraph
+)
+    vertex2index = sort_inter_dependence_graph_vertices(graph)
     println(io_buffer, "Seed = ", graph.seed)
     for (symexpr, vertex) in graph.rows
         show_inter_dependence_graph_vertex(vertex, vertex2index, symbol_info, liveness)
