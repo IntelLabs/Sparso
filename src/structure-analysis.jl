@@ -176,7 +176,7 @@ to build an dependance map for symbols
 """
 function build_dependence_cb(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
     build_dependence(ast, call_sites, 1)
-    return nothing
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 
