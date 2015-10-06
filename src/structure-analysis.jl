@@ -131,6 +131,11 @@ function build_dependence(
             # this is not direct type of args
             args_real_types = expr_skeleton(ast, symbol_info)[2:end]
 
+            # a quick hack for cholfact_int32 call
+            if func_name == "cholfact_int32"
+                return ret_set
+            end
+
             # a quick hack for setfield! call
             if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
                 @assert(ast.args[2].typ == args_real_types[2])
@@ -151,8 +156,8 @@ function build_dependence(
             # an arg depends on all other args (including itself?) if it's an ouput
             func_desc = look_for_function_description(m, func_name, args_real_types[2:end])
             if func_desc != nothing
-                for o in func_desc.output
-                    k = ast.args[o]
+                for out in func_desc.output
+                    k = ast.args[out]
                     if !haskey(depend_sets, k)
                     #    depend_sets[k] = Set{Sym}() 
                     end
@@ -200,6 +205,24 @@ function dprint_property_proxies(
                     v.upper_of)
     end
 end
+
+@doc """
+Print out a property map.
+"""
+function print_property_map(
+    level       :: Int,
+    pm          :: Dict,
+    depend_map  :: Dict
+)
+    for (k, v) in pm
+        if depend_map != nothing && haskey(depend_map, k)
+            dprintln(1, level, v, "\t", k, "\t", set_to_str(depend_map[k]))
+        else
+            dprintln(1, level, v, "\t", k)
+        end
+    end
+end
+
 
 @doc """
 Collect predefined maxtric property accoding from set_matrix_property statements
@@ -397,7 +420,7 @@ function find_properties_of_matrices(
         ConstantStructureProperty(),
         SymmetricValueProperty(),
         SymmetricStructureProperty(),
-        #LowerUpperProperty()
+        LowerUpperProperty()
     ]
 
     dprintln(1, 0, "\nProperty anylsis passes:")

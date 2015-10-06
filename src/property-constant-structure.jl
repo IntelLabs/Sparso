@@ -4,23 +4,6 @@ type ConstantStructureProperty <: MatrixProperty
     @doc """ set_property_for method"""
     set_property_for    :: Function
 
-    @doc """
-    Print out a property map.
-    """
-    function print_property_map(
-        level       :: Int,
-        pm          :: Dict,
-        depend_map  :: Dict
-    )
-        for (k, v) in pm
-            if haskey(depend_map, k)
-                dprintln(1, level, v, "\t", k, "\t", set_to_str(depend_map[k]))
-            else
-                dprintln(1, level, v, "\t", k)
-            end
-        end
-    end
-
     @doc """ 
     Figure out the constant_structured property of all the matrices in a given region.
     """

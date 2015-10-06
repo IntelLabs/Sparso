@@ -20,7 +20,7 @@ function foo()
 
         B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
         C = tril(A)
-        D  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
+        D  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A))*triu(A))
         E = C
         F = D
     end
