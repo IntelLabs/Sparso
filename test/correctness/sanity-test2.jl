@@ -11,7 +11,7 @@ function foo(A, x)
     A*x
 end
 
-pass = OptFramework.OptPass(do_nothing, true)
+pass = OptFramework.optPass(do_nothing, true)
 OptFramework.setOptPasses([pass])
 
 m = 10
