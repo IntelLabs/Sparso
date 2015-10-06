@@ -68,7 +68,7 @@ function set_options(args...)
         if arg == SA_ENABLE
             if !sparse_acc_enabled
                 # Insert sparse accelerator as 1 pass into the optimization framework
-                sparse_accelerator_pass = OptFramework.OptPass(SparseAccelerator.entry, OptFramework.PASS_UNOPTTYPED)
+                sparse_accelerator_pass = OptFramework.optPass(SparseAccelerator.entry, true)
                 #OptFramework.setOptPasses([sparse_accelerator_pass])
                 CompilerTools.OptFramework.addOptPass(sparse_accelerator_pass)
             end
@@ -362,12 +362,9 @@ function AST_transformation(
 end
 
 @doc """ 
-Entry point of SparseAccelerator. 
+Entry of SparseAccelerator. 
 """
-function entry(func_ref :: GlobalRef, func_ast :: Expr, func_arg_types :: Tuple)
-    assert(func_ast.head == :lambda)
-    func_args = func_ast.args[1]
-
+function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     old_ast = copy(func_ast)
     new_ast = nothing
     try

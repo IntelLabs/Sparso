@@ -958,7 +958,7 @@ function gather_knobs(
     assert(!call_sites.extra.ast_may_change)
 
     if typeof(ast) != Expr
-        return CompilerTools.AstWalker.ASTWALK_RECURSE
+        return
     end
 
     if haskey(call_sites.extra.expr2fknob, ast)
@@ -971,7 +971,7 @@ function gather_knobs(
         site = CallSite(ast)
         push!(call_sites.sites, site)
     end
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return nothing
 end
 
 @doc """ A handler to visit_expressions(). """
@@ -1101,7 +1101,7 @@ function propagate_matrix_info(
             create_propagate_matrix_info(mknob1, mknob2, bb, stmt_idx, call_sites)
         end
     end
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return nothing
 end
 
 @doc """ A handler to visit_expressions(). """

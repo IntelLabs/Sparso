@@ -1097,7 +1097,7 @@ end
 
 total = length(tests)
 succ = 0
-
+passed = Dict()
 if USE_THREADS == false
     for test in tests
         print("Testing ", test.name)
@@ -1105,8 +1105,10 @@ if USE_THREADS == false
         if s
             succ = succ + 1
             println(": Pass")
+	    passed[test.name] = true
         else
             println(": FAIL. See ", test.name * ".log")
+	    passed[test.name] = false
         end
     end
 else
@@ -1119,7 +1121,6 @@ else
     end
     finished = []
     running  = []
-    passed   =  Dict()
     while length(finished) < total
         for t in tasks
             if istaskdone(t)
@@ -1148,11 +1149,12 @@ else
         sleep(0.5)
     end
 
-    # Print out the results in a fixed order for easier checking
-    println("\nFinal report:")
-    for test in tests
-        println(test.name, ": ", passed[test.name] ? "Pass" : "FAIL. See $(test.name).log")
-    end
+end
+
+# Print out the results in a fixed order for easier checking
+println("\nFinal report:")
+for test in tests
+    println(test.name, ": ", passed[test.name] ? "Pass" : "FAIL. See $(test.name).log")
 end
 
 println("Total: ", total)
