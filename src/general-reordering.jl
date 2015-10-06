@@ -358,7 +358,7 @@ function build_inter_dependence_graph_for_call(
     end
 
     if function_name == ""
-        throw(UnresolvedFunction(head, args[1]))
+        throw(UnresolvedFunction(ast.head, args[1]))
     end
 
     graph = call_sites.extra.inter_dependence_graph
@@ -404,6 +404,7 @@ function build_inter_dependence_graph(
         call_sites.extra.decider_bb       = call_sites.extra.bb
         call_sites.extra.decider_stmt_idx = call_sites.extra.stmt_idx
     end
+
 
     local asttyp = typeof(ast)
     if asttyp <: Tuple
@@ -454,7 +455,8 @@ function build_inter_dependence_graph(
     elseif asttyp == SymbolNode  || asttyp == Symbol   || asttyp == GenSym ||
            asttyp == LabelNode   || asttyp == GotoNode || asttyp == LineNumberNode ||
            asttyp == ASCIIString || asttyp == LambdaStaticData ||
-           asttyp <: Number      || asttyp == NewvarNode || asttyp == GlobalRef
+           asttyp <: Number      || asttyp == NewvarNode || asttyp == GlobalRef ||
+	   asttyp == QuoteNode
         return nothing
     else
         throw(UnknownASTDistributivity(ast, typeof(ast)))
