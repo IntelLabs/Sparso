@@ -939,11 +939,11 @@ function match_replace_an_expr_pattern(
         for pattern in patterns
             success = match_replace(pattern, skeleton, ast, call_sites)
             if success
-                return CompilerTools.AstWalker.ASTWALK_RECURSE
+                return nothing
             end
         end
     end
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return nothing
 end
 
 @doc """

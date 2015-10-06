@@ -195,7 +195,7 @@ function discover_a_SpMV(ast, call_sites :: CallSites, top_level_number, is_top_
             end
         end
     end
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return nothing
 end
 
 @doc """
