@@ -2,8 +2,7 @@ Final report:
 sanity-test1: Pass
 sanity-test2: Pass
 sanity-test3: Pass
-spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
-    Need to fix the library to handle SpMV!(x, A, x, ...) case
+spmv-sanity-test1: Pass
 context-test1: Pass
 context-test2: Pass
 context-test2-without-reordering: Pass
@@ -13,6 +12,7 @@ context-test4: Pass
 context-test5: Pass
 pagerank-test1: Pass
 cosp2-test1: Pass
+lbfgs-test1: Pass
 liveness-test1: Pass
 liveness-test2: Pass
 call-replacement-test1: Pass
@@ -44,6 +44,6 @@ symmetric-value-test2: FAIL. See symmetric-value-test2.log
 symmetric-value-test3: Pass
 symmetric-value-test4: Pass
 lower-upper-test1: FAIL. See lower-upper-test1.log
-Total: 41
-Pass : 36
-Fail : 5
+Total: 42
+Pass : 38
+Fail : 4
