@@ -922,7 +922,19 @@ const lower_upper_test1 = Test(
     "lower-upper-test1",
     "lower-upper-test1.jl",
     [
-        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(r"Func Upper/Lower matrix discovered:.*\n[\s]*D is upper of A.*\n[\s]*GenSym\(0\) is upper of A",
+                     "Test D and GenSym(0) are upper part of A."
+        ),
+        exception_pattern
+    ]
+)
+
+
+const lower_upper_test2 = Test(
+    "lower-upper-test2",
+    "lower-upper-test2.jl",
+    [
+        TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*C is lower of A.*\n[\s]*D is upper of A.*\n[\s]*E is lower of A.*\n[\s]*F is upper of A.*\n[\s]*L is lower of A",
                      "Test ipm-ref that A B are recognized as symmetric in structure."
         ),
         exception_pattern
@@ -974,6 +986,7 @@ const all_tests = [
     symmetric_value_test4,
 #    symmetric_structure_test1,
     lower_upper_test1,
+    lower_upper_test2,
 ]
 
 const fast_tests = [

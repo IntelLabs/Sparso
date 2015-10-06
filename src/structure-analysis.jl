@@ -132,9 +132,9 @@ function build_dependence(
             args_real_types = expr_skeleton(ast, symbol_info)[2:end]
 
             # a quick hack for cholfact_int32 call
-            if func_name == "cholfact_int32"
-                return ret_set
-            end
+            #if func_name == "cholfact_int32"
+            #    return ret_set
+            #end
 
             # a quick hack for setfield! call
             if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
