@@ -206,6 +206,12 @@ function resolve_call_names(call_args :: Vector)
         else
             function_name = module_or_function_name(call_args[1].name)
         end
+    elseif  isa(call_args[1], TopNode) && call_args[1] == TopNode(:setfield!)
+            function_name = "setfield!"
+    elseif  isa(call_args[1], TopNode) && call_args[1] == TopNode(:typeof)
+            function_name = "typeof"
+    elseif  isa(call_args[1], TopNode) && call_args[1] == TopNode(:fieldtype)
+            function_name = "fieldtype"
     elseif isa(call_args[1], Expr) && call_args[1].head == :call
         # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
         return resolve_call_names(call_args[1].args)

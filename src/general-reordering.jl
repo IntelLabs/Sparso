@@ -358,7 +358,7 @@ function build_inter_dependence_graph_for_call(
     end
 
     if function_name == ""
-        throw(UnresolvedFunction(head, args[1]))
+        throw(UnresolvedFunction(ast.head, args[1]))
     end
 
     graph = call_sites.extra.inter_dependence_graph
@@ -404,6 +404,7 @@ function build_inter_dependence_graph(
         call_sites.extra.decider_bb       = call_sites.extra.bb
         call_sites.extra.decider_stmt_idx = call_sites.extra.stmt_idx
     end
+
 
     local asttyp = typeof(ast)
     if asttyp <: Tuple
@@ -454,7 +455,8 @@ function build_inter_dependence_graph(
     elseif asttyp == SymbolNode  || asttyp == Symbol   || asttyp == GenSym ||
            asttyp == LabelNode   || asttyp == GotoNode || asttyp == LineNumberNode ||
            asttyp == ASCIIString || asttyp == LambdaStaticData ||
-           asttyp <: Number      || asttyp == NewvarNode || asttyp == GlobalRef
+           asttyp <: Number      || asttyp == NewvarNode || asttyp == GlobalRef ||
+	   asttyp == QuoteNode
         return nothing
     else
         throw(UnknownASTDistributivity(ast, typeof(ast)))
@@ -471,9 +473,10 @@ Color the inter-dependence graph, starting with given vertex, which has been
 colored itself.
 """
 function color_inter_dependence_graph(
-    graph   :: InterDependenceGraph,
-    from    :: InterDependenceGraphVertex,
-    visited :: Set{InterDependenceGraphVertex}
+    liveness :: Liveness, 
+    graph    :: InterDependenceGraph,
+    from     :: InterDependenceGraphVertex,
+    visited  :: Set{InterDependenceGraphVertex}
 )
     if in(from, visited)
         return
@@ -501,7 +504,9 @@ function color_inter_dependence_graph(
                              "does not support. However, its neighbour, vertex ",
                              vertex2index[from], " requires its color to be ",
                              permutation_color_to_str(color), ".")
-                    throw(ConflictPermutation(from, vertex, color))                    
+                    dprintln(1, 0, "\nInter-dependence graph:")
+                    dprintln(1, 1, liveness, graph)
+                    throw(ConflictPermutation(from, vertex, color))
                 else
                     dprintln(1, 0, "\nPermutation constraints found: ",
                              permutation_color_to_str(vertex.color),
@@ -512,7 +517,7 @@ function color_inter_dependence_graph(
         else
             vertex.color = color
         end
-        color_inter_dependence_graph(graph, vertex, visited)
+        color_inter_dependence_graph(liveness, graph, vertex, visited)
     end
 end
 
@@ -520,7 +525,8 @@ end
 Color the inter-dependence graph, starting with the seed in it.
 """
 function color_inter_dependence_graph(
-    graph :: InterDependenceGraph
+    liveness :: Liveness, 
+    graph    :: InterDependenceGraph
 )
     seed                      = graph.seed
     seed_rows_vertex          = graph.rows[seed]
@@ -528,8 +534,8 @@ function color_inter_dependence_graph(
     seed_rows_vertex.color    = ROW_PERM
     seed_columns_vertex.color = COL_PERM
     visited                   = Set{InterDependenceGraphVertex}()
-    color_inter_dependence_graph(graph, seed_rows_vertex, visited)
-    color_inter_dependence_graph(graph, seed_columns_vertex, visited)
+    color_inter_dependence_graph(liveness, graph, seed_rows_vertex, visited)
+    color_inter_dependence_graph(liveness, graph, seed_columns_vertex, visited)
 end
 
 @doc """
@@ -733,10 +739,7 @@ function reordering(
         recursive  = false
         vist_expressions(region, cfg, call_sites, recursive, build_inter_dependence_graph)
 
-        dprintln(1, 0, "\nInter-dependence graph:")
-        dprintln(1, 1, liveness, graph)
-
-        color_inter_dependence_graph(graph)
+        color_inter_dependence_graph(liveness, graph)
 
         dprintln(1, 0, "\nColored inter-dependence graph:")
         dprintln(1, 1, liveness, graph)
