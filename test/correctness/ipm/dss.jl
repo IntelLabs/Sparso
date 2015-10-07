@@ -52,4 +52,6 @@ function dss_solve!(handle, rhs::Vector, sol::Vector)
   error = ccall((:dss_solve_real, SparseAccelerator.LIB_PATH), Cint,
                 (Ptr{Void}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cdouble}),
                 handle, &opt, rhs, &nrhs, sol)
+  ccall((:dss_delete, SparseAccelerator.LIB_PATH), Cint,
+        (Ptr{Void}, Ptr{Cint}), handle, &opt)
 end
