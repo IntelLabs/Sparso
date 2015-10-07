@@ -573,6 +573,82 @@ const lbfgs_compute_direction_Desc = FunctionDescription(
     ])
 )
 
+@doc """ A*x """
+const Ac_mul_B_Desc = FunctionDescription(
+    "Main", 
+    "Ac_mul_B",
+    (SparseMatrixCSC, Vector),        # The arguments must be vectors
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (1, 2, COLUMN_ROW_INVERSE)
+    ])
+)
+
+@doc """ min(value, A) """
+const min_Desc = FunctionDescription(
+    "Main", 
+    "min",
+    (Number, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW) ])
+)
+
+@doc """ max(value, A) """
+const max_Desc = FunctionDescription(
+    "Main", 
+    "max",
+    (Number, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW) ])
+)
+
+#The following are made for context-test3 with reordering on. There were
+#call resolution issues. For setfield!, there is also a question how to
+#handle fields (field-sensitive analysis?).
+ 
+#@doc """ typeof """
+#const typeof_Desc = FunctionDescription(
+#    "", 
+#    "typeof",
+#    (Any, ),
+#    UPDATED_NONE,                     # No argument is updated
+#    true,                             # The function is distributive
+#    Set()
+#)
+
+#@doc """ convert """
+#const convert_Desc = FunctionDescription(
+#    "", 
+#    "convert",
+#    (Type{Array{Float64,1}}, Array{Float64,1}),
+#    UPDATED_NONE,                     # No argument is updated
+#    true,                             # The function is distributive
+#    Set([ (0, 2, ROW_ROW) ])
+#)
+
+#@doc """ fieldtype """
+#const fieldtype_Desc = FunctionDescription(
+#    "", 
+#    "fieldtype",
+#    (Type{SparseMatrixCSC{Float64,Int32}}, QuoteNode),
+#    UPDATED_NONE,                     # No argument is updated
+#    true,                             # The function is distributive
+#    Set()
+#)
+
+#@doc """ setfield!(A, nzval) = x """
+#const setfield!_Desc = FunctionDescription(
+#    "", 
+#    "setfield!",
+#    (Type{SparseMatrixCSC{Float64,Int32}}, QuoteNode(:nzval), Array{Float64,1}),
+#    Set(1),
+#    true,                             # The function is distributive
+#    Set([ (1, 3, ROW_ROW) ])
+#)
+
 # Make assignment a special function
 const asignment_Desc = FunctionDescription(
     "", 
@@ -643,6 +719,9 @@ function_descriptions  = [
     bwdTriSolve!1_Desc,
     negative_Desc,
     divide_Desc,
+    Ac_mul_B_Desc,
+    min_Desc,
+    max_Desc,
     asignment_Desc,
     asignment1_Desc,
     lbfgs_compute_direction_Desc

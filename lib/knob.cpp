@@ -28,19 +28,44 @@ struct ReorderingInfo {
     int *col_perm, *col_inverse_perm;
     int col_perm_len;
 
+    bool cost_benefit_analysis_done;
+
     ReorderingInfo() :
         row_perm(NULL), row_inverse_perm(NULL), row_perm_len(0),
-        col_perm(NULL), col_inverse_perm(NULL), col_perm_len(0)
+        col_perm(NULL), col_inverse_perm(NULL), col_perm_len(0),
+        cost_benefit_analysis_done(false)
     { }
 };
 
+static double bw_threshold_to_reorder = 45*1e9;
+    // based on the result in endeavor, needs to be autotuned later
+
+void SetBandwidthThresholdToReorder(double bw)
+{
+    bw_threshold_to_reorder = bw;
+}
+
 // set this true to see important decisions on matrix reordering
-static const bool LOG_REORDERING = false;
+static bool LOG_REORDERING = false;
 // set this true to see if we're doing transposes which is not cheap.
 // we'd like to avoid transpose as much as possible if matrix
 // is symmetric or a transposed version of the matrix is already
 // available in the application context
-static const bool LOG_TRANSPOSE = false;
+static bool LOG_TRANSPOSE = false;
+
+void SetLogLevel(int level)
+{
+    if (level > 0)
+    {
+        LOG_REORDERING = true;
+        LOG_TRANSPOSE = true;
+    }
+    else
+    {
+        LOG_REORDERING = false;
+        LOG_TRANSPOSE = false;
+    }
+}
 
 static double spmp_spmv_time = 0;
 static double spmp_trsv_time = 0;
@@ -539,69 +564,113 @@ void SpMV(
 
     CreateOptimizedRepresentation(mknob, m, n, A_colptr, A_rowval, A_nzval);
 
-    if (fknob->reordering_info.row_inverse_perm == NULL && fknob->is_reordering_decision_maker) {
-        fknob->reordering_info.row_perm = new int[m];
-        fknob->reordering_info.row_inverse_perm = new int[m];
-        fknob->reordering_info.col_perm = new int[n];
-        fknob->reordering_info.col_inverse_perm = new int[n];
+    double current_spmv_time = -omp_get_wtime();
+    mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+    current_spmv_time += omp_get_wtime();
+    spmp_spmv_time += current_spmv_time;
 
+    if (fknob->is_reordering_decision_maker &&
+            !fknob->reordering_info.cost_benefit_analysis_done &&
+            fknob->reordering_info.row_inverse_perm == NULL) {
+
+        fknob->reordering_info.cost_benefit_analysis_done = true;
+
+        double bw = (12.*mknob->A->getNnz() + 8.*(mknob->A->m + mknob->A->n))/current_spmv_time;
         if (LOG_REORDERING) {
-            clog << "SpMV is reordering decision maker. Permute matrix and input vector" << endl;
+            clog << "SpMV: reordering decision maker. BW measured is " << bw/1e9 << " gbps" << endl;
         }
 
-        if (m != n) {
-            CSR AT(n, m, A_colptr, A_rowval, A_nzval);
+        if (bw < bw_threshold_to_reorder) {
+            double old_width_time = -omp_get_wtime();
+            double old_w = mknob->A->getAverageWidth(true);
+            old_width_time += omp_get_wtime();
 
-            double t = omp_get_wtime();
-            bfsBipartite(
-                *mknob->A, AT,
-                fknob->reordering_info.row_perm,
-                fknob->reordering_info.row_inverse_perm,
-                fknob->reordering_info.col_perm,
-                fknob->reordering_info.col_inverse_perm);
+            fknob->reordering_info.row_inverse_perm = MALLOC(int, m);
+            fknob->reordering_info.col_perm = MALLOC(int, n);
+
             if (LOG_REORDERING) {
+                clog << "SpMV: permute matrix and input vector" << endl;
+            }
+
+            if (m != n) {
+                CSR AT(n, m, A_colptr, A_rowval, A_nzval);
+
+                fknob->reordering_info.row_perm = MALLOC(int, m);
+                fknob->reordering_info.col_inverse_perm = MALLOC(int, n);
+
+                double t = omp_get_wtime();
+                bfsBipartite(
+                    *mknob->A, AT,
+                    fknob->reordering_info.row_perm,
+                    fknob->reordering_info.row_inverse_perm,
+                    fknob->reordering_info.col_perm,
+                    fknob->reordering_info.col_inverse_perm);
+                if (LOG_REORDERING) {
+                    t = omp_get_wtime() - t;
+                    clog << "SpMV: matrix is rectangular. bfsBipartite takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9 << " gbps)" << endl;
+                }
+            }
+            else {
+                double t = omp_get_wtime();
+                mknob->A->getBFSPermutation(
+                    fknob->reordering_info.col_perm,
+                    fknob->reordering_info.row_inverse_perm);
+                fknob->reordering_info.row_perm = fknob->reordering_info.col_perm;
+                fknob->reordering_info.col_inverse_perm = fknob->reordering_info.row_inverse_perm;
                 t = omp_get_wtime() - t;
-                clog << "SpMV: matrix is rectangular. bfsBipartite takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9 << " gbps)" << endl;
+                if (LOG_REORDERING) {
+                    clog << "SpMV: matrix is square. bfs takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                }
             }
-        }
-        else {
+
             double t = omp_get_wtime();
-            mknob->A->getBFSPermutation(fknob->reordering_info.col_perm, fknob->reordering_info.row_inverse_perm);
-#pragma omp parallel for
-            for (int i = 0; i < m; i++) {
-                fknob->reordering_info.row_perm[i] = fknob->reordering_info.col_perm[i];
-                fknob->reordering_info.col_inverse_perm[i] = fknob->reordering_info.row_inverse_perm[i];
-            }
-            t = omp_get_wtime() - t;
+
+            CSR *newA = mknob->A->permute(
+                fknob->reordering_info.col_perm,
+                fknob->reordering_info.row_inverse_perm);
+
+            double new_width_time = -omp_get_wtime();
+            double new_w = newA->getAverageWidth();
+            new_width_time += omp_get_wtime();
+
             if (LOG_REORDERING) {
-                clog << "SpMV: matrix is square. bfs takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                printf("SpMV: old_width = %f, new_width = %f, old_width takes %f sec new_width takes %f sec\n", old_w, new_w, old_width_time, new_width_time);
             }
-        }
 
-        double t = omp_get_wtime();
+            if (new_w/old_w < 1.2) {
+                mknob->A = newA;
 
-        mknob->A = mknob->A->permute(
-            fknob->reordering_info.col_perm,
-            fknob->reordering_info.row_inverse_perm);
+                mknob->reordering_info = fknob->reordering_info;
 
-        mknob->reordering_info = fknob->reordering_info;
+                reorderVectorWithInversePerm(
+                    x, fknob->reordering_info.col_inverse_perm, n);
+                if (y && y != x)
+                    reorderVectorWithInversePerm(
+                        y, fknob->reordering_info.row_perm, m);
+                if (w != x)
+                    reorderVectorWithInversePerm(
+                        w, fknob->reordering_info.row_inverse_perm, n);
 
-        reorderVectorWithInversePerm(
-            x, fknob->reordering_info.col_inverse_perm, n);
-        if (y)
-            reorderVectorWithInversePerm(
-                y, fknob->reordering_info.row_perm, m);
+                if (LOG_REORDERING) {
+                    printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
+                    t = omp_get_wtime() - t;
+                    clog << "SpMV: permutation takes " << t << " (" << ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                }
+            }
+            else {
+                if (fknob->reordering_info.row_perm != fknob->reordering_info.col_perm)
+                    FREE(fknob->reordering_info.row_perm);
+                fknob->reordering_info.row_perm = NULL;
+                if (fknob->reordering_info.col_inverse_perm != fknob->reordering_info.row_inverse_perm)
+                    FREE(fknob->reordering_info.col_inverse_perm);
+                fknob->reordering_info.col_inverse_perm = NULL;
+                FREE(fknob->reordering_info.col_perm);
+                FREE(fknob->reordering_info.row_inverse_perm);
 
-        if (LOG_REORDERING) {
-            printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
-            t = omp_get_wtime() - t;
-            clog << "SpMV: permutation takes " << t << " (" << ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                delete newA;
+            }
         }
     }
-
-    spmp_spmv_time -= omp_get_wtime();
-    mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
-    spmp_spmv_time += omp_get_wtime();
 
     knob_spmv_time += omp_get_wtime();
 }
@@ -787,13 +856,18 @@ static void TriangularSolve_(
         fknob->reordering_info.col_perm_len = m->A->n;
         assert(m->A->m == m->A->n);
 
-        if (m->reordering_info.row_perm != fknob->reordering_info.row_perm && fknob->is_reordering_decision_maker) {
+        if (m->reordering_info.row_perm != fknob->reordering_info.row_perm &&
+                !fknob->reordering_info.cost_benefit_analysis_done &&
+                fknob->is_reordering_decision_maker) {
+
             if (LOG_REORDERING) {
                 clog << "TriangularSolve triSolve is reordering decision maker. Permute matrix and input vector" << endl;
             }
             if (LOG_REORDERING) {
                 printf("TriangularSolve: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
             }
+
+            fknob->reordering_info.cost_benefit_analysis_done = true;
 
             m->A = m->A->permute(
                 fknob->reordering_info.col_perm,

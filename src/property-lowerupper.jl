@@ -369,6 +369,8 @@ type LowerUpperProperty <: MatrixProperty
             end
         end
 
+        dprintln(1, 0, "\nLower upper anaylsis:")
+
         for (pname, property_map, CS_propagation_patterns) in 
             [("lower_of", property_lower_map, CS_lower_propagation_patterns),
              ("upper_of", property_upper_map, CS_upper_propagation_patterns)]
