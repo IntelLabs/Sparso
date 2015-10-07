@@ -9,12 +9,45 @@ function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
 
   bytes = maxiter*(nnz(A)*12 + size(A, 1)*3*8)
 
-  t = time()
-
   Ap = zeros(size(A, 1))
+
+  t = time()
 
   for i = 1:maxiter
     Ap = (1-r)*A*p + r
+
+    if i == maxiter
+      err = norm(Ap - p)/norm(p)
+      println("error = $err")
+    end
+
+    temp = Ap
+    Ap = p
+    p = temp
+  end
+
+  t = time() - t
+  println("pagerank takes $t sec ($(bytes/t/1e9) gbps)")
+
+  p
+end
+
+# alternative version that can be faster if we can
+# recognize all non-zeros of A passed to this function 
+# is one so that we can use a special SpMV that doesn't
+# need to access nzval
+function pagerank2(A, p, r, d, maxiter) # p: initial rank, r: damping factor
+  set_matrix_property(Dict(
+    :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED))
+
+  bytes = maxiter*(nnz(A)*12 + size(A, 1)*3*8)
+
+  Ap = zeros(size(A, 1))
+
+  t = time()
+
+  for i = 1:maxiter
+    Ap = (1-r)*A*(p.*d) + r
 
     if i == maxiter
       err = norm(Ap - p)/norm(p)
@@ -111,15 +144,15 @@ function pagerank_call_replacement_and_context_opt(A, p, r, maxiter, do_print) #
   p
 end
 
-A = matrix_market_read(ARGS[1], true, true)
-A = spones(A)
+A0 = matrix_market_read(ARGS[1], true, true)
+A0 = spones(A0)
 
-m = size(A, 1)
+m = size(A0, 1)
 p = repmat([1/m], m)
 r = 0.15
 
-d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
-A = scale(A,1./d)
+d = max(convert(Array{eltype(A0),1}, vec(sum(A0, 2))), 1) # num of neighbors
+A = scale(A0,1./d)
 
 maxiter = 100
 
@@ -129,6 +162,8 @@ println("\nOriginal: ")
 p2 = copy(p)
 x = pagerank(A, p2, r, maxiter)
 println("End original.")
+
+#x = pagerank2(A0, p, r, 1./d, maxiter)
 
 println("\nManual_call_replacement:")
 x = pagerank_call_replacement(A, p, r, maxiter, false)
