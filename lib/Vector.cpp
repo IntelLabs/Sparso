@@ -131,26 +131,6 @@ void pointwiseMultiply_(int n, T *w, const T *x, const T *y)
 
 extern "C" {
 
-void reorderVector(double *v, double *tmp, const int *perm, int len)
-{
-  return SpMP::reorderVector(v, tmp, perm, len);
-}
-
-void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len)
-{
-  return SpMP::reorderVectorWithInversePerm(v, tmp, inversePerm, len);
-}
-
-void reorderVectorInplace(double *v, const int *perm, int len)
-{
-  return SpMP::reorderVector(v, perm, len);
-}
-
-void reorderVectorWithInversePermInplace(double *v, const int *inversePerm, int len)
-{
-  return SpMP::reorderVectorWithInversePerm(v, inversePerm, len);
-}
-
 void waxpby(int n, double *w, double alpha, const double *x, double beta, const double *y)
 {
   waxpby_(n, w, alpha, x, beta, y);
