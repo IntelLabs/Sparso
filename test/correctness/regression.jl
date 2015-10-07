@@ -843,7 +843,7 @@ const set_matrix_property_test5 = Test(
         TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B",
                      "Test ipm-ref that A is recognized as matrics in structure."
         ),
-        TestPattern(r"Loop3 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B\n[\s]*B is upper of C",
+        TestPattern(r"Loop3 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B.*\n[\s]*B is upper of C",
                      "Test ipm-ref that A is recognized as matrics in structure."
         ),
         exception_pattern
@@ -1006,9 +1006,6 @@ const fast_tests = [
 # julia/base/pcre.jl (times it with 10) and retry).
 const USE_PCREGREP_REGEX_MATCH = true
 
-# Run tests with multiple threads?
-const USE_THREADS = false
-
 function get_julia_ver()
     s, p = open(`$julia_command -v`)
     readline(s)
@@ -1111,7 +1108,7 @@ end
 total = length(tests)
 succ = 0
 passed = Dict()
-if USE_THREADS == false
+if nprocs() == 1 # single thread mode
     for test in tests
         print("Testing ", test.name)
         s = run_test(test)
