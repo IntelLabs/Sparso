@@ -1,3 +1,14 @@
+diff --git a/src/CompilerTools.jl b/src/CompilerTools.jl
+index a95a0b2..ec5c6dc 100644
+--- a/src/CompilerTools.jl
++++ b/src/CompilerTools.jl
+@@ -1,4 +1,5 @@
+-VERSION >= v"0.4.0-dev" && __precompile__()
++# disable precompilation to avoid problems caused by julia version drift
++# VERSION >= v"0.4.0-dev" && __precompile__()
+ 
+ module CompilerTools
+ 
 diff --git a/src/liveness.jl b/src/liveness.jl
 index f5c13f2..155f749 100644
 --- a/src/liveness.jl
