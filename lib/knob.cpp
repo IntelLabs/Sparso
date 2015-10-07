@@ -375,7 +375,7 @@ static void CreateOptimizedRepresentation(
     if (needTranspose) {
         m->A = AT->transpose();
         if (LOG_TRANSPOSE) {
-            clog << "Transposing a matrix" << endl;
+            printf("Transposing a matrix\n");
         }
 
 #ifndef NDEBUG
@@ -577,7 +577,7 @@ void SpMV(
 
         double bw = (12.*mknob->A->getNnz() + 8.*(mknob->A->m + mknob->A->n))/current_spmv_time;
         if (LOG_REORDERING) {
-            clog << "SpMV: reordering decision maker. BW measured is " << bw/1e9 << " gbps" << endl;
+            printf("SpMV: reordering decision maker. BW measured is %g gbps\n", bw/1e9);
         }
 
         if (bw < bw_threshold_to_reorder) {
@@ -589,7 +589,7 @@ void SpMV(
             fknob->reordering_info.col_perm = MALLOC(int, n);
 
             if (LOG_REORDERING) {
-                clog << "SpMV: permute matrix and input vector" << endl;
+                printf("SpMV: permute matrix and input vector\n");
             }
 
             if (m != n) {
@@ -607,7 +607,7 @@ void SpMV(
                     fknob->reordering_info.col_inverse_perm);
                 if (LOG_REORDERING) {
                     t = omp_get_wtime() - t;
-                    clog << "SpMV: matrix is rectangular. bfsBipartite takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9 << " gbps)" << endl;
+                    printf("SpMV: matrix is rectangular. bfsBipartite takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9);
                 }
             }
             else {
@@ -619,7 +619,7 @@ void SpMV(
                 fknob->reordering_info.col_inverse_perm = fknob->reordering_info.row_inverse_perm;
                 t = omp_get_wtime() - t;
                 if (LOG_REORDERING) {
-                    clog << "SpMV: matrix is square. bfs takes " << t << " (" << ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                    printf("SpMV: matrix is square. bfs takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9);
                 }
             }
 
@@ -634,7 +634,7 @@ void SpMV(
             new_width_time += omp_get_wtime();
 
             if (LOG_REORDERING) {
-                printf("SpMV: old_width = %f, new_width = %f, old_width takes %f sec new_width takes %f sec\n", old_w, new_w, old_width_time, new_width_time);
+                printf("SpMV: old_width = %g, new_width = %g, old_width takes %g sec new_width takes %g sec\n", old_w, new_w, old_width_time, new_width_time);
             }
 
             if (new_w/old_w < 1.2) {
@@ -654,7 +654,7 @@ void SpMV(
                 if (LOG_REORDERING) {
                     printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
                     t = omp_get_wtime() - t;
-                    clog << "SpMV: permutation takes " << t << " (" << ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9 << " gbps)" << endl;
+                    printf("SpMV: permutation takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9);
                 }
             }
             else {
@@ -798,7 +798,7 @@ static void TriangularSolve_(
             delete LT;
 
             if (LOG_TRANSPOSE) {
-                clog << "Transposing a matrix" << endl;
+                printf("Transposing a matrix\n");
             }
 
             if (m && m->constant_structured) {
@@ -840,7 +840,7 @@ static void TriangularSolve_(
             delete LT;
 
             if (LOG_TRANSPOSE) {
-                clog << "Transposing a matrix" << endl;
+                printf("Transposing a matrix\n");
             }
 
             needToDeleteL = true;
@@ -861,7 +861,7 @@ static void TriangularSolve_(
                 fknob->is_reordering_decision_maker) {
 
             if (LOG_REORDERING) {
-                clog << "TriangularSolve triSolve is reordering decision maker. Permute matrix and input vector" << endl;
+                printf("TriangularSolve triSolve is reordering decision maker. Permute matrix and input vector\n");
             }
             if (LOG_REORDERING) {
                 printf("TriangularSolve: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
@@ -925,6 +925,13 @@ void BackwardTriangularSolve(
         &backwardSolveWithReorderedMatrix);
 }
 
+static bool reuse_inspection = true;
+
+void SetReuseInspection(bool reuse)
+{
+    reuse_inspection = reuse;
+}
+
 void *CholFact(
     int m, int n, int *colptr, int *rowval, double *nzval,
     FunctionKnob *fknob)
@@ -962,7 +969,11 @@ void *CholFact(
         fprintf(stderr, "dss_factor_real returned error code %d\n", error);
     }
 
-    return mknob_A->dss_handle;
+    void *ret= mknob_A->dss_handle;
+    if (!reuse_inspection) {
+        mknob_A->dss_handle = NULL;
+    }
+    return ret;
 }
 
 void CholFactInverseDivide(
@@ -1036,6 +1047,10 @@ void ADB(
         *C_rowval = mknob_C->A->colidx;
         *C_nzval = mknob_C->A->values;
     }
+
+    if (!reuse_inspection) {
+        mknob_C->A = NULL;
+    }
 }
 
 void ILU(
@@ -1083,7 +1098,7 @@ void SpSquareWithEps(
         A = AT.transpose();
 
         if (LOG_TRANSPOSE) {
-            clog << "Transposing a matrix" << endl;
+            printf("Transposing a matrix\n");
         }
     }
 
@@ -1179,7 +1194,7 @@ void ReorderMatrixInplace(int numRows, int numCols, int *colptr, int *rowval, do
     auto itr = mknob_map.find(rowval);
     if (itr != mknob_map.end()) {
         if (LOG_REORDERING) {
-            clog << "CSR_ReorderMatrix: a related matrix knob found. Set its reordering information" << endl;
+            printf("CSR_ReorderMatrix: a related matrix knob found. Set its reordering information\n");
         }
 
         itr->second->reordering_info.row_perm = perm;
@@ -1191,7 +1206,7 @@ void ReorderMatrixInplace(int numRows, int numCols, int *colptr, int *rowval, do
 
         if (itr->second->A) {
             if (LOG_REORDERING) {
-                clog << "CSR_ReorderMatrix: an optimized matrix representation found. Update it." << endl;
+                printf("CSR_ReorderMatrix: an optimized matrix representation found. Update it.\n");
             }
 
             itr->second->A = NULL;
@@ -1225,7 +1240,7 @@ void ReorderMatrix(int numRows, int numCols, int *colptr, int *rowval, double *n
     auto itr = mknob_map.find(rowval);
     if (itr != mknob_map.end()) {
         if (LOG_REORDERING) {
-            clog << "CSR_ReorderMatrix: a related matrix knob found. Set its reordering information" << endl;
+            printf("CSR_ReorderMatrix: a related matrix knob found. Set its reordering information\n");
         }
 
         itr->second->reordering_info.row_perm = perm;
@@ -1243,7 +1258,7 @@ void ReorderMatrix(int numRows, int numCols, int *colptr, int *rowval, double *n
 
         if (itr->second->A) {
             if (LOG_REORDERING) {
-                clog << "CSR_ReorderMatrix: an optimized matrix representation found. Update it." << endl;
+                printf("CSR_ReorderMatrix: an optimized matrix representation found. Update it.\n");
             }
 
             itr->second->A = NULL;
