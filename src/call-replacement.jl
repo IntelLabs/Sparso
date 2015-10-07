@@ -886,34 +886,25 @@ function match_replace(
             end
         end
 
-        dprintln(1, 0, "\n\nAccording to pattern")
-        dprintln(1, 1, pattern)
-        dprintln(1, 0, "replace")
-        dsprintln(1, 1, symbol_info, ast)
+        dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
 
         ast_changed = replace(pattern, ast, symbol_info)
-        
+
+        if ast_changed
+            dprintln(1, 2, "Replaced with ", ast)
+        end
+
         if pattern.post_processing != do_nothing
             if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
                                         pattern.fknob_deletor, pattern.matrices_to_track,
                                         pattern.reordering_power, pattern.reordering_FAR)
                 # AST has already been changed by replace(). However, post 
                 # processing fails. That AST might be wrong. So abort 
-                dprintln(1, 0, "to")
-                dsprintln(1, 1, symbol_info, ast)
-                dprintln(1, 0, "according to pattern but post-processing failed.")
-                dprintln(1, 1, pattern)
+                dprintln(1, 2, "Post-processing failed.")
                 throw(PostPatternReplacementFailure(pattern))
             end
         end
-        
-        if ast_changed
-            dprintln(1, 0, "to")
-            dsprintln(1, 1, symbol_info, ast)
-        else
-            dprintln(1, 0, "No change.")
-        end
-        
+
         return true
     end
     return false
@@ -960,12 +951,6 @@ function replace(
     expr        :: Expr,
     symbol_info :: Sym2TypeMap
 )
-    dprintln(1, 0, "\n\nAccording to pattern")
-    dprintln(1, 1, pattern)
-    dprintln(1, 0, "replace")
-    dsprintln(1, 1, symbol_info, prev_expr)
-    dsprintln(1, 1, symbol_info, expr)
-
     # Replace prev_expr with the f!
     result         = copy(expr.args[1])
     f              = copy(prev_expr.args[2].args)
@@ -981,10 +966,8 @@ function replace(
     arg = copy(expr.args[1])
     expr.args[1] = expr.args[2]
     expr.args[2] = arg
-    
-    dprintln(1, 0, "to")
-    dsprintln(1, 1, symbol_info, prev_expr)
-    dsprintln(1, 1, symbol_info, expr)
+
+    return true
 end
 
 @doc """
@@ -1017,7 +1000,18 @@ function match_replace_an_in_place_update_pattern(
         f_skeleton = expr_skeleton(prev_expr.args[2], symbol_info)
         for pattern in in_place_update_patterns
             if match_skeletons(f_skeleton, pattern.f_skeleton)
-                replace(pattern, prev_expr, expr, symbol_info)
+                dprintln(1, 1, "Matched ", pattern.name, " with: ")
+                dprintln(1, 2, prev_expr)
+                dprintln(1, 2, expr)
+
+                ast_changed = replace(pattern, prev_expr, expr, symbol_info)
+
+                if ast_changed
+                    dprintln(1, 2, "Replaced with:")
+                    dprintln(1, 3, prev_expr)
+                    dprintln(1, 3, expr)
+                end
+
                 return true
             end
         end
@@ -1034,6 +1028,8 @@ function replace_calls(
     symbol_info :: Sym2TypeMap, 
     cfg         :: CFG
 )
+    dprintln(1, 0, "\nReplacing sparse matrix function calls:")
+
     call_sites  = CallSites(Set{CallSite}(), FunctionRegion(func_ast), symbol_info, 
                             expr_patterns, Vector{Action}(), nothing)
     for (bb_idx, bb) in cfg.basic_blocks

@@ -1132,6 +1132,7 @@ function context_sensitive_transformation(
     # a pattern containing a fknob. That is rather problematic.
     # Therefore, we'd better walk the AST twice. After the AST is stablized after
     # the first walk, the second walk can add the context info.
+    dprintln(1, 0, "\nContext-sensitive transformation:")
     recursive      = true
     ast_may_change = true
     call_sites = CallSites(Set{CallSite}(), region, symbol_info,

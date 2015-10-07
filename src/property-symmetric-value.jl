@@ -425,9 +425,11 @@ type SymmetricValueProperty <: MatrixProperty
         end
 
 
-        dprintln(1, 1, "\nBefore symmetric anaylsis:")
+        dprintln(1, 0, "\nBefore symmetric value anaylsis, property map:")
         print_property_map(1, property_map, depend_map)
 
+
+        dprintln(1, 0, "\nSymmetric value anaylsis:")
 
         # ctx_args is attached to call_sites so that
         # pattern functions can pass back their results
@@ -456,7 +458,8 @@ type SymmetricValueProperty <: MatrixProperty
             cnt = cnt + 1
         end
 
-        dprintln(1, 1, "\n", cnt, " iterations.\nAfter symmetric anaylsis:")
+        dprintln(1, 1, "\n", cnt, " iterations.")
+        dprintln(1, 0, "\nAfter symmetric value anaylsis, property map:")
         print_property_map(1, property_map, depend_map)
 
         # copy back result

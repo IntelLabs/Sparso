@@ -400,7 +400,7 @@ function find_properties_of_matrices(
         #LowerUpperProperty()
     ]
 
-    dprintln(1, 0, "\nProperty anylsis passes:")
+    dprintln(1, 0, "\nProperty analysis passes:")
     for one_property in all_structure_properties
         one_property.set_property_for(structure_proxies, depend_map, region, liveness, symbol_info, cfg)
     end
