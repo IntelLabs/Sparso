@@ -649,7 +649,7 @@ void SpMV(
                         y, fknob->reordering_info.row_perm, m);
                 if (w != x)
                     reorderVectorWithInversePerm(
-                        w, fknob->reordering_info.row_inverse_perm, n);
+                        w, fknob->reordering_info.row_inverse_perm, m);
 
                 if (LOG_REORDERING) {
                     printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
