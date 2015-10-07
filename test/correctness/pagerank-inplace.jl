@@ -14,9 +14,9 @@ function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
   Ap = zeros(size(A, 1))
 
   for i = 1:maxiter
-    A_mul_B!(1 - r, A, p, 0, Ap)
-    Ap = Ap + r
-    #Ap = (1-r)*A*p + r
+    #A_mul_B!(1 - r, A, p, 0, Ap)
+    #Ap = Ap + r
+    Ap = (1-r)*A*p + r
 
     if i == maxiter
       err = norm(Ap - p)/norm(p)
