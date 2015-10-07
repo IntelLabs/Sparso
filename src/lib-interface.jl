@@ -1322,3 +1322,7 @@ end
 function set_knob_log_level(level)
   ccall((:SetLogLevel, LIB_PATH), Void, (Cint,), level)
 end
+
+function set_reuse_inspection(reuse)
+  ccall((:SetReuseInspection, LIB_PATH), Void, (Bool,), reuse)
+end
