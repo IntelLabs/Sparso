@@ -257,7 +257,7 @@ const context_test3 = Test(
 #        TestPattern(r"New AST:(.|\n)*?Rd = .*\(SparseAccelerator,:SpMV\)\)\(1,__AT__,y,1,s-p,fknob_spmv.*\)",
 #                     "Test call replacement. Currently cannot match as we need to handle AT specially."
 #        ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator,:SpMV!\)\)\(Rp,1,A.*?,x.*?,-1,b.*?,0,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Rp = .*?\(SparseAccelerator,:SpMV\)\)\(1,A.*?,x.*?,-1,b.*?,0,.*?fknob.*?\)",
                      "Test call replacement."
         ),
         TestPattern(r"New AST:(.|\n)*?Rc = .*?SparseAccelerator,:element_wise_multiply\)\)\(x.*?,s.*?\)",
@@ -405,7 +405,7 @@ const pagerank_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test pagerank with reordering"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(\(top\(getfield\)\)\(SparseAccelerator,:SpMV!\)\)\(Ap,1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,##fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Ap = \(\(top\(getfield\)\)\(SparseAccelerator,:SpMV\)\)\(1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,##fknob.*?\)",
                      "Test pagerank with reordering"
         ),
         TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,p,SparseAccelerator.ROW_PERM\)",
@@ -843,7 +843,7 @@ const set_matrix_property_test5 = Test(
         TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B",
                      "Test ipm-ref that A is recognized as matrics in structure."
         ),
-        TestPattern(r"Loop3 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B\n[\s]*B is upper of C",
+        TestPattern(r"Loop3 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B.*\n[\s]*B is upper of C",
                      "Test ipm-ref that A is recognized as matrics in structure."
         ),
         exception_pattern
@@ -922,7 +922,19 @@ const lower_upper_test1 = Test(
     "lower-upper-test1",
     "lower-upper-test1.jl",
     [
-        TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+        TestPattern(r"Func Upper/Lower matrix discovered:.*\n[\s]*D is upper of A.*\n[\s]*GenSym\(0\) is upper of A",
+                     "Test D and GenSym(0) are upper part of A."
+        ),
+        exception_pattern
+    ]
+)
+
+
+const lower_upper_test2 = Test(
+    "lower-upper-test2",
+    "lower-upper-test2.jl",
+    [
+        TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*C is lower of A.*\n[\s]*D is upper of A.*\n[\s]*E is lower of A.*\n[\s]*F is upper of A.*\n[\s]*L is lower of A",
                      "Test ipm-ref that A B are recognized as symmetric in structure."
         ),
         exception_pattern
@@ -974,6 +986,7 @@ const all_tests = [
     symmetric_value_test4,
 #    symmetric_structure_test1,
     lower_upper_test1,
+    lower_upper_test2,
 ]
 
 const fast_tests = [
@@ -992,9 +1005,6 @@ const fast_tests = [
 # If false, use Julia (If PCRE JIT stack overflow: enlarge JIT_STACK_MAX_SIZE in
 # julia/base/pcre.jl (times it with 10) and retry).
 const USE_PCREGREP_REGEX_MATCH = true
-
-# Run tests with multiple threads?
-const USE_THREADS = false
 
 function get_julia_ver()
     s, p = open(`$julia_command -v`)
@@ -1098,7 +1108,7 @@ end
 total = length(tests)
 succ = 0
 passed = Dict()
-if USE_THREADS == false
+if nprocs() == 1 # single thread mode
     for test in tests
         print("Testing ", test.name)
         s = run_test(test)
