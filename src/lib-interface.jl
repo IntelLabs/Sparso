@@ -1074,12 +1074,21 @@ function reorder_arrays(
         if matrices_done
             assert(typeof(A) <: AbstractVector)
             # For each vector, 1 permutation vector follows
-            perm = permutation_vectors[array_tuple[i + 1]]
+            perm_vec_idx = array_tuple[i + 1]
+            perm         = permutation_vectors[perm_vec_idx]
             i    = i + 2
             if inverse_reorder
                 inverse_reorder_vector!(A, perm)
             else
-                reorder_vector!(A, perm)
+                # reordering(v, ROW_PERM) is equivalent to 
+                # reverse_reordering(v, ROW_INV_PERM) but is slower. So change
+                # to the second form if possible.
+                if perm_vec_idx == ROW_PERM || perm_vec_idx == COL_PERM
+                    perm = permutation_vectors[perm_vec_idx + 1]
+                    inverse_reorder_vector!(A, perm)
+                else
+                    reorder_vector!(A, perm)
+                end
             end
         else
             assert(typeof(A) <: AbstractSparseMatrix)
@@ -1317,4 +1326,8 @@ end
 
 function reset_knob_trisolve_time()
   ccall((:ResetKnobTriangularSolveTime, LIB_PATH), Void, ())
+end
+
+function set_knob_log_level(level)
+  ccall((:SetLogLevel, LIB_PATH), Void, (Cint,), level)
 end
