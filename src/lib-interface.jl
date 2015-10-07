@@ -313,37 +313,7 @@ function reorder_matrix!(
                pointer(P), pointer(inverse_P))
 end
 
-@doc """ Reorder vector V into new vector new_V with permutation vector P """
-function reorder_vector(
-    V     :: Vector, 
-    new_V :: Vector, 
-    P     :: Vector
-)
-    ccall((:reorderVector, LIB_PATH), Void,
-         (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         pointer(V), pointer(new_V), pointer(P), length(V))
-end
-
-function reorder_vector!(
-    V     :: Vector, 
-    P     :: Vector
-)
-    ccall((:reorderVectorInplace, LIB_PATH), Void,
-         (Ptr{Cdouble}, Ptr{Cint}, Cint),
-         pointer(V), pointer(P), length(V))
-end
-
-@doc """ Reversely reorder vector V into new vector new_V with permutation vector P """
-function inverse_reorder_vector(
-    V     :: Vector, 
-    new_V :: Vector, 
-    P     :: Vector
-)
-    ccall((:reorderVectorWithInversePerm, LIB_PATH), Void,
-         (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint),
-         pointer(V), pointer(new_V), pointer(P), length(V))
-end
-
+@doc """ Inversely reorder vector V with permutation vector P """
 function inverse_reorder_vector!(
     V     :: Vector, 
     P     :: Vector
@@ -476,49 +446,6 @@ SpMV(alpha :: Number, A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_
 @doc """ A*x """
 SpMV(A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_NULL) = 
     SpMV(one(eltype(x)), A, x, zero(eltype(x)), Array{Float64,1}[], zero(eltype(x)), fknob)
-
-@doc """
-SpMV. In addition, measure the potential benefit of reordering its input matrix,
-if reordering has not done yet.
-"""
-function SpMV_conditional_reordering(
-    A                  :: SparseMatrixCSC, 
-    x                  :: Vector, 
-    first_reorder_done :: Bool, 
-    beneficial         :: Vector{Bool}
-)
-    if first_reorder_done
-        return SpMV(A, x)
-    end
-    time1 = time()
-    y = SpMV(A, x)
-    time2 = time()
-    nnz = size(A.nzval, 1)
-    rows = A.m
-    SpMV_bandwidth = (nnz * 12 + rows * 3 * 8) / (time2 - time1) * 128 / 10 ^ 9
-    # ISSUE: here the machine peak bandwidth and the distance are fixed constants.
-    # The machine peak bandwidth should be set after running STREAM benchmark once
-    # during the installation time of the SparseAccelerator. The distance should
-    # be changed to make it portable for different machines. 
-    machine_peak_bandwidth = 60
-    if abs(SpMV_bandwidth - machine_peak_bandwidth) > 15
-        beneficial[1] = true
-    end
-    return y
-end
-
-@doc """ Initialize the conditions for conditional reordering. """
-function init_conditional_reordering(
-    first_reorder_done :: Bool, 
-    beneficial         :: Vector
-)
-    # Benefical can be just a scalar var. But we will treat it as a 1-element
-    # array so that we do not have difficulty in changing it in calling 
-    # SpMV_conditional_reordering
-    beneficial = Vector{Bool}()
-    push!(beneficial, false)
-    first_reorder_done = false
-end
 
 @doc """ Dot product of vector x and y """
 function dot(
@@ -1087,7 +1014,7 @@ function reorder_arrays(
                     perm = permutation_vectors[perm_vec_idx + 1]
                     inverse_reorder_vector!(A, perm)
                 else
-                    reorder_vector!(A, perm)
+                    assert(false)
                 end
             end
         else

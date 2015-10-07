@@ -1,5 +1,7 @@
 #include <cstdio>
 #include <cassert>
+#include <climits>
+
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -545,6 +547,60 @@ void DeleteFunctionKnob(FunctionKnob* fknob)
     if (fknob != NULL) delete fknob;
 }
 
+static double getWidthAfterPermutation(const CSR *A, const int *col_perm)
+{
+    int base = A->getBase();
+    const int *rowptr = A->rowptr - base;
+    const int *colidx = A->colidx - base;
+    col_perm -= base;
+
+    unsigned long long total_width = 0;
+
+#pragma omp parallel reduction(+:total_width)
+    {
+        int iBegin, iEnd;
+        getLoadBalancedPartition(&iBegin, &iEnd, rowptr + base, A->m);
+
+        for (int i = iBegin; i < iEnd; ++i) {
+            if (rowptr[i] == rowptr[i + 1]) continue;
+
+            int min_row = INT_MAX, max_row = INT_MIN;
+            for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                int c = col_perm[colidx[j]];
+                min_row = min(c, min_row);
+                max_row = max(c, max_row);
+            }
+
+            int width = max_row - min_row;
+            total_width += width;
+        }
+    } // omp parallel
+
+    return (double)total_width/A->m;
+}
+
+static double *getTempVector(int l)
+{
+    static double *temp_vector = NULL;
+    static int temp_vector_len = -1;
+
+    if (!temp_vector) {
+        temp_vector = (double *)malloc(sizeof(double)*l);
+        temp_vector_len = l;
+    }
+    else if (l > temp_vector_len) {
+        temp_vector = (double *)realloc(temp_vector, sizeof(double)*l);
+        temp_vector_len = l;
+    }
+
+    return temp_vector;
+}
+
+void reorderVectorWithInversePermInplace(double *v, const int *inversePerm, int len)
+{
+  return SpMP::reorderVectorWithInversePerm(v, getTempVector(len), inversePerm, len);
+}
+
 void SpMV(
     int m, int n,
     double *w,
@@ -565,7 +621,19 @@ void SpMV(
     CreateOptimizedRepresentation(mknob, m, n, A_colptr, A_rowval, A_nzval);
 
     double current_spmv_time = -omp_get_wtime();
-    mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+    if (w == x) {
+        double *temp_vector = getTempVector(n);
+
+#pragma omp parallel for
+        for (int i = 0; i < n; ++i) {
+            temp_vector[i] = x[i];
+        }
+
+        mknob->A->multiplyWithVector(w, alpha, temp_vector, beta, y, gamma);
+    }
+    else {
+        mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+    }
     current_spmv_time += omp_get_wtime();
     spmp_spmv_time += current_spmv_time;
 
@@ -623,33 +691,31 @@ void SpMV(
                 }
             }
 
-            double t = omp_get_wtime();
-
-            CSR *newA = mknob->A->permute(
-                fknob->reordering_info.col_perm,
-                fknob->reordering_info.row_inverse_perm);
-
             double new_width_time = -omp_get_wtime();
-            double new_w = newA->getAverageWidth();
+            double new_w = getWidthAfterPermutation(mknob->A, fknob->reordering_info.col_perm);
             new_width_time += omp_get_wtime();
-
             if (LOG_REORDERING) {
                 printf("SpMV: old_width = %g, new_width = %g, old_width takes %g sec new_width takes %g sec\n", old_w, new_w, old_width_time, new_width_time);
             }
 
             if (new_w/old_w < 1.2) {
-                mknob->A = newA;
+                double t = omp_get_wtime();
+                mknob->A = mknob->A->permute(
+                    fknob->reordering_info.col_perm,
+                    fknob->reordering_info.row_inverse_perm);
 
                 mknob->reordering_info = fknob->reordering_info;
 
-                reorderVectorWithInversePerm(
-                    x, fknob->reordering_info.col_inverse_perm, n);
+                double *temp_vector = getTempVector(max(m, n));
+
+                SpMP::reorderVectorWithInversePerm(
+                    x, temp_vector, fknob->reordering_info.col_inverse_perm, n);
                 if (y && y != x)
-                    reorderVectorWithInversePerm(
-                        y, fknob->reordering_info.row_perm, m);
+                    SpMP::reorderVectorWithInversePerm(
+                        y, temp_vector, fknob->reordering_info.row_perm, m);
                 if (w != x)
-                    reorderVectorWithInversePerm(
-                        w, fknob->reordering_info.row_inverse_perm, m);
+                    SpMP::reorderVectorWithInversePerm(
+                        w, temp_vector, fknob->reordering_info.row_inverse_perm, m);
 
                 if (LOG_REORDERING) {
                     printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
@@ -666,8 +732,6 @@ void SpMV(
                 fknob->reordering_info.col_inverse_perm = NULL;
                 FREE(fknob->reordering_info.col_perm);
                 FREE(fknob->reordering_info.row_inverse_perm);
-
-                delete newA;
             }
         }
     }
@@ -875,8 +939,10 @@ static void TriangularSolve_(
 
             m->reordering_info = fknob->reordering_info;
 
-            reorderVectorWithInversePerm(
-                b, fknob->reordering_info.col_inverse_perm, L->m);
+            double *temp_vector = getTempVector(L->m);
+
+            SpMP::reorderVectorWithInversePerm(
+                b, temp_vector, fknob->reordering_info.col_inverse_perm, L->m);
 
             L = m->A;
         }

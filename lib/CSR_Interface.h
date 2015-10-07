@@ -69,9 +69,6 @@ void CSR_Permute(const CSR_Handle *A, CSR_Handle *out, const int *columnPerm, co
 int CSR_GetBandwidth(CSR_Handle *A);
 
 // vector routines
-void reorderVector(double *v, double *tmp, const int *perm, int len);
-void reorderVectorWithInversePerm(double *v, double *tmp, const int *inversePerm, int len);
-void reorderVectorInplace(double *v, const int *perm, int len);
 void reorderVectorWithInversePermInplace(double *v, const int *inversePerm, int len);
 
 // w = alpha*x + beta*w
