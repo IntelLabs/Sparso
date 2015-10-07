@@ -35,11 +35,12 @@ type StructureProxy
     constant_structured     :: Int
     symmetric_valued        :: Int
     symmetric_structured    :: Int
+    structure_only          :: Int
     lower_of                :: Any
     upper_of                :: Any
     proxy                   :: Any
 
-    StructureProxy() = new(0, 0, 0, 0, nothing, nothing, nothing)
+    StructureProxy() = new(0, 0, 0, 0, 0, nothing, nothing, nothing)
 end
 
 @doc "sorter for symbol indexed map"
@@ -49,7 +50,7 @@ sort_by_str_key = (x) -> sort(collect(keys(x)), by=v->string(v))
 function dprint_property_proxies(
     pmap    :: Dict 
 )
-    dprintln(1, 1, "Sym : CV CS SV SS Lo Up")
+    dprintln(1, 1, "Sym : CV CS SV SS SO Lo Up")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
         dprintln(1, 1, k, " : ", 
@@ -57,6 +58,7 @@ function dprint_property_proxies(
                     v.constant_structured, "  ",
                     v.symmetric_valued, "  ",
                     v.symmetric_structured, "  ",
+                    v.structure_only, "  ",
                     v.lower_of, " ",
                     v.upper_of)
     end
@@ -471,6 +473,10 @@ function find_predefined_properties(
                         dprintln(1, 1, "Predef: symmetric_structured ", sym)
                         sp.symmetric_structured = 3
                     end
+                    if (p & SA_STRUCTURE_ONLY) != 0
+                        dprintln(1, 1, "Predef: structure_only ", sym)
+                        sp.structure_only = 3
+                    end
 
                     # add symbol to property map
                     structure_proxies[sym] = sp
@@ -571,6 +577,7 @@ function find_properties_of_matrices(
                 p.constant_structured || 
                 p.is_structure_symmetric ||
                 p.is_symmetric || 
+                p.is_structure_only || 
                 p.lower_of != nothing ||
                 p.upper_of != nothing
                 if !haskey(structure_proxies, sym)
@@ -589,6 +596,9 @@ function find_properties_of_matrices(
             end
             if p.is_structure_symmetric && sp.symmetric_structured == 0
                 sp.symmetric_structured = 4 
+            end
+            if p.is_structure_only && sp.structure_only == 0
+                sp.structure_only = 4 
             end
             if p.lower_of != nothing
                 sp.lower_of = p.lower_of
@@ -644,6 +654,9 @@ function find_properties_of_matrices(
     dprintln(1, 0, "\n" * region_name * " Structure symmetry discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> v.symmetric_structured>0, structure_proxies))))
 
+    dprintln(1, 0, "\n" * region_name * " Structure only discovered:")
+    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> v.structure_only>0, structure_proxies))))
+
     dprintln(1, 0, "\n" * region_name * " Upper/Lower matrix discovered:")
     for k in sort_by_str_key(structure_proxies)
         v = structure_proxies[k]
@@ -676,6 +689,7 @@ function find_properties_of_matrices(
             matrix_properties[s].constant_structured = (p.constant_structured>0)
             matrix_properties[s].is_symmetric = (p.symmetric_valued>0)
             matrix_properties[s].is_structure_symmetric = (p.symmetric_structured>0) 
+            matrix_properties[s].is_structure_only = (p.structure_only>0)
             matrix_properties[s].lower_of = p.lower_of
             matrix_properties[s].upper_of = p.upper_of
         end
