@@ -15,7 +15,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
     blas1_time = 0.
 
     L = tril(A)
-    U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
+    U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A))*triu(A))
 
     spmv_time -= time()
     #r = b - A * x
