@@ -244,7 +244,7 @@ type LowerUpperProperty <: MatrixProperty
 
     const CS_apply_type_pattern = ExprPattern(
         "CS_apply_type_pattern",
-        (:call, TypedExprNode(Function, :call, TopNode(:apply_type)), SparseMatrixCSC),
+        (:call, Expr(:call, TopNode(:apply_type), Any, Any, Any), SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         CS_apply_type_check,
         (:NO_CHANGE, ),
@@ -436,6 +436,8 @@ type LowerUpperProperty <: MatrixProperty
                 property_upper_map[rk] = mat_property[rk].upper_of
             end
         end
+
+        dprintln(1, 0, "\nLower upper anaylsis:")
 
         for (pname, property_map, CS_propagation_patterns) in 
             [("lower_of", property_lower_map, CS_lower_propagation_patterns),
