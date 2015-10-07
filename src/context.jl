@@ -688,7 +688,11 @@ const CS_SpMV!_pattern2 = ExprPattern(
     "CS_SpMV!_pattern2",
     (:(=), Vector, Vector),
     (nothing, nothing, SpMV_6_parameters_pattern),
-    LHS_in_RHS,
+    # NOTE: this is a HACK! We should not do this without knowing that z has memory
+    # allocated. This is only to enable using SpMV! for performance.
+    # TODO: uncomment this condition below after Linxiang's analysis works
+    # LHS_in_RHS,
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
      :arg1, :aarg22, :aarg23, :aarg24, :aarg25, :aarg26, :aarg27),
     gather_context_sensitive_info,
