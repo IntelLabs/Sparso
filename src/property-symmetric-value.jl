@@ -1,46 +1,11 @@
 @doc """ Set is_constant_structured perperty for mat_property in a region """
 type SymmetricValueProperty <: MatrixProperty 
 
+    @doc "pass name"
+    name                :: AbstractString
+
     @doc """ set_property_for method"""
     set_property_for    :: Function
-
-    @doc """
-    Get the structure proxy for a symbol or expr
-    returns nothing if it's not found
-    """
-    function get_property_val(
-        call_sites  :: CallSites,
-        sym_name    :: Symexpr
-    )
-        if in(typeof(sym_name), [Expr])
-            pmap = call_sites.extra.local_map 
-        else
-            pmap = call_sites.extra.property_map
-        end
-
-        if !haskey(pmap, sym_name)
-            pmap[sym_name] = 0
-        end
-        return pmap[sym_name]
-    end
-
-    function set_property_val(
-        call_sites  :: CallSites,
-        sym_name    :: Symexpr,
-        value       :: Int
-    )
-        if in(typeof(sym_name), [ Expr])
-            pmap = call_sites.extra.local_map 
-        else
-            pmap = call_sites.extra.property_map
-            if value != 0 && (!haskey(pmap, sym_name) || pmap[sym_name] != value)
-                call_sites.extra.changed = true
-                dprintln(1, 1, "val changed: ", sym_name, value)
-            end
-        end
-        
-        pmap[sym_name] = value
-    end
 
     @doc """ Post-processing function. Propagate the structure of the last arg. """
     function post_assign_action(
@@ -337,43 +302,17 @@ type SymmetricValueProperty <: MatrixProperty
         CS_last_resort_pattern
     ]
 
+    typealias PropertyValType Int
+    const DEFAULT_PROP_VAL = 0
+    const NEG_PROP_VAL = -1
 
     @doc """ 
     Figure out the constant_structured property of all the matrices in a given region.
     """
     function set_property_for(
-        mat_property:: Dict,
-        depend_map  :: Dict, 
-        region      :: Region,
-        liveness    :: Liveness,
-        symbol_info :: Sym2TypeMap,
-        cfg         :: CFG
+        region_info         :: RegionInfo,
+        mat_property        :: Dict,
     )
-        if isa(region, LoopRegion)
-            bb_idxs = region.loop.members
-        else
-            bb_idxs = keys(cfg.basic_blocks)
-        end
-
-        # collect all statements in this region
-        stmts = []
-        for bb_idx in bb_idxs
-            bb = cfg.basic_blocks[bb_idx]
-            append!(stmts, bb.statements)
-        end
-
-        # reverse dependence map: k -> symbols that depends on k 
-        reverse_depend_map = Dict{Sym, Set{Sym}}()
-
-        # fill reverse dependence map
-        for (k, s) in depend_map
-            for v in s
-                if !haskey(reverse_depend_map, v)
-                    reverse_depend_map[v] = Set{Sym}()
-                end
-                push!(reverse_depend_map[v], k)
-            end
-        end
 
         # property value: 
         #  -1: not symmetric
@@ -382,66 +321,38 @@ type SymmetricValueProperty <: MatrixProperty
         #  2: external(constant)
         #  3: specified by set_matrix_property statement
         #  4: inherited from parent region
-        property_map = PropertyMap()
-        property_map[:NEGATIVE_PROPERTY] = -1
+        property_map = new_sym_property_map(PropertyValType, DEFAULT_PROP_VAL, NEG_PROP_VAL)
 
-        single_defs = find_single_defs(region, liveness, cfg)
-
-        for k in keys(depend_map)
+        for k in keys(region_info.depend_map)
             # always prefer predefined values
             if haskey(mat_property, k) 
-                if mat_property[k].symmetric_valued!=0 
+                if mat_property[k].symmetric_valued!=DEFAULT_PROP_VAL 
                     property_map[k] = mat_property[k].symmetric_valued
                 end
             else
-                property_map[k] = in(k, single_defs) ? 0 : -1
+                property_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL 
             end
         end
 
-        for rk in keys(reverse_depend_map)
+        for rk in keys(region_info.reverse_depend_map)
             if !haskey(property_map, rk)  && 
                         haskey(mat_property, rk) && mat_property[rk].symmetric_valued>0
                 property_map[rk] = mat_property[rk].symmetric_valued
             end
         end
 
-
         dprintln(1, 1, "\nBefore symmetric anaylsis:")
-        print_property_map(1, property_map, depend_map)
+        dprint_property_map(1, property_map)
 
-
-        # ctx_args is attached to call_sites so that
-        # pattern functions can pass back their results
-        ctx_args = ASTContextArgs(false, property_map, Dict{Expr, Int}())
-
-        call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
-                            CS_symmetric_propagation_patterns,
-                            Vector{Action}(), ctx_args)
-
-        converged = false
-        cnt = 0
-        while !converged
-            converged = true
-            for stmt in stmts
-                expr = stmt.expr
-                if typeof(expr) != Expr
-                    continue
-                end
-                ctx_args.changed = false
-                ctx_args.local_map = Dict{Any, Int}()
-                CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
-                if ctx_args.changed 
-                    converged = false 
-                end
-            end
-            cnt = cnt + 1
-        end
-
-        dprintln(1, 1, "\n", cnt, " iterations.\nAfter symmetric anaylsis:")
-        print_property_map(1, property_map, depend_map)
+        cnt = propagate_property(property_map, region_info, CS_symmetric_propagation_patterns, 
+                PropertyValType, DEFAULT_PROP_VAL, NEG_PROP_VAL,
+                nothing
+        )
+    
+        dprintln(1, 1, "\nAfter symmetric anaylsis (", cnt, " iterations):")
+        dprint_property_map(1, property_map)
 
         # copy back result
-        delete!(property_map, :NEGATIVE_PROPERTY)
         for (k, v) in property_map
             if !haskey(mat_property, k)
                 mat_property[k] = StructureProxy()
@@ -454,6 +365,7 @@ type SymmetricValueProperty <: MatrixProperty
     function SymmetricValueProperty()
         instance = new()
         instance.set_property_for = set_property_for
+        instance.name = "symmetric_valued"
         return instance 
     end
 end
