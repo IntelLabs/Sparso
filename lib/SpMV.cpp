@@ -9,6 +9,7 @@ using namespace SpMP;
 
 // w = (alpha*A*x + beta*y + gamma)*z
 template<class T, bool HAS_VALUE = true, bool HAS_Z = false>
+inline
 static void SpMV_(
   int m,
   T *w,
@@ -136,19 +137,45 @@ static void SpMV_(
           }
         }
         else {
-          for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
-            for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (HAS_VALUE) {
-                sum += values[j]*x[colidx[j]];
-              }
-              else {
-                sum += x[colidx[j]];
+          if (HAS_Z) {
+            if (HAS_VALUE) {
+              for (int i = iBegin; i < iEnd; ++i) {
+                T sum = 0;
+                for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                  sum += values[j]*x[colidx[j]];
+                }
+                w[i] = (alpha*sum + beta*y[i] + gamma)*z[i];
               }
             }
-            sum = alpha*sum + beta*y[i];
-            if (HAS_Z) w[i] = z[i]*sum;
-            else w[i] = sum;
+            else {
+              for (int i = iBegin; i < iEnd; ++i) {
+                T sum = 0;
+                for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                  sum += x[colidx[j]];
+                }
+                w[i] = (alpha*sum + beta*y[i] + gamma)*z[i];
+              }
+            }
+          }
+          else {
+            if (HAS_VALUE) {
+              for (int i = iBegin; i < iEnd; ++i) {
+                T sum = 0;
+                for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                  sum += values[j]*x[colidx[j]];
+                }
+                w[i] = alpha*sum + beta*y[i] + gamma;
+              }
+            }
+            else {
+              for (int i = iBegin; i < iEnd; ++i) {
+                T sum = 0;
+                for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                  sum += x[colidx[j]];
+                }
+                w[i] = alpha*sum + beta*y[i] + gamma;
+              }
+            }
           }
         }
       }
