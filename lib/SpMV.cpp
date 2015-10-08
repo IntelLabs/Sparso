@@ -52,29 +52,30 @@ static void SpMV_(
           for (int i = iBegin; i < iEnd; ++i) {
             T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            if (z) w[i] = z[i]*sum;
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = gamma;
+            T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            if (z) w[i] = z[i]*sum;
+            sum += gamma;
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
@@ -83,31 +84,33 @@ static void SpMV_(
         // alpha == 1 && beta != 0
         if (0 == gamma) {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = beta*y[i];
+            T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            if (z) w[i] = z[i]*sum;
+            sum += beta*y[i];
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = beta*y[i] + gamma;
+            T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            if (z) w[i] = z[i]*sum;
+            sum += beta*y[i] + gamma;
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
@@ -120,7 +123,7 @@ static void SpMV_(
           for (int i = iBegin; i < iEnd; ++i) {
             T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
@@ -128,23 +131,23 @@ static void SpMV_(
               }
             }
             sum *= alpha;
-            if (z) w[i] = z[i]*sum;
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = gamma;
+            T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            sum *= alpha;
-            if (z) w[i] = z[i]*sum;
+            sum = alpha*sum + beta*y[i];
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
@@ -153,33 +156,33 @@ static void SpMV_(
         // alpha != 1 && beta != 0
         if (0 == gamma) {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = beta*y[i];
+            T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            sum *= alpha;
-            if (z) w[i] = z[i]*sum;
+            sum = alpha*sum + beta*y[i];
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = beta*y[i] + gamma;
+            T sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (values) {
+              if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
               }
               else {
                 sum += x[colidx[j]];
               }
             }
-            sum *= alpha;
-            if (z) w[i] = z[i]*sum;
+            sum = alpha*sum + beta*y[i] + gamma;
+            if (HAS_Z) w[i] = z[i]*sum;
             else w[i] = sum;
           }
         }
