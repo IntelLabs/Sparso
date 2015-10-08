@@ -603,6 +603,13 @@ void reorderVectorWithInversePermInplace(double *v, const int *inversePerm, int 
   return SpMP::reorderVectorWithInversePerm(v, getTempVector(len), inversePerm, len);
 }
 
+void multiplyWithVector(
+  double *w,
+  double alpha, const CSR *A, const double *x,
+  double beta, const double *y,
+  double gamma,
+  const double *z);
+
 void SpMV(
     int m, int n,
     double *w,
@@ -612,6 +619,7 @@ void SpMV(
     double beta,
     double *y,
     double gamma,
+    double *z,
     FunctionKnob *fknob)
 {
     knob_spmv_time -= omp_get_wtime();
@@ -633,10 +641,10 @@ void SpMV(
             temp_vector[i] = x[i];
         }
 
-        mknob->A->multiplyWithVector(w, alpha, temp_vector, beta, y, gamma);
+        multiplyWithVector(w, alpha, mknob->A, temp_vector, beta, y, gamma, z);
     }
     else {
-        mknob->A->multiplyWithVector(w, alpha, x, beta, y, gamma);
+        multiplyWithVector(w, alpha, mknob->A, x, beta, y, gamma, z);
     }
     current_spmv_time += omp_get_wtime();
     spmp_spmv_time += current_spmv_time;
@@ -714,8 +722,11 @@ void SpMV(
                     x, fknob->reordering_info.col_inverse_perm, n);
                 if (y && y != x)
                     reorderVectorWithInversePermInplace(
-                        y, fknob->reordering_info.row_perm, m);
-                if (w != x)
+                        y, fknob->reordering_info.row_inverse_perm, m);
+                if (z && z != x && z != y)
+                    reorderVectorWithInversePermInplace(
+                        z, fknob->reordering_info.row_inverse_perm, m);
+                if (w != x && w != y && w != z)
                     reorderVectorWithInversePermInplace(
                         w, fknob->reordering_info.row_inverse_perm, m);
 

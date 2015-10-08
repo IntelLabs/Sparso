@@ -86,6 +86,7 @@ void SpMV(
     double beta,
     double *y,
     double gamma,
+    double *z,
     FunctionKnob *fknob);
 
 /**

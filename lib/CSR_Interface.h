@@ -40,12 +40,13 @@ void load_matrix_market(
   int *is_symmetric, int *m, int *n, int *nnz,
   bool one_based_CSR = false, bool force_symmetric = false);
 
-// w = alpha*A*x + beta*y + gamma
+// w = (alpha*A*x + beta*y + gamma).*z
 void CSR_MultiplyWithVector(
   double *w,
   double alpha, const CSR_Handle *A, const double *x,
   double beta, const double *y,
-  double gamma);
+  double gamma,
+  const double *z);
 
 // W = alpha*A*X + beta*Y + gamma
 void CSR_MultiplyWithDenseMatrix(
