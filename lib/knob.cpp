@@ -560,6 +560,8 @@ static double getWidthAfterPermutation(const CSR *A, const int *col_perm)
     {
         int iBegin, iEnd;
         getLoadBalancedPartition(&iBegin, &iEnd, rowptr + base, A->m);
+        iBegin += base;
+        iEnd += base;
 
         for (int i = iBegin; i < iEnd; ++i) {
             if (rowptr[i] == rowptr[i + 1]) continue;
@@ -618,7 +620,9 @@ void SpMV(
     MatrixKnob *mknob = GetMatrixKnob(fknob, 0);
     assert(mknob);
 
-    CreateOptimizedRepresentation(mknob, m, n, A_colptr, A_rowval, A_nzval);
+    CreateOptimizedRepresentation(
+        mknob, m, n, A_colptr, A_rowval,
+        mknob->is_structure_only ? NULL : A_nzval);
 
     double current_spmv_time = -omp_get_wtime();
     if (w == x) {
@@ -643,7 +647,7 @@ void SpMV(
 
         fknob->reordering_info.cost_benefit_analysis_done = true;
 
-        double bw = (12.*mknob->A->getNnz() + 8.*(mknob->A->m + mknob->A->n))/current_spmv_time;
+        double bw = ((mknob->A->values ? 12. : 4.)*mknob->A->getNnz() + 8.*(mknob->A->m + mknob->A->n))/current_spmv_time;
         if (LOG_REORDERING) {
             printf("SpMV: reordering decision maker. BW measured is %g gbps\n", bw/1e9);
         }
@@ -706,16 +710,14 @@ void SpMV(
 
                 mknob->reordering_info = fknob->reordering_info;
 
-                double *temp_vector = getTempVector(max(m, n));
-
-                SpMP::reorderVectorWithInversePerm(
-                    x, temp_vector, fknob->reordering_info.col_inverse_perm, n);
+                reorderVectorWithInversePermInplace(
+                    x, fknob->reordering_info.col_inverse_perm, n);
                 if (y && y != x)
-                    SpMP::reorderVectorWithInversePerm(
-                        y, temp_vector, fknob->reordering_info.row_perm, m);
+                    reorderVectorWithInversePermInplace(
+                        y, fknob->reordering_info.row_perm, m);
                 if (w != x)
-                    SpMP::reorderVectorWithInversePerm(
-                        w, temp_vector, fknob->reordering_info.row_inverse_perm, m);
+                    reorderVectorWithInversePermInplace(
+                        w, fknob->reordering_info.row_inverse_perm, m);
 
                 if (LOG_REORDERING) {
                     printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
@@ -933,6 +935,7 @@ static void TriangularSolve_(
 
             fknob->reordering_info.cost_benefit_analysis_done = true;
 
+            m->A->constructDiagPtr();
             m->A = m->A->permute(
                 fknob->reordering_info.col_perm,
                 fknob->reordering_info.row_inverse_perm);
@@ -941,8 +944,8 @@ static void TriangularSolve_(
 
             double *temp_vector = getTempVector(L->m);
 
-            SpMP::reorderVectorWithInversePerm(
-                b, temp_vector, fknob->reordering_info.col_inverse_perm, L->m);
+            reorderVectorWithInversePermInplace(
+                b, fknob->reordering_info.col_inverse_perm, L->m);
 
             L = m->A;
         }
