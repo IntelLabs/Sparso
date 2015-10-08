@@ -366,7 +366,7 @@ function destroy_CSR(A :: Ptr{Void})
     ccall((:CSR_Destroy, LIB_PATH), Void, (Ptr{Void},), A)
 end
 
-@doc """ w = alpha*A*x + beta*y + gamma """
+@doc """ w = (alpha*A*x + beta*y + gamma).*z """
 function SpMV!(
     w     :: Vector, 
     alpha :: Number, 
@@ -375,16 +375,18 @@ function SpMV!(
     beta  :: Number, 
     y     :: Vector, 
     gamma :: Number,
+    z     :: Vector,
     fknob :: Ptr{Void} = C_NULL # fknob == C_NULL => A is symmetric so we can directly call CSR_MultiplyWithVector with CSC matrix
 )
     assert(length(w) == length(y) || length(y) == 0)
+    assert(length(w) == length(z) || length(z) == 0)
 
     if use_SPMP
         if fknob == C_NULL
           A1 = create_CSR(A)
           ccall((:CSR_MultiplyWithVector, LIB_PATH), Void,
-                (Ptr{Cdouble}, Cdouble, Ptr{Void}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
-                pointer(w), alpha, A1, pointer(x), beta, length(y) == 0 ? C_NULL : pointer(y), gamma)
+                (Ptr{Cdouble}, Cdouble, Ptr{Void}, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
+                pointer(w), alpha, A1, pointer(x), beta, length(y) == 0 ? C_NULL : pointer(y), gamma, length(z) == 0 ? C_NULL : pointer(z))
           destroy_CSR(A1)
         else
           ccall((:SpMV, LIB_PATH), Void,
@@ -394,6 +396,7 @@ function SpMV!(
                  Ptr{Cdouble},
                  Cdouble, Ptr{Cdouble},
                  Cdouble,
+                 Ptr{Cdouble},
                  Ptr{Void}),
                 size(A, 1), size(A, 2),
                 w,
@@ -401,6 +404,7 @@ function SpMV!(
                 x,
                 beta, length(y) == 0 ? C_NULL : y,
                 gamma,
+                length(z) == 0 ? C_NULL : z,
                 fknob)
         end
     else
@@ -408,6 +412,18 @@ function SpMV!(
         w[:] = alpha * A * x + beta * y + gamma
     end
 end
+
+@doc """ w = alpha*A*x + beta*y + gamma """
+SpMV!(
+    w     :: Vector, 
+    alpha :: Number, 
+    A     :: SparseMatrixCSC, 
+    x     :: Vector, 
+    beta  :: Number, 
+    y     :: Vector, 
+    gamma :: Number,
+    fknob :: Ptr{Void} = C_NULL) =
+    SpMV!(w, alpha, A, x, beta, y, gamma, Array{Float64,1}[], fknob)
 
 @doc """ y = A*x """
 SpMV!(y :: Vector, A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_NULL) = 
