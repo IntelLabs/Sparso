@@ -144,7 +144,7 @@ static void SpMV_(
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += values[j]*x[colidx[j]];
                 }
-                w[i] = (alpha*sum + beta*y[i] + gamma)*z[i];
+                w[i] = (alpha*sum + gamma)*z[i];
               }
             }
             else {
@@ -153,7 +153,7 @@ static void SpMV_(
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += x[colidx[j]];
                 }
-                w[i] = (alpha*sum + beta*y[i] + gamma)*z[i];
+                w[i] = (alpha*sum + gamma)*z[i];
               }
             }
           }
@@ -164,7 +164,7 @@ static void SpMV_(
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += values[j]*x[colidx[j]];
                 }
-                w[i] = alpha*sum + beta*y[i] + gamma;
+                w[i] = alpha*sum + gamma;
               }
             }
             else {
@@ -173,7 +173,7 @@ static void SpMV_(
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += x[colidx[j]];
                 }
-                w[i] = alpha*sum + beta*y[i] + gamma;
+                w[i] = alpha*sum + gamma;
               }
             }
           }
