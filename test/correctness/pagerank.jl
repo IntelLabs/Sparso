@@ -138,11 +138,11 @@ bytes = maxiter*(nnz(A)*4 + m*3*8)
 
 d_inv = 1./d
 x = pagerank2(A0, p, r, d_inv, maxiter)
-println("\nOriginal2: ")
+println("\nOriginal: ")
 x = pagerank2(A0, p, r, d_inv, maxiter)
-println("End original2.")
+println("End original.")
 
-println("\nManual_call_replacement2:")
+println("\nManual_call_replacement:")
 x = pagerank2_call_replacement(A0, p, r, d_inv, maxiter, false)
 
 SparseAccelerator.reset_spmp_spmv_time()
@@ -152,9 +152,9 @@ t = SparseAccelerator.get_spmp_spmv_time()
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
 t = SparseAccelerator.get_knob_spmv_time()
 println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")
-println("End Manual_call_replacement2.")
+println("End Manual_call_replacement.")
 
-println("\nManual_call_replacement_and_context_opt2:")
+println("\nManual_call_replacement_and_context_opt:")
 x = pagerank2_call_replacement_and_context_opt(A, p, r, d_inv, maxiter, false)
 
 SparseAccelerator.reset_spmp_spmv_time()
@@ -166,14 +166,14 @@ println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
 t = SparseAccelerator.get_knob_spmv_time()
 println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")
 
-println("End Manual_call_replacement_and_context_opt2.")
+println("End Manual_call_replacement_and_context_opt.")
 
 # copy A since we change A in-place
 #SparseAccelerator.set_knob_log_level(0)
 A2 = copy(A0)
 @acc x= pagerank2(A2, p, r, d_inv, maxiter)
 
-println("\nAccelerated2: ")
+println("\nAccelerated: ")
 SparseAccelerator.reset_spmp_spmv_time()
 SparseAccelerator.reset_knob_spmv_time()
 #SparseAccelerator.set_knob_log_level(1)
@@ -182,4 +182,4 @@ t = SparseAccelerator.get_spmp_spmv_time()
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
 t = SparseAccelerator.get_knob_spmv_time()
 println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")
-println("End accelerated2.")
+println("End accelerated.")
