@@ -1072,8 +1072,8 @@ function reordering(
     reordering_done = status[1]
     if !reordering_done
         row_perm, row_inv_perm, col_perm, col_inv_perm = get_reordering_vectors(fknob)
-        if row_perm != C_NULL
-            assert(row_inv_perm != C_NULL && col_perm != C_NULL && col_inv_perm != C_NULL)
+        if length(row_perm) > 0
+            assert(length(row_inv_perm) > 0 && length(col_perm) > 0 && length(col_inv_perm) > 0)
 
             status[2] = row_perm
             status[3] = row_inv_perm
