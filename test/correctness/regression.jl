@@ -460,16 +460,16 @@ const lbfgs_test1 = Test(
     "lbfgs-test1",
     "lbfgs.jl covtype.mtx",
     [
-        TestPattern(r"Original L-BFGS:      32 iterations f = 0.00000000004134",
+        TestPattern(r"Original L-BFGS:      3\d iterations f = 0.00000\d*",
                      "Test original"
         ),
-        TestPattern(r"Opt L-BFGS:      32 iterations f = 0.00000000004134",
+        TestPattern(r"Opt L-BFGS:      3\d iterations f = 0.0000\d*",
                      "Test optimized version"
         ),
         TestPattern(r"Opt_with_reordering L-BFGS:",
                      "Test Opt_with_reordering"
         ),
-        TestPattern(r"Accelerated L-BFGS:      32 iterations f = 0.000000000041",
+        TestPattern(r"Accelerated L-BFGS:      3\d iterations f = 0.00000\d*",
                      "Test accelerated"
         ),
         TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(Xt,true,true,false,false,false,false\)",
