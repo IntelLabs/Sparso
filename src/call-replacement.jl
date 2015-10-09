@@ -38,9 +38,10 @@ function LHS_in_RHS(
     return is_an_arg(ast.args[1], ast.args[2]);
 end
 
-# There are two kinds of patterns: one is ExprPattern, the other InPlaceUpdatePattern.
-# ExprPattern is for matching an expression within a statement. InPlaceUpdatePattern
-# is for matching two expressions in two adjacent statements.
+# There are two kinds of patterns: one is ExprPattern, the other TwoStatementsPattern.
+# ExprPattern is for matching an expression within a statement (It can be the
+# whole or part of the statement). TwoStatementsPattern is for matching
+# two whole adjacent statements.
 
 @doc """
 For an Expr AST node, describe it for pattern matching and replacement.
@@ -92,10 +93,22 @@ immutable ExprPattern <: Pattern
 end
 
 @doc """
-Match the following pattern that crosses two adjacent assignment statements: 
+Match a pattern that crosses two adjacent statements. The fields are
+the same as ExprPattern, except that it has two skeletons to match, and 
+two new skeletons for replacement. See the description of ExprPattern for the
+common fields' meaning. 
+
+After replacement, the new first statement is the one that has the total
+effect of the original two statements, while the new second statement is
+usually just a copy (maybe useless). So the fields, including pre/post_processing,
+fknob_creator/deletor, matrices_to_track, reordering_power, and reordering_FAR
+are all for the new first statement.
+
+One special case is:
     y = f(...) # f is some function. y is a Symbol or GenSym
     result = y
-Result must have already been allocated space. Otherwise, we cannot use the pattern.
+Result must have already been allocated space, and that space is not used by
+any other array. Otherwise, we cannot use the pattern.
 
 We would replace the two statements into the following instead:
     f!(result, ...)
@@ -104,12 +117,21 @@ ASSUMPTION: the only difference between f and f! is that f! has the result
 as its first parameter (Space already allocated), while f must allocate space
 for its result before it returns. By changing f to f!, we save memory allocation.
 
-This pattern is frequently seen from a source line like x += ...
+This special case is frequently seen from a source line like x += ...
 """
-immutable InPlaceUpdatePattern <: Pattern
-    name        :: AbstractString # Name of the pattern
-    f_skeleton  :: Tuple  # Skeleton of f
-    f!          :: Tuple  # The substitute
+immutable TwoStatementsPattern <: Pattern
+    name                :: AbstractString # Name of the pattern
+    first_skeleton      :: Tuple  # Skeleton of the first expression
+    second_skeleton     :: Tuple  # Skeleton of the second expression
+    pre_processing      :: Function
+    new_first_skeleton  :: Tuple  # The skeleton for the substitute of the first expression
+    new_second_skeleton :: Tuple  # The skeleton for the substitute of the second expression
+    post_processing     :: Function
+    fknob_creator       :: AbstractString
+    fknob_deletor       :: AbstractString
+    matrices_to_track   :: Tuple
+    reordering_power    :: Int
+    reordering_FAR      :: Tuple
 end
 
 # Below are the expr_patterns we care about.
@@ -713,25 +735,45 @@ expr_patterns = [
     #WAXPBY!_pattern,
 ]
 
-const SpMV!_in_place_update_pattern1 = InPlaceUpdatePattern(
-    "SpMV!_in_place_update_pattern1",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
+    "SpMV!_two_statements_pattern1",
+    (:(=), Any, 
+           Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+                 Number, SparseMatrixCSC, Vector, Number, Vector, Number)),
+    (:(=), Vector, :f1),
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :result, :arg2, :arg3, :arg4, :arg5, :arg6, :arg7)
+     :s1, :f2_2, :f2_3, :f2_4, :f2_5, :f2_6, :f2_7),
+    (:(=), :f1, :s1),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
 )
 
-const WAXPBY!_in_place_update_pattern1 = InPlaceUpdatePattern(
-    "WAXPBY!_in_place_update_pattern1",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
-     Number, Vector, Number, Vector),
+const WAXPBY!_two_statements_pattern1 = TwoStatementsPattern(
+    "WAXPBY!_two_statements_pattern1",
+    (:(=), Any,
+           Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
+                 Number, Vector, Number, Vector)),
+    (:(=), Vector, :f1),
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
-     :result, :arg2, :arg3, :arg4, :arg5)
+     :s1, :f2_2, :f2_3, :f2_4, :f2_5),
+    (:(=), :f1, :s1),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
 )
 
-in_place_update_patterns = [
-    SpMV!_in_place_update_pattern1,
-    WAXPBY!_in_place_update_pattern1
+two_statements_patterns = [
+    SpMV!_two_statements_pattern1,
+    WAXPBY!_two_statements_pattern1
 ]
 
 @doc """ Return an Expr AST node's skeleton """
@@ -753,13 +795,16 @@ function expr_skeleton(
 end
 
 @doc """ 
-The real arg to replace the symbolic arg (like :arg1) in the patterns.
+Use the real argument in args to replace the symbolic arg (like :e1).
+First/second_expr are used only when replacing a two-statements pattern.
 """
 function replacement_arg(
-    arg         :: Any, 
-    args        :: Vector,
+    arg         :: Any,    # Symbolic arg to replace
+    args        :: Vector, # Real arguments
     result      :: Any,
-    symbol_info :: Sym2TypeMap
+    symbol_info :: Sym2TypeMap,
+    first_expr  :: Any = nothing,
+    second_expr :: Any = nothing
 )
     if typeof(arg) == Symbol
         arg_string = string(arg)
@@ -785,58 +830,183 @@ function replacement_arg(
             y   = Int(arg_string[7]) - Int('0')
             arg = args[x].args[y]
             arg = TypedExprNode(type_of_ast_node(arg, symbol_info), :call, :(-), arg)
+        elseif length(arg_string) > 1 && (arg_string[1] == 'f' || arg_string[1] == 's')
+            # f/s means first/second_expr.
+            #   f3 means   first_expr.args[3].
+            #   f3_1 means first_expr.args[3].args[1]
+            #   s3 means   second_expr.args[3].
+            #   s3_1 means second_expr.args[3].args[1]
+            # TODO: Get rid of "arg" and "aarg", and replace them all with f or s.
+            assert(first_expr  != nothing)
+            assert(second_expr != nothing)
+            indexes = split(arg_string[2 : end], "_")
+            x = parse(Int, indexes[1])
+            if arg_string[1] == 'f'
+                arg = first_expr.args[x]
+            else
+                arg = second_expr.args[x]
+            end 
+            for i in 2 : length(indexes)
+                x = parse(Int, indexes[i])
+                arg = arg.args[x]
+            end         
         end
     end
     arg
 end
 
-replacement_arg(arg :: Any, args :: Vector, symbol_info :: Sym2TypeMap) =
-    replacement_arg(arg, args, nothing, symbol_info)
-
 @doc """
-Replace the AST based on the expression pattern. Return true if AST is replaced.
+Replace the AST based on the substitute skeleton. Return true if AST is replaced.
+When repalcing an ExprPattern, expr is a copy of first_expr, and second_expr is
+nothing. When replacing a TwoStatementsPattern, expr is a copy of either
+first or second_expr. 
 """
 function replace(
-    pattern     :: ExprPattern,
-    ast         :: Expr,
-    symbol_info :: Sym2TypeMap
+    substitute                 :: Tuple,
+    expr                       :: Expr,
+    symbol_info                :: Sym2TypeMap,
+    first_expr                 :: Any,
+    second_expr                :: Any,
+    expr_is_copy_of_first_expr :: Bool
 )
-    substitute = pattern.substitute
     if length(substitute) == 1 && substitute[1] == :NO_CHANGE
         return false
     end
 
-    orig_ast = copy(ast)
-    ast.head = substitute[1]
-    empty!(ast.args)
+    expr.head = substitute[1]
+    empty!(expr.args)
     for i = 2 : length(substitute)
-        arg = replacement_arg(substitute[i], orig_ast.args, symbol_info)
-        push!(ast.args, arg)
+        arg = replacement_arg(substitute[i], 
+                expr_is_copy_of_first_expr ? first_expr.args : second_expr.args,
+                nothing, symbol_info, first_expr, second_expr)
+        push!(expr.args, arg)
     end
     return true
 end
 
+function replace(
+    substitute  :: Tuple,
+    expr        :: Expr,
+    symbol_info :: Sym2TypeMap,
+) 
+    expr_backup  = copy(expr)
+    replace(substitute, expr, symbol_info, expr_backup, nothing, true)
+end
+
 @doc """ 
-Match two skeletons. Return true if matched. 
+Match the expr's skeleton with the pattern's skeleton. Return true if matched.
+First/second_expr are used only when replacing a two-statements pattern, where
+expr is part or whole of first/second_expr. 
 """
 function match_skeletons(
-    skeleton1 :: Tuple,
-    skeleton2 :: Tuple
+    expr             :: Expr,
+    pattern_skeleton :: Tuple,
+    symbol_info      :: Sym2TypeMap,    
+    first_expr       :: Any,
+    second_expr      :: Any,          
 )
-    if length(skeleton1) == length(skeleton2)
-        if (skeleton1[1] == skeleton2[1]) && 
-           ((skeleton1[1] == :call && skeleton1[2] == skeleton2[2]) ||
-            (skeleton1[1] == :(=)  && skeleton1[2] <: skeleton2[2]))
-            for i in 3:length(skeleton1)
-                if !(skeleton1[i] <: skeleton2[i])
+#if (first_expr != nothing && second_expr !=nothing)
+#println("matching skeleton: expr =", expr)
+#println("\t pattern_skeleton =", pattern_skeleton)
+#println("\t first_expr =", first_expr)
+#println("\t second_expr =", second_expr)
+#end
+
+    skeleton = expr_skeleton(expr, symbol_info)
+    
+#println("skeleton=", skeleton)                    
+#    if length(skeleton) != length(pattern_skeleton)
+#println("\tskeleton len diff", length(skeleton), " ", length(pattern_skeleton))                    
+#    end
+#        if (skeleton[1] != pattern_skeleton[1])
+#println("\t 1 not equal", skeleton[1] , " ", pattern_skeleton[1])
+#end 
+
+    if length(skeleton) == length(pattern_skeleton)
+        if (skeleton[1] == pattern_skeleton[1])
+            # So far, we handle only call or assignment
+            assert((skeleton[1] == :call) || (skeleton[1] == :(=)))
+            for i in 2:length(skeleton)
+                typ = typeof(pattern_skeleton[i]) 
+                if typ == Expr
+                    if pattern_skeleton[i].typ == Function
+                        # Literally match the module and function name
+                        if skeleton[i] != pattern_skeleton[i]
+#    println("\t not literal exr match i=", i)                    
+#    println("\t\t args i-1=", expr.args[i - 1])                    
+#    println("\t\t skeleton i=", pattern_skeleton[i])                    
+                            return false
+                        else
+                            continue
+                        end
+                    end
+                         
+                    if typeof(expr.args[i - 1]) != Expr
+#println("\t notexpr i=", i)                    
+#println("\t\t args i-1=", expr.args[i - 1])                    
+#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                        return false
+                    else
+#println("\t recurrsive:")
+#println("\t\t args i-1=", expr.args[i - 1])                    
+#dsprintln(1, 0, symbol_info, expr.args[i - 1])                    
+                    
+                        # Do recursive match
+                        sub_pattern_skeleton = ntuple(j -> (
+                            (j == 1) ? pattern_skeleton[i].head
+                                     : pattern_skeleton[i].args[j - 1]),
+                            length(pattern_skeleton[i].args) + 1)
+                        if !match_skeletons(expr.args[i - 1], sub_pattern_skeleton, symbol_info, first_expr, second_expr)
+#println("\t not match i=", i)                    
+#println("\t\t args i-1=", expr.args[i - 1])                    
+#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                            return false
+                        end
+                    end
+                elseif typ == Symbol
+                    # The pattern has a symbolic argument like :f1 or :s1.
+                    arg = replacement_arg(pattern_skeleton[i], expr.args, nothing, symbol_info, first_expr, second_expr)
+                    if get_symexpr(arg) != get_symexpr(expr.args[i - 1])
+#println("\t not same i=", i)                    
+#println("\t\t args i-1=", expr.args[i - 1])                    
+#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                        return false
+                    end
+                elseif typ == GlobalRef
+                    # We need literal match in these cases.
+                    if skeleton[i] != pattern_skeleton[i]
+#println("\t not literal match i=", i)                    
+#println("\t\t args i-1=", expr.args[i - 1])                    
+#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                        return false
+                    end
+                elseif !(skeleton[i] <: pattern_skeleton[i])
+#println("\t not tpe matach i=", i)                    
+#println("\t\t args i-1=", expr.args[i - 1])                    
+#println("\t\t skeleton i=", pattern_skeleton[i])                    
                     return false
                 end
             end
+
+if (first_expr != nothing && second_expr !=nothing)
+#println("matchED skeleton: expr =", expr)
+#println("\t pattern_skeleton =", pattern_skeleton)
+#println("\t first_expr =", first_expr)
+#println("\t second_expr =", second_expr)
+end
+
             return true
         end
     end
+   
     return false
 end
+
+match_skeletons(
+    expr             :: Expr,
+    pattern_skeleton :: Tuple,
+    symbol_info      :: Sym2TypeMap,    
+) = match_skeletons(expr, pattern_skeleton, symbol_info, nothing, nothing)
 
 @doc """ 
 Match and replace a pattern. Return true if matched. 
@@ -845,7 +1015,6 @@ may need its sub-expressions be matched and replaced first.
 """
 function match_replace(
     pattern    :: ExprPattern,
-    skeleton   :: Tuple,
     ast        :: Expr,
     call_sites :: CallSites
 )
@@ -857,7 +1026,7 @@ function match_replace(
     #end
 
     symbol_info = call_sites.symbol_info
-    if match_skeletons(skeleton, pattern.skeleton)
+    if match_skeletons(ast, pattern.skeleton, symbol_info)
         # Check sub-expr_patterns
         if length(pattern.sub_expr_patterns) == 1 && 
            pattern.sub_expr_patterns[1] == :NO_SUB_PATTERNS
@@ -868,8 +1037,7 @@ function match_replace(
                 sub_pattern = pattern.sub_expr_patterns[i]
                 if sub_pattern != nothing
                     if typeof(ast.args[i- 1]) <: Expr
-                        sub_expr_skeleton = expr_skeleton(ast.args[i- 1], symbol_info)
-                        if !match_replace(sub_pattern, sub_expr_skeleton, ast.args[i - 1], call_sites)
+                        if !match_replace(sub_pattern, ast.args[i - 1], call_sites)
                             return false
                         end
                     else
@@ -887,8 +1055,8 @@ function match_replace(
         end
 
         dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
-
-        ast_changed = replace(pattern, ast, symbol_info)
+    
+        ast_changed = replace(pattern.substitute, ast, symbol_info)
 
         if ast_changed
             dprintln(1, 2, "Replaced with ", ast)
@@ -926,9 +1094,8 @@ function match_replace_an_expr_pattern(
         end
 
         # Now match against the Expr. Replacement may happen on the expression.
-        skeleton = expr_skeleton(ast, symbol_info)
         for pattern in patterns
-            success = match_replace(pattern, skeleton, ast, call_sites)
+            success = match_replace(pattern, ast, call_sites)
             if success
                 return nothing
             end
@@ -942,33 +1109,7 @@ Match an expression pattern and do replacement.
 """
 function match_replace_an_expr_pattern(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
     match_replace_an_expr_pattern(ast, call_sites)
-end
-
-@doc """ Replace two Expr nodes based on the in-place-update pattern. """
-function replace(
-    pattern     :: InPlaceUpdatePattern,
-    prev_expr   :: Expr,
-    expr        :: Expr,
-    symbol_info :: Sym2TypeMap
-)
-    # Replace prev_expr with the f!
-    result         = copy(expr.args[1])
-    f              = copy(prev_expr.args[2].args)
-    f!             = pattern.f!
-    prev_expr.head = f![1]
-    empty!(prev_expr.args)
-    for i = 2 : length(f!)
-        arg = replacement_arg(f![i], f, result, symbol_info)
-        push!(prev_expr.args, arg)
-    end
-
-    # Swith the two arguments of expr.
-    arg = copy(expr.args[1])
-    expr.args[1] = expr.args[2]
-    expr.args[2] = arg
-
-    return true
-end
+end    
 
 @doc """
 Check if the two expression, from adjacent statements, are of the following pattern:
@@ -980,40 +1121,61 @@ Replace it into the following instead:
     f!(result, ...)
     y = result
 """
-function match_replace_an_in_place_update_pattern(
-    prev_expr   :: Expr,
-    expr        :: Expr,
-    symbol_info :: Sym2TypeMap
-)
-    if prev_expr.head == :(=) && expr.head == :(=) &&
-       length(prev_expr.args) == 2 && length(expr.args) == 2 &&
-       prev_expr.args[1] == expr.args[2] && 
-       (typeof(expr.args[2]) == Symbol || typeof(expr.args[2]) == GenSym) &&
-       typeof(prev_expr.args[2]) == Expr
-       
-        # Check that the result is one of the input parameter of f, in which case
-        # it must have been allocated space already.
-        if !is_an_arg(expr.args[1], prev_expr.args[2])
-            return false
-        end
+function match_replace_an_two_statements_pattern(
+    first_expr  :: Expr,
+    second_expr :: Expr,
+    symbol_info :: Sym2TypeMap,
+    patterns    :: Vector
+)      
+    # Check that the result is one of the input parameter of f, in which case
+    # it must have been allocated space already.
+    # ISSUE: this does not ensure safety, because the result's memory
+    # might be shared(pointed to) by another array, and thus we cannot
+    # do this replacement.
+    # NOTE: In a for loop, Julia'a semantics is to create a new 
+    # result array every time result = ... is encountered.
+    # TODO: after points-to and memory lifetime analysis work, check that
+    # the memory is not only allocated, but also no other array uses it.  
+    #if !is_an_arg(expr.args[1], prev_expr.args[2])
+    #    return false
+    #end
+    for pattern in patterns
+        if match_skeletons(first_expr,  pattern.first_skeleton,  symbol_info, first_expr, second_expr) &&
+           match_skeletons(second_expr, pattern.second_skeleton, symbol_info, first_expr, second_expr)
+            dprintln(1, 1, "Matched ", pattern.name, " with: ")
+            dprintln(1, 2, first_expr)
+            dprintln(1, 2, second_expr)
 
-        f_skeleton = expr_skeleton(prev_expr.args[2], symbol_info)
-        for pattern in in_place_update_patterns
-            if match_skeletons(f_skeleton, pattern.f_skeleton)
-                dprintln(1, 1, "Matched ", pattern.name, " with: ")
-                dprintln(1, 2, prev_expr)
-                dprintln(1, 2, expr)
-
-                ast_changed = replace(pattern, prev_expr, expr, symbol_info)
-
-                if ast_changed
-                    dprintln(1, 2, "Replaced with:")
-                    dprintln(1, 3, prev_expr)
-                    dprintln(1, 3, expr)
+            if pattern.pre_processing != do_nothing
+                if !pattern.pre_processing(first_expr, call_sites, pattern.fknob_creator,
+                                           pattern.fknob_deletor)
+                    return false
                 end
-
-                return true
             end
+
+            first_expr_backup  = copy(first_expr)
+            second_expr_backup = copy(second_expr)
+            ast_changed        = replace(pattern.new_first_skeleton, first_expr, symbol_info, first_expr_backup, second_expr_backup, true)
+            ast_changed       |= replace(pattern.new_second_skeleton, second_expr, symbol_info, first_expr_backup, second_expr_backup, false)
+
+            if pattern.post_processing != do_nothing
+                if !pattern.post_processing(first_expr, call_sites, pattern.fknob_creator,
+                                            pattern.fknob_deletor, pattern.matrices_to_track,
+                                            pattern.reordering_power, pattern.reordering_FAR)
+                    # AST has already been changed by replace(). However, post 
+                    # processing fails. That AST might be wrong. So abort 
+                    dprintln(1, 2, "Post-processing failed.")
+                    throw(PostPatternReplacementFailure(pattern))
+                end
+            end
+
+            if ast_changed
+                dprintln(1, 2, "Replaced with:")
+                dprintln(1, 2, first_expr)
+                dprintln(1, 2, second_expr)
+            end
+
+            return true
         end
     end
     return false
@@ -1045,7 +1207,7 @@ function replace_calls(
             
             if prev_expr != nothing
                 # Between this and the previous expression, try to optimize for an in-place update
-                match_replace_an_in_place_update_pattern(prev_expr, expr, symbol_info)
+                match_replace_an_two_statements_pattern(prev_expr, expr, symbol_info, two_statements_patterns)
             end
             
             prev_expr = expr

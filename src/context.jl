@@ -36,13 +36,14 @@ type ContextExtra
     # Scratch variables.
     bb                       :: Any              # BasicBlock
     stmt_idx                 :: StatementIndex
+    prev_stmt_idx            :: StatementIndex
     
     ContextExtra(_matrix_properties, _ast_may_change) = new(
             _matrix_properties, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
-            Set{Symbol}(), Set{Symbol}(), nothing, 0)
+            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0)
 end
 
 # Below are the patterns that we would like to replace a function with another,
@@ -129,13 +130,21 @@ function gather_context_sensitive_info(
     symbol_info        = call_sites.symbol_info
     symbol_info[fknob] = FunctionKnob
 
+    # Get the previous and the current expression that would be used for
+    # argument replacement below.
+    bb            = call_sites.extra.bb
+    stmt_idx      = call_sites.extra.stmt_idx
+    prev_stmt_idx = call_sites.extra.prev_stmt_idx
+    cur_expr      = bb.statements[stmt_idx].expr
+    prev_expr     = bb.statements[prev_stmt_idx].expr
+
     # Create matrix-specific knobs for the matrices inputs.
     args = ast.args
     for arg in matrices_to_track
         if arg == :result
             M = ast
         else
-            new_arg = replacement_arg(arg, args, nothing, symbol_info)
+            new_arg = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
             assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
                    typeof(new_arg) == GenSym)
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
@@ -164,7 +173,7 @@ function gather_context_sensitive_info(
                 call_sites.extra.reordering_decider_power = reordering_power
                 call_sites.extra.reordering_FAR           = []
                 for arg in reordering_FAR
-                    new_arg = replacement_arg(arg, args, ast, symbol_info)
+                    new_arg = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
                     assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
                     M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
                     push!(call_sites.extra.reordering_FAR, M)
@@ -774,6 +783,37 @@ CS_transformation_patterns = [
 ]
 
 @doc """
+    SparseAccelerator.SpMV!(z, a, A, x, b, y, r)
+    z = z .* u
+with
+    SparseAccelerator.SpMV!(z, a, A, x, b, y, r, u)
+    z = z # Useless
+"""
+const CS_SpMV!_two_statements_pattern1 = TwoStatementsPattern(
+    "CS_SpMV!_two_statements_pattern1",
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+      Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    (:(=), :f2, 
+        Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_multiply)),
+             :f2, Vector)),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+     :f2, :f3, :f4, :f5, :f6, :f7, :f8, :s2_2),
+    (:(=), :f2, :f2),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:f4,),
+    100,
+    (:f4, :f2, :f5, :f7, :f9) # Put seed (A) at the first
+)
+
+CS_two_statements_patterns = [
+#    SpMV!_two_statements_pattern1,
+]
+
+
+@doc """
 Create statements that will create a matrix knob for matrix M.
 """
 function create_new_matrix_knob(
@@ -922,18 +962,22 @@ of the expression and handle each with the handler. Otherwise, handle the
 expression with the handler.
 """
 function vist_expressions(
-    region      :: LoopRegion,
-    cfg         :: CFG,
-    call_sites  :: CallSites,
-    recursive   :: Bool,
-    handler     :: Function
+    region                 :: LoopRegion,
+    cfg                    :: CFG,
+    call_sites             :: CallSites,
+    recursive              :: Bool,
+    handler                :: Function,
+    two_statements_handler :: Function = do_nothing
 )
-    L      = region.loop
-    blocks = cfg.basic_blocks
+    L           = region.loop
+    blocks      = cfg.basic_blocks
+    symbol_info = call_sites.symbol_info
     for bb_idx in L.members
-        bb                  = blocks[bb_idx]
-        statements          = bb.statements
-        call_sites.extra.bb = bb
+        bb                             = blocks[bb_idx]
+        statements                     = bb.statements
+        call_sites.extra.bb            = bb
+        prev_expr                      = nothing
+        call_sites.extra.prev_stmt_idx = 0
         for stmt_idx in 1 : length(statements)
             call_sites.extra.stmt_idx = stmt_idx
             stmt                      = statements[stmt_idx]
@@ -947,6 +991,13 @@ function vist_expressions(
             else
                 handler(expr, call_sites)
             end
+                
+            if prev_expr != nothing && two_statements_handler != do_nothing
+                # Try to merge this and the previous expression
+                two_statements_handler(prev_expr, expr, symbol_info, CS_two_statements_patterns)
+            end
+            prev_expr                      = expr
+            call_sites.extra.prev_stmt_idx = stmt_idx
         end
     end
 end
@@ -1142,7 +1193,7 @@ function context_sensitive_transformation(
     call_sites = CallSites(Set{CallSite}(), region, symbol_info,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
-    vist_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern)
+    vist_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
     # were generated in the first walk. Not all those generated are gathered,

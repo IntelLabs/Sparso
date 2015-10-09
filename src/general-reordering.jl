@@ -53,10 +53,11 @@ type ReorderingExtra
     decider_stmt_idx       :: Int
     bb                     :: Any # BasicBlock
     stmt_idx               :: StatementIndex
+    prev_stmt_idx          :: StatementIndex
     inter_dependence_graph :: InterDependenceGraph
 
     ReorderingExtra(_seed, _decider_ast) = new(_seed, _decider_ast,
-             nothing, 0, nothing, 0, InterDependenceGraph(_seed))
+             nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed))
 end
 
 @doc """
