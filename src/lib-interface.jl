@@ -1030,7 +1030,9 @@ function reorder_arrays(
                     perm = permutation_vectors[perm_vec_idx + 1]
                     inverse_reorder_vector!(A, perm)
                 else
-                    assert(false)
+                    assert(perm_vec_idx == ROW_INV_PERM || perm_vec_idx == COL_INV_PERM)
+                    perm = permutation_vectors[perm_vec_idx - 1]
+                    inverse_reorder_vector!(A, perm)
                 end
             end
         else
