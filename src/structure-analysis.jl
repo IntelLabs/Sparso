@@ -15,9 +15,10 @@ function set_matrix_property(
 end
 
 const SA_LOWER_OF = 1
-const SA_UPPER_OF = 1
+const SA_UPPER_OF = 2
+const SA_TRANSPOSE_OF = 4
 
-@doc """ specify that matrix A is the lower/upper part of B"""
+@doc """ specify that matrix A is the lower/upper part or transpose of B"""
 function set_matrix_property(
     A       :: Symbol,
     part_of :: Int,
@@ -38,9 +39,10 @@ type StructureProxy
     structure_only          :: Int
     lower_of                :: Any
     upper_of                :: Any
+    transpose_of            :: Any
     proxy                   :: Any
 
-    StructureProxy() = new(0, 0, 0, 0, 0, nothing, nothing, nothing)
+    StructureProxy() = new(0, 0, 0, 0, 0, nothing, nothing, nothing, nothing)
 end
 
 @doc "sorter for symbol indexed map"
@@ -50,7 +52,7 @@ sort_by_str_key = (x) -> sort(collect(keys(x)), by=v->string(v))
 function dprint_property_proxies(
     pmap    :: Dict 
 )
-    dprintln(1, 1, "Sym : CV CS SV SS SO Lo Up")
+    dprintln(1, 1, "Sym : CV CS SV SS SO Lower Upper Trans")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
         dprintln(1, 1, k, " : ", 
@@ -60,7 +62,9 @@ function dprint_property_proxies(
                     v.symmetric_structured, "  ",
                     v.structure_only, "  ",
                     v.lower_of, " ",
-                    v.upper_of)
+                    v.upper_of, " ",
+                    v.transpose_of
+                    )
     end
 end
 
@@ -442,10 +446,13 @@ function find_predefined_properties(
                 if ast.args[3].name == :SA_LOWER_OF
                     structure_proxies[sym].lower_of = get_symexpr(psym)
                     dprintln(1, 1, "Predef: ", sym, " is lower of ", psym)
-                else
-                    assert(ast.args[3].name == :SA_UPPER_OF)
+                elseif ast.args[3].name == :SA_UPPER_OF
                     structure_proxies[sym].upper_of = get_symexpr(psym)
                     dprintln(1, 1, "Predef: ", sym, " is upper of ", psym)
+                else
+                    assert(ast.args[3].name == :SA_TRANSPOSE_OF)
+                    structure_proxies[sym].transpose_of = get_symexpr(psym)
+                    dprintln(1, 1, "Predef: ", sym, " is transpose of ", psym)
                 end
             else # set other properties
                 pmap = eval(ast.args[2])
@@ -606,6 +613,9 @@ function find_properties_of_matrices(
             if p.upper_of != nothing
                 sp.upper_of = p.upper_of
             end
+            if p.transpose_of != nothing
+                sp.transpose_of = p.transpose_of
+            end
         end
     end
 
@@ -668,6 +678,14 @@ function find_properties_of_matrices(
         end
     end
 
+    dprintln(1, 0, "\n" * region_name * " Transpose matrix discovered:")
+    for k in sort_by_str_key(structure_proxies)
+        v = structure_proxies[k]
+        if v.transpose_of != nothing
+            dprintln(1, 1, k, " is transpose of ", v.transpose_of)
+        end
+    end
+
     # Merge with structure info
     symbols = union(region_info.single_defs, collect(keys(structure_proxies)))
 
@@ -692,6 +710,7 @@ function find_properties_of_matrices(
             matrix_properties[s].is_structure_only = (p.structure_only>0)
             matrix_properties[s].lower_of = p.lower_of
             matrix_properties[s].upper_of = p.upper_of
+            matrix_properties[s].transpose_of = p.transpose_of
         end
     end
 

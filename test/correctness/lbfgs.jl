@@ -101,6 +101,8 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
   t0 = time()
   it = 1
   for it=1:100
+    set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
+
     spmv_time -= time()
     Xw = X*x
     spmv_time += time()
