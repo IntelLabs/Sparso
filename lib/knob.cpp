@@ -583,7 +583,7 @@ static double getWidthAfterPermutation(const CSR *A, const int *col_perm)
     return (double)total_width/A->m;
 }
 
-static double *getTempVector(int l)
+double *getTempVector(int l)
 {
     static double *temp_vector = NULL;
     static int temp_vector_len = -1;
