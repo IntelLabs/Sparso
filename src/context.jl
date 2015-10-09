@@ -785,7 +785,7 @@ CS_transformation_patterns = [
 @doc """
     SparseAccelerator.SpMV!(z, a, A, x, b, y, r)
     z = z .* u
-with
+=>
     SparseAccelerator.SpMV!(z, a, A, x, b, y, r, u)
     z = z # Useless
 """

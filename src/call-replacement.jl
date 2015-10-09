@@ -104,20 +104,17 @@ usually just a copy (maybe useless). So the fields, including pre/post_processin
 fknob_creator/deletor, matrices_to_track, reordering_power, and reordering_FAR
 are all for the new first statement.
 
-One special case is:
+One special case frequently seen from a source line like x += ... is:
     y = f(...) # f is some function. y is a Symbol or GenSym
     result = y
-Result must have already been allocated space, and that space is not used by
-any other array. Otherwise, we cannot use the pattern.
-
 We would replace the two statements into the following instead:
     f!(result, ...)
     y = result
+Result must have already been allocated space, and that space is not used by
+any other array. Otherwise, we cannot do the replacement.
 ASSUMPTION: the only difference between f and f! is that f! has the result 
 as its first parameter (Space already allocated), while f must allocate space
 for its result before it returns. By changing f to f!, we save memory allocation.
-
-This special case is frequently seen from a source line like x += ...
 """
 immutable TwoStatementsPattern <: Pattern
     name                :: AbstractString # Name of the pattern
@@ -735,6 +732,13 @@ expr_patterns = [
     #WAXPBY!_pattern,
 ]
 
+@doc """
+    z = SparseAccelerator.SpMV(a, A, x, b, y, r)
+    y = z
+=>
+    SparseAccelerator.SpMV!(y, a, A, x, b, y, r)
+    z = y    
+"""
 const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "SpMV!_two_statements_pattern1",
     (:(=), Any, 
@@ -753,6 +757,13 @@ const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     ()
 )
 
+@doc """
+    z = SparseAccelerator.WAXPBY(a, x, b, y)
+    y = z
+=>
+    SparseAccelerator.WAXPBY!(y, a, x, b, y)
+    z = y    
+"""
 const WAXPBY!_two_statements_pattern1 = TwoStatementsPattern(
     "WAXPBY!_two_statements_pattern1",
     (:(=), Any,
@@ -895,118 +906,70 @@ end
 
 @doc """ 
 Match the expr's skeleton with the pattern's skeleton. Return true if matched.
-First/second_expr are used only when replacing a two-statements pattern, where
+First/second_expr are used only when matching a two-statements pattern, where
 expr is part or whole of first/second_expr. 
 """
 function match_skeletons(
     expr             :: Expr,
     pattern_skeleton :: Tuple,
     symbol_info      :: Sym2TypeMap,    
-    first_expr       :: Any,
-    second_expr      :: Any,          
+    first_expr       :: Any = nothing,
+    second_expr      :: Any = nothing,          
 )
-#if (first_expr != nothing && second_expr !=nothing)
-#println("matching skeleton: expr =", expr)
-#println("\t pattern_skeleton =", pattern_skeleton)
-#println("\t first_expr =", first_expr)
-#println("\t second_expr =", second_expr)
-#end
-
     skeleton = expr_skeleton(expr, symbol_info)
-    
-#println("skeleton=", skeleton)                    
-#    if length(skeleton) != length(pattern_skeleton)
-#println("\tskeleton len diff", length(skeleton), " ", length(pattern_skeleton))                    
-#    end
-#        if (skeleton[1] != pattern_skeleton[1])
-#println("\t 1 not equal", skeleton[1] , " ", pattern_skeleton[1])
-#end 
-
     if length(skeleton) == length(pattern_skeleton)
         if (skeleton[1] == pattern_skeleton[1])
             # So far, we handle only call or assignment
             assert((skeleton[1] == :call) || (skeleton[1] == :(=)))
-            for i in 2:length(skeleton)
+            for i in 2 : length(skeleton)
+                # A skeleton has a head in the first place, then arguments.
+                # Thus expr.args[i - 1] corresponds to pattern_skeleton[i]
+                real_arg = expr.args[i - 1]      
+
                 typ = typeof(pattern_skeleton[i]) 
                 if typ == Expr
                     if pattern_skeleton[i].typ == Function
                         # Literally match the module and function name
                         if skeleton[i] != pattern_skeleton[i]
-#    println("\t not literal exr match i=", i)                    
-#    println("\t\t args i-1=", expr.args[i - 1])                    
-#    println("\t\t skeleton i=", pattern_skeleton[i])                    
                             return false
                         else
                             continue
                         end
                     end
-                         
-                    if typeof(expr.args[i - 1]) != Expr
-#println("\t notexpr i=", i)                    
-#println("\t\t args i-1=", expr.args[i - 1])                    
-#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                    
+                    if typeof(real_arg) != Expr
                         return false
                     else
-#println("\t recurrsive:")
-#println("\t\t args i-1=", expr.args[i - 1])                    
-#dsprintln(1, 0, symbol_info, expr.args[i - 1])                    
-                    
                         # Do recursive match
                         sub_pattern_skeleton = ntuple(j -> (
                             (j == 1) ? pattern_skeleton[i].head
                                      : pattern_skeleton[i].args[j - 1]),
                             length(pattern_skeleton[i].args) + 1)
-                        if !match_skeletons(expr.args[i - 1], sub_pattern_skeleton, symbol_info, first_expr, second_expr)
-#println("\t not match i=", i)                    
-#println("\t\t args i-1=", expr.args[i - 1])                    
-#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                        if !match_skeletons(real_arg, sub_pattern_skeleton, symbol_info, first_expr, second_expr)
                             return false
                         end
                     end
                 elseif typ == Symbol
-                    # The pattern has a symbolic argument like :f1 or :s1.
+                    # pattern_skeleton[i] is a symbolic argument like :f1 or :s1.
                     arg = replacement_arg(pattern_skeleton[i], expr.args, nothing, symbol_info, first_expr, second_expr)
-                    if get_symexpr(arg) != get_symexpr(expr.args[i - 1])
-#println("\t not same i=", i)                    
-#println("\t\t args i-1=", expr.args[i - 1])                    
-#println("\t\t skeleton i=", pattern_skeleton[i])                    
+                    if get_symexpr(arg) != get_symexpr(real_arg)
                         return false
                     end
                 elseif typ == GlobalRef
                     # We need literal match in these cases.
                     if skeleton[i] != pattern_skeleton[i]
-#println("\t not literal match i=", i)                    
-#println("\t\t args i-1=", expr.args[i - 1])                    
-#println("\t\t skeleton i=", pattern_skeleton[i])                    
                         return false
                     end
                 elseif !(skeleton[i] <: pattern_skeleton[i])
-#println("\t not tpe matach i=", i)                    
-#println("\t\t args i-1=", expr.args[i - 1])                    
-#println("\t\t skeleton i=", pattern_skeleton[i])                    
                     return false
                 end
             end
-
-if (first_expr != nothing && second_expr !=nothing)
-#println("matchED skeleton: expr =", expr)
-#println("\t pattern_skeleton =", pattern_skeleton)
-#println("\t first_expr =", first_expr)
-#println("\t second_expr =", second_expr)
-end
-
             return true
         end
     end
    
     return false
 end
-
-match_skeletons(
-    expr             :: Expr,
-    pattern_skeleton :: Tuple,
-    symbol_info      :: Sym2TypeMap,    
-) = match_skeletons(expr, pattern_skeleton, symbol_info, nothing, nothing)
 
 @doc """ 
 Match and replace a pattern. Return true if matched. 
@@ -1206,7 +1169,7 @@ function replace_calls(
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
             
             if prev_expr != nothing
-                # Between this and the previous expression, try to optimize for an in-place update
+                # Try to merge this and the previous expression
                 match_replace_an_two_statements_pattern(prev_expr, expr, symbol_info, two_statements_patterns)
             end
             
