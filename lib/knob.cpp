@@ -664,7 +664,8 @@ void SpMV(
 
         if (bw < bw_threshold_to_reorder) {
             double old_width_time = -omp_get_wtime();
-            double old_w = mknob->A->getAverageWidth(true);
+            double old_w = m != n ? 1 : mknob->A->getAverageWidth(true);
+                // don't compute width for rectangular matrices because it's ill-defined
             old_width_time += omp_get_wtime();
 
             fknob->reordering_info.row_inverse_perm = MALLOC(int, m);
@@ -706,7 +707,8 @@ void SpMV(
             }
 
             double new_width_time = -omp_get_wtime();
-            double new_w = getWidthAfterPermutation(mknob->A, fknob->reordering_info.col_perm);
+            double new_w = m != n ? 0 : getWidthAfterPermutation(mknob->A, fknob->reordering_info.col_perm);
+                // don't compute width for rectangular matrices because it's ill-defined
             new_width_time += omp_get_wtime();
             if (LOG_REORDERING) {
                 printf("SpMV: old_width = %g, new_width = %g, old_width takes %g sec new_width takes %g sec\n", old_w, new_w, old_width_time, new_width_time);
@@ -717,6 +719,9 @@ void SpMV(
                 mknob->A = mknob->A->permute(
                     fknob->reordering_info.col_perm,
                     fknob->reordering_info.row_inverse_perm);
+
+                fknob->reordering_info.row_perm_len = m;
+                fknob->reordering_info.col_perm_len = n;
 
                 mknob->reordering_info = fknob->reordering_info;
 
