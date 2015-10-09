@@ -265,6 +265,8 @@ void multiplyWithVector(
   }
 }
 
+extern double *getTempVector(int l); // defined in knob.cpp
+
 extern "C" {
 
 void CSR_MultiplyWithVector(
@@ -274,7 +276,18 @@ void CSR_MultiplyWithVector(
   double gamma,
   const double *z)
 {
-  multiplyWithVector(w, alpha, (CSR *)A, x, beta, y, gamma, z);
+  if (w == x) {
+    double *temp_vector = getTempVector(((CSR *)A)->m);
+#pragma omp parallel for
+    for (int i = 0; i < ((CSR *)A)->m; ++i) {
+      temp_vector[i] = x[i];
+    }
+
+    multiplyWithVector(w, alpha, (CSR *)A, temp_vector, beta, y, gamma, z);
+  }
+  else {
+    multiplyWithVector(w, alpha, (CSR *)A, x, beta, y, gamma, z);
+  }
 }
 
 void CSR_MultiplyWithDenseMatrix(
