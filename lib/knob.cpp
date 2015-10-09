@@ -375,9 +375,11 @@ static void CreateOptimizedRepresentation(
     }
 
     if (needTranspose) {
+        double t = omp_get_wtime();
         m->A = AT->transpose();
         if (LOG_TRANSPOSE) {
-            printf("Transposing a matrix\n");
+            t = omp_get_wtime() - t;
+            printf("Transposing a matrix takes %g (%g gbps)\n", t, (double)AT->getNnz()*12*2/t/1e9);
         }
 
 #ifndef NDEBUG
@@ -662,7 +664,8 @@ void SpMV(
 
         if (bw < bw_threshold_to_reorder) {
             double old_width_time = -omp_get_wtime();
-            double old_w = mknob->A->getAverageWidth(true);
+            double old_w = m != n ? 1 : mknob->A->getAverageWidth(true);
+                // don't compute width for rectangular matrices because it's ill-defined
             old_width_time += omp_get_wtime();
 
             fknob->reordering_info.row_inverse_perm = MALLOC(int, m);
@@ -687,7 +690,7 @@ void SpMV(
                     fknob->reordering_info.col_inverse_perm);
                 if (LOG_REORDERING) {
                     t = omp_get_wtime() - t;
-                    printf("SpMV: matrix is rectangular. bfsBipartite takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*12 + m*4*8)/t/1e9);
+                    printf("SpMV: matrix is rectangular. bfsBipartite takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*4 + m*4*8)/t/1e9);
                 }
             }
             else {
@@ -699,12 +702,13 @@ void SpMV(
                 fknob->reordering_info.col_inverse_perm = fknob->reordering_info.row_inverse_perm;
                 t = omp_get_wtime() - t;
                 if (LOG_REORDERING) {
-                    printf("SpMV: matrix is square. bfs takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*12 + m*6*8)/t/1e9);
+                    printf("SpMV: matrix is square. bfs takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*4 + m*6*8)/t/1e9);
                 }
             }
 
             double new_width_time = -omp_get_wtime();
-            double new_w = getWidthAfterPermutation(mknob->A, fknob->reordering_info.col_perm);
+            double new_w = m != n ? 0 : getWidthAfterPermutation(mknob->A, fknob->reordering_info.col_perm);
+                // don't compute width for rectangular matrices because it's ill-defined
             new_width_time += omp_get_wtime();
             if (LOG_REORDERING) {
                 printf("SpMV: old_width = %g, new_width = %g, old_width takes %g sec new_width takes %g sec\n", old_w, new_w, old_width_time, new_width_time);
@@ -715,6 +719,9 @@ void SpMV(
                 mknob->A = mknob->A->permute(
                     fknob->reordering_info.col_perm,
                     fknob->reordering_info.row_inverse_perm);
+
+                fknob->reordering_info.row_perm_len = m;
+                fknob->reordering_info.col_perm_len = n;
 
                 mknob->reordering_info = fknob->reordering_info;
 
@@ -731,8 +738,9 @@ void SpMV(
                         w, fknob->reordering_info.row_inverse_perm, m);
 
                 if (LOG_REORDERING) {
-                    printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
                     t = omp_get_wtime() - t;
+
+                    printf("SpMV: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
                     printf("SpMV: permutation takes %g (%g gbps)\n", t, ((double)mknob->A->getNnz()*2*12 + m*6*8)/t/1e9);
                 }
             }
@@ -794,7 +802,12 @@ static void TriangularSolve_(
                 // constructing schedule
                 CreateOptimizedRepresentation(symKnob, L_numrows, L_numcols, symKnob->colptr, symKnob->rowval, NULL);
                 schedule = new LevelSchedule;
+                double t = omp_get_wtime();
                 schedule->constructTaskGraph(*symKnob->A);
+                if (LOG_REORDERING) {
+                    t = omp_get_wtime() - t;
+                    printf("TriangularSolve: constructTaskGraph takes %g (%g gbps)\n", t, (double)symKnob->A->getNnz()*4/t/1e9);
+                }
                 m->derivatives[DERIVATIVE_TYPE_SYMMETRIC]->schedule = schedule;
                 m->schedule = schedule;
             } else if (m->A) {
@@ -802,9 +815,15 @@ static void TriangularSolve_(
                 schedule = new LevelSchedule;
 
                 int *symRowPtr = NULL, *symColIdx = NULL, *symDiagPtr = NULL, *symExtPtr = NULL;
+                double t = omp_get_wtime();
                 bool wasSymmetric = getSymmetricNnzPattern(
                     m->A, &symRowPtr, &symDiagPtr, &symExtPtr, &symColIdx);
+                if (LOG_REORDERING) {
+                    t = omp_get_wtime() - t;
+                    printf("TriangularSolve: matrix is not structurally symmetric. getSymmetricNnzPattern takes %g (%g gbps)\n", t, (double)m->A->getNnz()*4*2/t/1e9);
+                }
 
+                t = omp_get_wtime();
                 if (wasSymmetric) {
                     FREE(symRowPtr);
                     FREE(symColIdx);
@@ -837,6 +856,11 @@ static void TriangularSolve_(
                     FREE(symExtPtr);
                 }
 
+                if (LOG_REORDERING) {
+                    t = omp_get_wtime() - t;
+                    printf("TriangularSolve: constructTaskGraph takes %g (%g gbps)\n", t, (double)m->A->getNnz()*4/t/1e9);
+                }
+
                 m->schedule = schedule;
             }
         } // constant_structured
@@ -849,16 +873,28 @@ static void TriangularSolve_(
         schedule = new LevelSchedule;
         needToDeleteSchedule = true;
 
+        double t = omp_get_wtime();
+
         int *symRowPtr = NULL, *symColIdx = NULL, *symDiagPtr = NULL, *symExtPtr = NULL;
         bool wasSymmetric = getSymmetricNnzPattern(
             LT, &symRowPtr, &symDiagPtr, &symExtPtr, &symColIdx);
+
+        if (LOG_REORDERING) {
+            t = omp_get_wtime() - t;
+            printf("TriangularSolve: matrix is not structurally symmetric. getSymmetricNnzPattern takes %g (%g gbps)\n", t, (double)LT->getNnz()*4*2/t/1e9);
+        }
 
         if (wasSymmetric) {
             FREE(symRowPtr);
             FREE(symColIdx);
 
             L = LT;
+            t = omp_get_wtime();
             schedule->constructTaskGraph(*L);
+            if (LOG_REORDERING) {
+                t = omp_get_wtime() - t;
+                printf("TriangularSolve: constructTaskGraph takes %g (%g gbps)\n", t, (double)L->getNnz()*4/t/1e9);
+            }
 
             if (m && m->constant_structured) {
                 m->schedule = schedule;
@@ -866,16 +902,23 @@ static void TriangularSolve_(
             }
         }
         else {
+            t = omp_get_wtime();
             schedule->constructTaskGraph(
                LT->m,
                symRowPtr, symDiagPtr, symExtPtr, symColIdx,
                PrefixSumCostFunction(symRowPtr)); 
+            if (LOG_REORDERING) {
+                t = omp_get_wtime() - t;
+                printf("TriangularSolve: constructTaskGraph takes %g (%g gbps)\n", t, (double)LT->getNnz()*4/t/1e9);
+            }
 
+            t = omp_get_wtime();
             L = LT->transpose();
             delete LT;
 
             if (LOG_TRANSPOSE) {
-                printf("Transposing a matrix\n");
+                t = omp_get_wtime() - t;
+                printf("Transposing a matrix takes %g (%g gbps)\n", t, (double)LT->getNnz()*12*2/t/1e9);
             }
 
             if (m && m->constant_structured) {
@@ -913,11 +956,13 @@ static void TriangularSolve_(
             needToDeleteL = true;
         } else {
             CSR *LT = new CSR(L_numrows, L_numcols, L_colptr, L_rowval, L_nzval);
+            double t = omp_get_wtime();
             L = LT->transpose();
             delete LT;
 
             if (LOG_TRANSPOSE) {
-                printf("Transposing a matrix\n");
+                t = omp_get_wtime() - t;
+                printf("Transposing a matrix takes %g (%g gbps)\n", t, (double)LT->getNnz()*12*2/t/1e9);
             }
 
             needToDeleteL = true;
@@ -937,14 +982,9 @@ static void TriangularSolve_(
                 !fknob->reordering_info.cost_benefit_analysis_done &&
                 fknob->is_reordering_decision_maker) {
 
-            if (LOG_REORDERING) {
-                printf("TriangularSolve triSolve is reordering decision maker. Permute matrix and input vector\n");
-            }
-            if (LOG_REORDERING) {
-                printf("TriangularSolve: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
-            }
-
             fknob->reordering_info.cost_benefit_analysis_done = true;
+
+            double t = omp_get_wtime();
 
             m->A->constructDiagPtr();
             m->A = m->A->permute(
@@ -957,6 +997,14 @@ static void TriangularSolve_(
 
             reorderVectorWithInversePermInplace(
                 b, fknob->reordering_info.col_inverse_perm, L->m);
+
+            if (LOG_REORDERING) {
+                t = omp_get_wtime() - t;
+
+                printf("TriangularSolve triSolve is reordering decision maker. Permute matrix and input vector\n");
+                printf("TriangularSolve: row_perm=%p row_inverse_perm=%p col_perm=%p col_inverse_perm=%p\n", fknob->reordering_info.row_perm, fknob->reordering_info.row_inverse_perm, fknob->reordering_info.col_perm, fknob->reordering_info.col_inverse_perm);
+                printf("TriangularSolve: permutation takes %g (%g gbps)\n", t, ((double)m->A->getNnz()*2*12 + m->A->m*2*8)/t/1e9);
+            }
 
             L = m->A;
         }
@@ -1175,10 +1223,13 @@ void SpSquareWithEps(
         A = &AT;
     }
     else {
+        double t = omp_get_wtime();
+
         A = AT.transpose();
 
         if (LOG_TRANSPOSE) {
-            printf("Transposing a matrix\n");
+            t = omp_get_wtime() - t;
+            printf("Transposing a matrix takes %g (%g gbps)\n", t, (double)AT.getNnz()*12*2/t/1e9);
         }
     }
 

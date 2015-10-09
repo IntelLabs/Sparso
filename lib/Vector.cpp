@@ -194,30 +194,30 @@ void CSR_abs(int n, double *w, const double *x)
 
 void CSR_exp(int n, double *w, const double *x)
 {
-#pragma omp parallel
+/*#pragma omp parallel
   {
     int begin, end;
     SpMP::getSimpleThreadPartition(&begin, &end, n);
     vdExp(end - begin, x + begin, w + begin);
-  }
-/*#pragma omp parallel for
+  }*/
+#pragma omp parallel for
   for (int i = 0; i < n; i++) {
     w[i] = exp(x[i]);
-  }*/
+  }
 }
 
 void CSR_log1p(int n, double *w, const double *x)
 {
-#pragma omp parallel
+/*#pragma omp parallel
   {
     int begin, end;
     SpMP::getSimpleThreadPartition(&begin, &end, n);
     vdLog1p(end - begin, x + begin, w + begin);
-  }
-/*#pragma omp parallel for
+  }*/
+#pragma omp parallel for
   for (int i = 0; i < n; i++) {
     w[i] = log1p(x[i]);
-  }*/
+  }
 }
 
 } // extern "C"
