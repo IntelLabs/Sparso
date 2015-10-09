@@ -441,6 +441,7 @@ const fill!_Desc = FunctionDescription(
     ])
 )
 
+@doc """ max(A, value) """
 const max_Desc = FunctionDescription(
     "Main", 
     "max",                          
@@ -448,6 +449,16 @@ const max_Desc = FunctionDescription(
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive 
     Set([ (0, 1, ROW_ROW) ])
+)
+
+@doc """ max(value, A) """
+const max1_Desc = FunctionDescription(
+    "Main", 
+    "max",
+    (Number, Vector),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 2, ROW_ROW) ])
 )
 
 const scale_Desc = FunctionDescription(
@@ -595,16 +606,6 @@ const min_Desc = FunctionDescription(
     Set([ (0, 2, ROW_ROW) ])
 )
 
-@doc """ max(value, A) """
-const max_Desc = FunctionDescription(
-    "Main", 
-    "max",
-    (Number, Vector),
-    UPDATED_NONE,                     # No argument is updated
-    true,                             # The function is distributive
-    Set([ (0, 2, ROW_ROW) ])
-)
-
 #The following are made for context-test3 with reordering on. There were
 #call resolution issues. For setfield!, there is also a question how to
 #handle fields (field-sensitive analysis?).
@@ -708,6 +709,7 @@ function_descriptions  = [
     Array_Desc,
     fill!_Desc,
     max_Desc,
+    max1_Desc,
     scale_Desc,
     sum_Desc,
     convert_Desc,
@@ -721,7 +723,6 @@ function_descriptions  = [
     divide_Desc,
     Ac_mul_B_Desc,
     min_Desc,
-    max_Desc,
     asignment_Desc,
     asignment1_Desc,
     lbfgs_compute_direction_Desc
