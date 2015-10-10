@@ -247,7 +247,7 @@ function CS_ADAT_post_replacement(
     assert(typeof(A) == SymbolNode)
     properties = call_sites.extra.matrix_properties[A.name]
     AT = Symbol(string("__", string(A.name), "T__"))
-    stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
+    stmt = Statement(0, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
 
     ast.args[4] = SymbolNode(AT, A.typ)
@@ -865,7 +865,7 @@ function create_propagate_matrix_info(
 )
     # Insert the propagation after the (assignment) statement.
     action = InsertBeforeOrAfterStatement(Vector{Statement}(), false, bb, stmt_idx)
-    stmt = Statement(-1, 
+    stmt = Statement(0, 
                      Expr(:call, GlobalRef(SparseAccelerator, :propagate_matrix_info), 
                            to_mknob, from_mknob))
     push!(action.new_stmts, stmt)
@@ -993,7 +993,7 @@ function visit_expressions(
                 continue
             end
 
-#            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, liveness)
+            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, liveness)
 
             if recursive
                 CompilerTools.AstWalker.AstWalk(expr, handler, call_sites)
@@ -1007,7 +1007,7 @@ function visit_expressions(
             end
             prev_expr                                 = expr
             call_sites.extra.prev_stmt_idx            = stmt_idx
-#           call_sites.extra.live_in_before_prev_expr = call_sites.extra.live_in_before_expr            
+           call_sites.extra.live_in_before_prev_expr = call_sites.extra.live_in_before_expr            
         end
     end
 end
