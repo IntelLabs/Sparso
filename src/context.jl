@@ -1064,6 +1064,22 @@ function generate_and_delete_knobs(
         create_new_function_knob(action_before_region.new_stmts, fknob, fknob_creator)
     end
 
+    # Derivative information is already included in matrix_knob, so we copy it into derivatives
+    for mknob in matrix_knobs
+        M = call_sites.extra.mknob2matrix[mknob]
+        prop = call_sites.extra.matrix_properties[M]
+        if prop.lower_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.lower_of)
+            assert(prop.upper_of == nothing)
+            push!(derivatives, (M, DERIVATIVE_TYPE_LOWER_TRIANGULAR, prop.lower_of))
+        elseif prop.upper_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.upper_of)
+            push!(derivatives, (M, DERIVATIVE_TYPE_UPPER_TRIANGULAR, prop.upper_of))
+        end
+        if prop.transpose_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.transpose_of)
+            dprintln(1, 1, "making ", M, "as transpose of ", prop.transpose_of)
+            push!(derivatives, (M, DERIVATIVE_TYPE_TRANSPOSE, prop.transpose_of))
+        end
+    end
+
     # Add statements that define the relationship between matrix knobs
     for (M1, relation, M2) in derivatives
         mknob1 = call_sites.extra.matrix2mknob[M1]
