@@ -130,9 +130,10 @@ end
 Context used for analyzing one statement
 """
 type ASTContextArgs{ValTp}
-    changed         :: Bool                  # any property has been changed ?
-    property_map    :: Dict{Sym, ValTp}      # symbol -> property
-    local_map       :: Dict{Symexpr, ValTp}  # symbol|expr -> property
+    changed             :: Bool                  # any property has been changed ?
+    property_map        :: Dict{Sym, ValTp}      # symbol -> property
+    local_map           :: Dict{Symexpr, ValTp}  # symbol|expr -> property
+    live_in_before_expr :: Set{Sym}    
 end
 
 @doc """
@@ -359,8 +360,8 @@ type RegionInfo
         info.depend_map[sym_negative_id] = Set{Union{GenSym, Symbol}}()
 
         call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
-                            [],
-                            Vector{Action}(), info.depend_map)
+                                liveness, [],
+                                Vector{Action}(), info.depend_map)
 
         info.constants = find_constant_values(region, liveness, cfg)
         info.single_defs = find_single_defs(region, liveness, cfg)
@@ -516,11 +517,11 @@ function propagate_property(
 
     # ctx_args is attached to call_sites so that
     # pattern functions can pass back their results
-    ctx_args = ASTContextArgs{PropertyValType}(false, property_map, Dict{Expr, PropertyValType}())
+    ctx_args = ASTContextArgs{PropertyValType}(false, property_map, Dict{Expr, PropertyValType}(), Set{Sym}())
 
     call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.symbol_info,
-                        propagation_patterns,
-                        Vector{Action}(), ctx_args)
+                            region_info.liveness, propagation_patterns,
+                            Vector{Action}(), ctx_args)
 
     converged = false
     cnt = 0
@@ -536,6 +537,7 @@ function propagate_property(
             if ctx_arg_initializer != nothing
                 ctx_arg_initializer(ctx_args)
             end
+#            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, region_info.liveness)
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
             if ctx_args.changed 
                 converged = false 
