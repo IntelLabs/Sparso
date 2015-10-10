@@ -838,10 +838,10 @@ const set_matrix_property_test5 = Test(
     "set-matrix-property-test5.jl",
     [
         TestPattern(r"Func Upper/Lower matrix discovered:.*\n[\s]*A is lower of B",
-                     "Test that A is recognized as matrics in structure."
+                     "Test that A is recognized as lower part of B."
         ),
         TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B",
-                     "Test that A is recognized as matrics in structure."
+                     "Test that A is recognized as lower part of B."
         ),
         TestPattern(r"Loop3 Upper/Lower matrix discovered:.*\n[\s]*A is lower of B.*\n[\s]*B is upper of C",
                      "Test that A is recognized as matrics in structure."
@@ -856,16 +856,32 @@ const set_matrix_property_test6 = Test(
     [
 
         TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:A])),
-                     "Test that A is recognized as structure-only matrix in structure."
+                     "Test that A is recognized as structure-only matrix."
         ),
 
         TestPattern(Regex("Loop0 Structure only discovered:.*\\n.*" * gen_set_regex_string([:A, :C])),
-                     "Test that A C are recognized as structure-only matrics in structure."
+                     "Test that A C are recognized as structure-only matrics."
         ),
 
         exception_pattern
     ]
 )
+
+const set_matrix_property_test7 = Test(
+    "set-matrix-property-test7",
+    "set-matrix-property-test7.jl",
+    [
+        TestPattern(r"Func Transpose matrix discovered:.*\n[\s]*A is transpose of B",
+                     "Test that A is recognized as transpose of B."
+        ),
+        TestPattern(r"Loop0 Transpose matrix discovered:.*\n[\s]*B is transpose of C",
+                     "Test that A is recognized as transpsoe of C."
+        ),
+
+        exception_pattern
+    ]
+)
+
 
 const constant_structure_test1 = Test(
     "constant-structure-test1",
@@ -996,6 +1012,7 @@ const all_tests = [
     set_matrix_property_test4,
     set_matrix_property_test5,
     set_matrix_property_test6,
+    set_matrix_property_test7,
     constant_structure_test1,
     symmetric_value_test1,
     symmetric_value_test2,

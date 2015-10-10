@@ -302,8 +302,9 @@ type MatrixProperties
     is_single_def          :: Bool
     lower_of               :: Any
     upper_of               :: Any
+    transpose_of           :: Any
 
-    MatrixProperties() = new(false, false, false, false, false, false, nothing, nothing)
+    MatrixProperties() = new(false, false, false, false, false, false, nothing, nothing, nothing)
 end
 typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 
