@@ -284,7 +284,7 @@ function create_reorder_actions(
         init_action = InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
         push!(actions, init_action)
         
-        init_stmt = Statement(-1, 
+        init_stmt = Statement(0, 
             Expr(:call, GlobalRef(SparseAccelerator, :init_conditional_reordering), 
                 first_reorder_done, beneficial))
         push!(init_action.new_stmts, init_stmt)
@@ -308,12 +308,12 @@ function create_reorder_actions(
     
     if conditional_reordering
         # Check if reordering is not turned on, and it is beneficial to do so
-        goto_stmt = Statement(-1, Expr(:gotoifnot, 
+        goto_stmt = Statement(0, Expr(:gotoifnot, 
             Expr(:&&, Expr(:call, TopNode(:arrayref), beneficial, 1), 
                 Expr(:call, :!, first_reorder_done)), loop_head.label))
         push!(first_reorder_action.new_stmts, goto_stmt)
         
-        done_stmt = Statement(-1, Expr(:(=), first_reorder_done, true))
+        done_stmt = Statement(0, Expr(:(=), first_reorder_done, true))
         push!(first_reorder_action.new_stmts, done_stmt)
     end
 

@@ -47,17 +47,22 @@ end
 The CallSites' extra field for reordering.
 """
 type ReorderingExtra
-    seed                   :: Sym
-    decider_ast            :: Expr
-    decider_bb             :: Any # BasicBlock
-    decider_stmt_idx       :: Int
-    bb                     :: Any # BasicBlock
-    stmt_idx               :: StatementIndex
-    prev_stmt_idx          :: StatementIndex
-    inter_dependence_graph :: InterDependenceGraph
+    seed                     :: Sym
+    decider_ast              :: Expr
+    decider_bb               :: Any # BasicBlock
+    decider_stmt_idx         :: Int
+    bb                       :: Any # BasicBlock
+    stmt_idx                 :: StatementIndex
+    prev_stmt_idx            :: StatementIndex
+    inter_dependence_graph   :: InterDependenceGraph
+
+    # Scratch variables.
+    live_in_before_prev_expr :: Set{Sym}
+    live_in_before_expr      :: Set{Sym}
 
     ReorderingExtra(_seed, _decider_ast) = new(_seed, _decider_ast,
-             nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed))
+             nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed),
+             Set{Sym}(), Set{Sym}())
 end
 
 @doc """
