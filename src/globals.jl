@@ -322,6 +322,7 @@ type CallSites
     sites       :: Set{CallSite}
     region      :: Region
     symbol_info :: Sym2TypeMap
+    liveness    :: Liveness
     patterns    :: Vector{Pattern}
     actions     :: Vector{Action}
     extra       :: Any
@@ -404,14 +405,26 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             # Reordering and context-sensitive optimization: Do all analyses, and 
             # put their intended transformation code sequence into a list. Then 
             # transform the code with the list on the CFG.
+            # REQUIREMENT: even though the AST and CFG can be changed, liveness
+            # information regarding each statement that originally exists 
+            # should still remain valid. Even though the expression contained in
+            # an original statement can be changed, the statement (a container)
+            # should not be touched. Therefore, we should still consult liveness
+            # info based on the original statement, no matter the expression in
+            # it has been changed or not. This is important: otherwise, we would
+            # have to rebuild liveness in order for subsequent optimizations (
+            # like call replacement) to continue.  
             actions = AST_transformation(func_ast, symbol_info, liveness, cfg, loop_info)
             CFG_transformation(actions, cfg)
         end
 
-        # Do call replacement at the end, because it relies only on type info, 
-        # which has not been changed so far.
+        # Call replacement happens at the last, as we would like context-
+        # optimizations, which are more important, to happen first.
+        # Call replacement relies only on type info and liveness, and it affects
+        # only one or two statements. It should not change liveness of statements
+        # either. 
         if replace_calls_enabled
-            replace_calls(func_ast, symbol_info, cfg)
+            replace_calls(func_ast, symbol_info, liveness, cfg)
         end
 
         # Now create a new function based on the CFG

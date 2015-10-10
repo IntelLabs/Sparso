@@ -37,13 +37,15 @@ type ContextExtra
     bb                       :: Any              # BasicBlock
     stmt_idx                 :: StatementIndex
     prev_stmt_idx            :: StatementIndex
+    live_in_before_prev_expr :: Set{Sym}
+    live_in_before_expr      :: Set{Sym}
     
     ContextExtra(_matrix_properties, _ast_may_change) = new(
             _matrix_properties, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
-            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0)
+            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0, Set{Sym}(), Set{Sym}())
 end
 
 # Below are the patterns that we would like to replace a function with another,
@@ -141,12 +143,15 @@ function gather_context_sensitive_info(
     # Create matrix-specific knobs for the matrices inputs.
     args = ast.args
     for arg in matrices_to_track
-        if arg == :result
+        if arg == :r
             M = ast
         else
-            new_arg = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
+            (new_arg, properties) = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
             assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
                    typeof(new_arg) == GenSym)
+            # It is useless to specify properties in the matrices_to_track.
+            # Properties should be specified in the original skeleton for matching.
+            assert(properties == 0)                   
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
         end
         if !haskey(call_sites.extra.matrix2mknob, M)
@@ -173,8 +178,11 @@ function gather_context_sensitive_info(
                 call_sites.extra.reordering_decider_power = reordering_power
                 call_sites.extra.reordering_FAR           = []
                 for arg in reordering_FAR
-                    new_arg = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
+                    (new_arg, properties) = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
                     assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
+                    # It is useless to specify properties in the reordering_FAR.
+                    # Properties should be specified in the original skeleton for matching.
+                    assert(properties == 0)                   
                     M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
                     push!(call_sites.extra.reordering_FAR, M)
                 end
@@ -390,11 +398,11 @@ const CS_ADAT_pattern = ExprPattern(
     (nothing, nothing, nothing, nothing, CS_transpose_pattern),
     CS_ADAT_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:ADB)),
-     :arg2, :arg3, :arg2),
+     :a2, :a3, :a2),
     CS_ADAT_post_replacement,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:result, :arg2, :arg3, :arg4),
+    (:r, :a2, :a3, :a4),
     0,
     ()
 )
@@ -405,11 +413,11 @@ const CS_cholfact_int32_pattern = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_int32)),
-     :arg2),
+     :a2),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     0,
     ()
 )
@@ -420,11 +428,11 @@ const CS_cholsolve_pattern = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_inverse_divide)),
-     :arg2, :arg3),
+     :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     0,
     ()
 )
@@ -440,13 +448,13 @@ const CS_fwdTriSolve!_pattern = ExprPattern(
     (:NO_SUB_PATTERNS,),
     CS_fwdBwdTriSolve!_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:fwdTriSolve!)),
-      :arg2, :arg3),
+      :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     100,
-    (:arg2, :arg3)
+    (:a2, :a3)
 )
  
 @doc """
@@ -459,13 +467,13 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
     (:NO_SUB_PATTERNS,),
     CS_fwdBwdTriSolve!_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:bwdTriSolve!)),
-      :arg2, :arg3),
+      :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     90,
-    (:arg2, :arg3)
+    (:a2, :a3)
 )
 
 @doc """
@@ -480,13 +488,13 @@ const CS_SpMV_pattern1 = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     1, :arg2, :arg3),
+     1, :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     40,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """ a * A * x + g => SpMV(a, A, x, 0, x, g) """
@@ -496,13 +504,13 @@ const CS_SpMV_pattern2 = ExprPattern(
     (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
+     :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     40,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """ a * A * x => SpMV(a, A, x) """
@@ -512,13 +520,13 @@ const CS_SpMV_pattern3 = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :arg2, :arg3, :arg4),
+     :a2, :a3, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     40,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """
@@ -535,13 +543,13 @@ const CS_SpMV_pattern4 = ExprPattern(
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
+     :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """
@@ -558,13 +566,13 @@ const CS_SpMV_pattern5 = ExprPattern(
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 1, :arg3, 0),
+     :a2_2, :a2_3, :a2_4, 1, :a3, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :arg6, :result)
+    (:a3, :a4, :a6, :r)
 )
 
 @doc """
@@ -581,13 +589,13 @@ const CS_SpMV_pattern6 = ExprPattern(
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, -1, :arg3, 0),
+     :a2_2, :a2_3, :a2_4, -1, :a3, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :arg6, :result)
+    (:a3, :a4, :a6, :r)
 )
 
 @doc """
@@ -683,13 +691,13 @@ const CS_SpMV!_pattern1 = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg2, :arg3, :arg4),
+     :a2, :a3, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :arg2) # Put seed (A) as the first
+    (:a3, :a4, :a2) # Put seed (A) as the first
 )
 
 @doc """ z = SpMV(a, A, x, b, y, g), z is x or y => SpMV!(z, a, A, x, b, y, g) """
@@ -703,13 +711,13 @@ const CS_SpMV!_pattern2 = ExprPattern(
     # LHS_in_RHS,
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, :aarg25, :aarg26, :aarg27),
+     :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg4,),
+    (:a4,),
     80,
-    (:arg4, :arg2, :arg5, :arg7) # Put seed (A) at the first
+    (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
 @doc """ x = a * A * x => SpMV!(x, a, A, x, 0, x, 0) """
@@ -719,13 +727,13 @@ const CS_SpMV!_pattern3 = ExprPattern(
     (nothing, nothing, SpMV_3_parameters_pattern),
     LHS_in_RHS,
     (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, 0.0, :arg1, 0.0),
+     :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg4,),
+    (:a4,),
     60,
-    (:arg4, :arg2, :arg5) # Put seed (A) at the first
+    (:a4, :a2, :a5) # Put seed (A) at the first
 )
 
 @doc """ A_mul_B!(a, A, x, b, y) => SpMV!(y, a, A, x, b, y , 0) """
@@ -735,13 +743,13 @@ const CS_SpMV!_pattern4 = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
+     :a6, :a2, :a3, :a4, :a5, :a6, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg4,),
+    (:a4,),
     70,
-    (:arg4, :arg2, :arg5, :arg7) # Put seed (A) at the first
+    (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
 
@@ -753,11 +761,11 @@ const SpSquareWithEps_pattern1 = ExprPattern(
     (nothing, nothing,                            nothing,         CS_transpose_pattern, nothing),
     SpSquareWithEps_check,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpSquareWithEps)),
-     :arg2, :arg4),
+     :a2, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     0,
     ()
 )
@@ -970,6 +978,7 @@ function visit_expressions(
     L           = region.loop
     blocks      = cfg.basic_blocks
     symbol_info = call_sites.symbol_info
+    liveness    = call_sites.liveness
     for bb_idx in L.members
         bb                             = blocks[bb_idx]
         statements                     = bb.statements
@@ -984,6 +993,8 @@ function visit_expressions(
                 continue
             end
 
+#            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, liveness)
+
             if recursive
                 CompilerTools.AstWalker.AstWalk(expr, handler, call_sites)
             else
@@ -994,8 +1005,9 @@ function visit_expressions(
                 # Try to merge this and the previous expression
                 two_statements_handler(prev_expr, expr, call_sites, CS_two_statements_patterns)
             end
-            prev_expr                      = expr
-            call_sites.extra.prev_stmt_idx = stmt_idx
+            prev_expr                                 = expr
+            call_sites.extra.prev_stmt_idx            = stmt_idx
+#           call_sites.extra.live_in_before_prev_expr = call_sites.extra.live_in_before_expr            
         end
     end
 end
@@ -1204,7 +1216,7 @@ function context_sensitive_transformation(
     dprintln(1, 0, "\nContext-sensitive transformation:")
     recursive      = true
     ast_may_change = true
-    call_sites = CallSites(Set{CallSite}(), region, symbol_info,
+    call_sites = CallSites(Set{CallSite}(), region, symbol_info, liveness,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
