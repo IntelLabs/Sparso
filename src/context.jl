@@ -793,12 +793,10 @@ const CS_SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "CS_SpMV!_two_statements_pattern1",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
       Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
-    (:(=), :f2, 
-        Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_multiply)),
-             :f2, Vector)),
+    (:(=), :f2, Expr(:call, GlobalRef(Main, :.*), :f2, Vector)),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :f2, :f3, :f4, :f5, :f6, :f7, :f8, :s2_2),
+     :f2, :f3, :f4, :f5, :f6, :f7, :f8, :s2_3),
     (:(=), :f2, :f2),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -809,7 +807,7 @@ const CS_SpMV!_two_statements_pattern1 = TwoStatementsPattern(
 )
 
 CS_two_statements_patterns = [
-#    SpMV!_two_statements_pattern1,
+    CS_SpMV!_two_statements_pattern1,
 ]
 
 
@@ -961,7 +959,7 @@ Visit each expression the loop region. If recursive is true, visit each AST node
 of the expression and handle each with the handler. Otherwise, handle the
 expression with the handler.
 """
-function vist_expressions(
+function visit_expressions(
     region                 :: LoopRegion,
     cfg                    :: CFG,
     call_sites             :: CallSites,
@@ -994,7 +992,7 @@ function vist_expressions(
                 
             if prev_expr != nothing && two_statements_handler != do_nothing
                 # Try to merge this and the previous expression
-                two_statements_handler(prev_expr, expr, symbol_info, CS_two_statements_patterns)
+                two_statements_handler(prev_expr, expr, call_sites, CS_two_statements_patterns)
             end
             prev_expr                      = expr
             call_sites.extra.prev_stmt_idx = stmt_idx
@@ -1193,14 +1191,14 @@ function context_sensitive_transformation(
     call_sites = CallSites(Set{CallSite}(), region, symbol_info,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
-    vist_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
+    visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
     # were generated in the first walk. Not all those generated are gathered,
     # since some ast nodes have been replaced, and thus won't be visited this
     # time.
     call_sites.extra.ast_may_change = false
-    vist_expressions(region, cfg, call_sites, recursive, gather_knobs)
+    visit_expressions(region, cfg, call_sites, recursive, gather_knobs)
 
     # Generate/delete the knobs at the beginning/exit of the loop
     generate_and_delete_knobs(region, call_sites)
@@ -1211,7 +1209,7 @@ function context_sensitive_transformation(
 
     # Propagate matrix info from one matrix knob to another for assignment statements
     recursive  = false
-    vist_expressions(region, cfg, call_sites, recursive, propagate_matrix_info)
+    visit_expressions(region, cfg, call_sites, recursive, propagate_matrix_info)
 
     # Add fknobs to function calls in the AST. This changes AST, and thus should 
     # be put at the last, because otherwise, the maps in the extra including
