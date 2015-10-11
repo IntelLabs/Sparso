@@ -147,6 +147,48 @@ immutable TwoStatementsPattern <: Pattern
     reordering_FAR      :: Tuple
 end
 
+@doc """
+Argument Description. Used for describing an argument in a pattern.
+type_or_symbol: a type, or a symbol representing an argument.
+properties:     a combination of properties. 
+relations:      relation with other argument/variable.
+ 
+For example,
+    AD(SparseMatrixCSC, SA_HAS_FREE_MEMORY | SA_CONST_VALUED, [(SA_TRANSPOSE_OF, :a1])
+which means: the current argument has SparseMatrixCSC type, it has free memory
+available at the program point the argument is executed, and it is a 
+transposition of args[1] in the same expression.
+
+A symbol can be simple or more complicated like :a1_2, :f1_2, :s1_2, :n1, etc.
+For example:
+    :a1 means the current Expr's args[1], 
+    :a1_2 means the current Expr's args[1].args[2], 
+    :n1_2 means the negative :a1_2
+    :f1_2 means (in a TwoStatementPattern) first_expr.args[1].arg[2]
+    :s1_2 means (in a TwoStatementPattern) second_expr.args[1].arg[2]
+
+When you use AD, you need to describe at least properties or relations. 
+Otherwise, you can directly describe it in a type or a symbol, without using
+AD.
+ that contains it, and that
+the argument is constant valued.
+    AD(:f2_3, SA_SYMM_STRUCTURED) 
+means that in a TwoStatementPattern, an argument that is the same as the 
+first_expr.args[2].args[3], and it is symmetric in structure.
+"""
+type AD
+    type_or_symbol :: Any
+    properties     :: Int
+    relations      :: Vector{Tuple{Int, Symbol}}
+    
+    AD(_type_or_symbol, _properties :: Int) = 
+        new(_type_or_symbol, _properties, Vector{Tuple{Int, Symbol}}())
+    AD(_type_or_symbol, _relations :: Vector{Tuple{Int, Symbol}}) = 
+        new(_type_or_symbol, 0, _relations)
+    AD(_type_or_symbol, _properties :: Int, _relations :: Vector{Tuple{Int, Symbol}}) = 
+        new(_type_or_symbol, _properties, _relations)
+end
+
 # Below are the expr_patterns we care about.
 
 # Patterns that are used only for matching (sub-expressions).
@@ -238,6 +280,7 @@ const number_times_vector_pattern = ExprPattern(
     ()
 )
 
+@doc """ x - a """
 const vector_minus_number_pattern = ExprPattern(
     "vector_minus_number_pattern",
     (:call, GlobalRef(Main, :-), Vector, Number),
@@ -252,6 +295,7 @@ const vector_minus_number_pattern = ExprPattern(
     ()
 )
 
+@doc """ x + a """
 const vector_add_number_pattern = ExprPattern(
     "vector_add_number_pattern",
     (:call, GlobalRef(Main, :+), Vector, Number),
@@ -266,6 +310,7 @@ const vector_add_number_pattern = ExprPattern(
     ()
 )
 
+@doc """ SparseAccelerator.WAXPBY(a, x, b, y) """
 const WAXPBY_4_parameters_pattern = ExprPattern(
     "WAXPBY_4_parameters_pattern",
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
@@ -428,10 +473,10 @@ const min!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x)"""
+@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x) """
 const copy!_pattern1 = ExprPattern(
     "copy!_pattern1",
-    (:call, GlobalRef(Main, :copy!), Vector, Vector),
+    (:call, GlobalRef(Main, :copy!), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:copy!)),
@@ -524,12 +569,12 @@ const SpMV!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ z = SpMV(a, A, x, b, y, g), z is x or y => SpMV!(z, a, A, x, b, y, g) """
+@doc """ z = SpMV(a, A, x, b, y, g) => SpMV!(z, a, A, x, b, y, g) """
 const SpMV!_pattern2 = ExprPattern(
     "SpMV!_pattern2",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_6_parameters_pattern),
-    LHS_in_RHS,
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     do_nothing,
@@ -540,12 +585,12 @@ const SpMV!_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ x = a * A * x => SpMV!(x, a, A, x, 0, x, 0) """
+@doc """ y = a * A * x => SpMV!(y, a, A, x, 0, x, 0) """
 const SpMV!_pattern3 = ExprPattern(
     "SpMV!_pattern3",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_3_parameters_pattern),
-    LHS_in_RHS,
+    do_nothing,
     (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
      :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     do_nothing,
@@ -602,9 +647,10 @@ const WAXPBY_pattern2 = ExprPattern(
     ()
 )
 
+@doc """ z = SparseAccelerator.WAXPBY(a, x, b, y) => SparseAccelerator.WAXPBY!(z, a, x, b, y) """
 const WAXPBY!_pattern1 = ExprPattern(
     "WAXPBY!_pattern1",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, WAXPBY_4_parameters_pattern),
     LHS_in_RHS,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
@@ -617,13 +663,14 @@ const WAXPBY!_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ w = x - a => SparseAccelerator.WAXPB!(w, 1, x, -a)"""
 const WAXPB!_pattern1 = ExprPattern(
     "WAXPB!_pattern1",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_minus_number_pattern),
-    LHS_in_RHS,
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
-     :a1, 1, :a1, :n2_3),
+     :a1, 1, :a2_2, :n2_3),
     do_nothing,
     "",
     "",
@@ -632,13 +679,14 @@ const WAXPB!_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ w = x + a => SparseAccelerator.WAXPB!(w, 1, x, a)"""
 const WAXPB!_pattern2 = ExprPattern(
     "WAXPB!_pattern2",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_add_number_pattern),
-    LHS_in_RHS,
+    do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
-     :a1, 1, :a1, :a2_3),
+     :a1, 1, :a2_2, :a2_3),
     do_nothing,
     "",
     "",
@@ -647,7 +695,7 @@ const WAXPB!_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ w = x.*y => w = element_wise_multiply(x, y) """
+@doc """ x.*y => w = element_wise_multiply(x, y) """
 const element_wise_multiply_pattern1 = ExprPattern(
     "element_wise_multiply_pattern1",
     (:call, GlobalRef(Main, :.*), Vector, Vector),
@@ -663,7 +711,7 @@ const element_wise_multiply_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ w = x ./ y => w = element_wise_divide(x, y) """
+@doc """ x ./ y => element_wise_divide(x, y) """
 const element_wise_divide_pattern1 = ExprPattern(
     "element_wise_divide_pattern1",
     (:call, GlobalRef(Main, :./), Vector, Vector),
@@ -760,7 +808,7 @@ const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     (:(=), Any, 
            Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
                  Number, SparseMatrixCSC, Vector, Number, Vector, Number)),
-    (:(=), Vector, :f1),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5, :f2_6, :f2_7),
@@ -785,7 +833,7 @@ const WAXPBY!_two_statements_pattern1 = TwoStatementsPattern(
     (:(=), Any,
            Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
                  Number, Vector, Number, Vector)),
-    (:(=), Vector, :f1),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
     (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5),
@@ -821,15 +869,9 @@ function expr_skeleton(
     skeleton
 end
 
-@doc """
-Properties of a symbolic argument.
-"""
-const SYMBOLIC_ARG_LIVEIN = 1
-
 @doc """ 
-Use the real argument in args to replace arg, the symbolic argument, and
-gather its properties as well (like livein). Return a tuple of the real
-argument and the properties.
+Use the real argument in args to replace arg, the symbolic argument. Return
+the real argument.
 First/second_expr are used only when replacing a two-statements pattern.
 """
 function replacement_arg(
@@ -840,7 +882,6 @@ function replacement_arg(
     first_expr  :: Any = nothing,
     second_expr :: Any = nothing
 )
-    properties = 0
     if typeof(arg) == Symbol
         arg_string = string(arg)
         if arg == :r 
@@ -855,9 +896,6 @@ function replacement_arg(
             #   f3_1 means first_expr.args[3].args[1]
             #   s3 means   second_expr.args[3].
             #   s3_1 means second_expr.args[3].args[1]
-            # Some properties can also be added, e.g. a3_livein means args[3]
-            # is live into the expression that contain the args. So far, the only
-            # property supported is livein. 
             assert((arg_string[1] != 'f' && arg_string[1] != 's')|| first_expr  != nothing)
             assert((arg_string[1] != 'f' && arg_string[1] != 's')|| second_expr != nothing)
             indexes = split(arg_string[2 : end], "_")
@@ -870,12 +908,8 @@ function replacement_arg(
                 arg = args[x]
             end 
             for i in 2 : length(indexes)
-                if indexes[i] == "livein"
-                    properties |= SYMBOLIC_ARG_LIVEIN
-                else
-                    x = parse(Int, indexes[i])
-                    arg = arg.args[x]
-                end
+                x = parse(Int, indexes[i])
+                arg = arg.args[x]
             end         
 
             if arg_string[1] == 'n'
@@ -883,7 +917,7 @@ function replacement_arg(
             end
         end
     end
-    return (arg, properties)
+    arg
 end
 
 @doc """
@@ -907,13 +941,9 @@ function replace(
     expr.head = substitute[1]
     empty!(expr.args)
     for i = 2 : length(substitute)
-        (arg, properties) = replacement_arg(substitute[i], 
+        arg = replacement_arg(substitute[i], 
                 expr_is_copy_of_first_expr ? first_expr.args : second_expr.args,
                 nothing, symbol_info, first_expr, second_expr)
-        # It is useless to specify properties in the substitute skeleton.
-        # Properties should be specified in the original skeleton for matching,
-        # not for replacement.
-        assert(properties == 0)
         push!(expr.args, arg)
     end
     return true
@@ -937,9 +967,14 @@ function check_properties(
     properties          :: Int,
     live_in_before_expr :: Set{Sym},
 )
-    # So far, we only have livein property, if any.
-    assert(properties == 0 || properties == SYMBOLIC_ARG_LIVEIN)
-    if properties & SYMBOLIC_ARG_LIVEIN != 0
+    # So far, we only have SA_HAS_FREE_MEMORY property, if any.
+    assert(properties == 0 || properties == SA_HAS_FREE_MEMORY)
+    if properties & SA_HAS_FREE_MEMORY != 0
+        # ISSUE: this is a hack: even if the arg is live into the pattern,
+        # it is still possible that the arg is pointed to by another variable,
+        # and thus is not free. Also, even if it does have a free memory, we
+        # need to ensure that GC has not collected it (Thus compiler needs to 
+        # pin it in some way)
         if !in(get_symexpr(arg), live_in_before_expr)
             return false
         end
@@ -996,13 +1031,28 @@ function match_skeletons(
                     end
                 elseif typ == Symbol
                     # pattern_skeleton[i] is a symbolic argument like :f1 or :s1.
-                    (arg, properties) = replacement_arg(pattern_skeleton[i], expr.args, nothing, symbol_info, first_expr, second_expr)
+                    arg = replacement_arg(pattern_skeleton[i], expr.args, nothing, symbol_info, first_expr, second_expr)
                     if get_symexpr(arg) != get_symexpr(real_arg)
                         return false
                     end
+                elseif typ == AD
+                    type_or_symbol = pattern_skeleton[i].type_or_symbol
+                    properties     = pattern_skeleton[i].properties
+                    #TODO: handle pattern_skeleton[i].relations as well
+                    if typeof(type_or_symbol) == Symbol
+                        arg = replacement_arg(type_or_symbol, expr.args, nothing, symbol_info, first_expr, second_expr)
+                        if get_symexpr(arg) != get_symexpr(real_arg)
+                            return false
+                        end
+                    else # A type
+                        if !(skeleton[i] <: type_or_symbol)
+                            return false
+                        end
+                        arg = real_arg
+                    end
                     if !check_properties(arg, properties, live_in_before_expr)
                         return false
-                    end
+                    end                    
                 elseif typ == GlobalRef
                     # We need literal match in these cases.
                     if skeleton[i] != pattern_skeleton[i]

@@ -146,12 +146,9 @@ function gather_context_sensitive_info(
         if arg == :r
             M = ast
         else
-            (new_arg, properties) = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
+            new_arg = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
             assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
                    typeof(new_arg) == GenSym)
-            # It is useless to specify properties in the matrices_to_track.
-            # Properties should be specified in the original skeleton for matching.
-            assert(properties == 0)                   
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
         end
         if !haskey(call_sites.extra.matrix2mknob, M)
@@ -178,11 +175,8 @@ function gather_context_sensitive_info(
                 call_sites.extra.reordering_decider_power = reordering_power
                 call_sites.extra.reordering_FAR           = []
                 for arg in reordering_FAR
-                    (new_arg, properties) = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
+                    new_arg = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
                     assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
-                    # It is useless to specify properties in the reordering_FAR.
-                    # Properties should be specified in the original skeleton for matching.
-                    assert(properties == 0)                   
                     M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
                     push!(call_sites.extra.reordering_FAR, M)
                 end

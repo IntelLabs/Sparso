@@ -263,7 +263,7 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*?Rc = .*?SparseAccelerator,:element_wise_multiply\)\)\(x.*?,s.*?\)",
                      "Test call replacement."
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPB!\)\)\(Rc,1,Rc,-\(\(Main.min\)\(0.1,100 \* mu",
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPB!\)\)\(Rc,1,Rc.*?,-\(\(Main.min\)\(0.1,100 \* mu.*?\).*? \* mu.*?\)",
                      "Test call replacement."
         ),
         #TestPattern(r"Original sum of x=715375.98850000",
