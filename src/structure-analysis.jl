@@ -1,22 +1,10 @@
 # --- begin: set_matrix_property inferface --->
 
-@doc """
-"""
-const SA_CONST_VALUED       = 1
-const SA_CONST_STRUCTURED   = 2
-const SA_SYMM_VALUED        = 4
-const SA_SYMM_STRUCTURED    = 8
-const SA_STRUCTURE_ONLY     = 16
-
 @doc """ interface to explicitly specify matrix property in source code"""
 function set_matrix_property(
     pmap    :: Dict{Symbol, Int}
 ) 
 end
-
-const SA_LOWER_OF = 1
-const SA_UPPER_OF = 2
-const SA_TRANSPOSE_OF = 4
 
 @doc """ specify that matrix A is the lower/upper part or transpose of B"""
 function set_matrix_property(
@@ -537,7 +525,7 @@ function propagate_property(
             if ctx_arg_initializer != nothing
                 ctx_arg_initializer(ctx_args)
             end
-#            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, region_info.liveness)
+            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, region_info.liveness)
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
             if ctx_args.changed 
                 converged = false 

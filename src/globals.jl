@@ -97,6 +97,19 @@ function set_options(args...)
     end
 end
 
+@doc """
+Properties of a variable/argument.
+"""
+const SA_CONST_VALUED       = 1
+const SA_CONST_STRUCTURED   = 2
+const SA_SYMM_VALUED        = 4
+const SA_SYMM_STRUCTURED    = 8
+const SA_STRUCTURE_ONLY     = 16
+const SA_LOWER_OF           = 32
+const SA_UPPER_OF           = 64
+const SA_TRANSPOSE_OF       = 128
+const SA_HAS_FREE_MEMORY    = 1024 # Used only in a pattern's skeleton
+
 # Create a path to libcsr. This is a CSR(Compressed Sparse Row format)-based
 # interface to the SPMP library.
 const libcsr = joinpath(dirname(@__FILE__), "..", "lib", "libcsr.so")
