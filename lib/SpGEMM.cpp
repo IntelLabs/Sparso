@@ -66,68 +66,84 @@ void inspectADB_(CSR * C, const CSR *A, const CSR *B)
   C->rowptr[0] = BASE;
 
   int *marker_array = new int[C->n*omp_get_max_threads()];
+  int prefix_sum_workspace[omp_get_max_threads() + 1];
 
-  int *marker = marker_array; 
-  for (int i = 0; i < C->n; ++i) {
-    marker[i] = -1;
+#pragma omp parallel
+  {
+    int tid = omp_get_thread_num();
+
+    int *marker = marker_array + C->n*tid; 
+    for (int i = 0; i < C->n; ++i) {
+      marker[i] = -1;
+    }
+
+    int iBegin, iEnd;
+    getSimpleThreadPartition(&iBegin, &iEnd, A->m);
+
+    int counter = 0;
+    for (int i = iBegin; i < iEnd; ++i) {
+      for (int j = A->rowptr[i] - BASE; j < A->rowptr[i + 1] - BASE; j++) {
+        int jcol = A->colidx[j] - BASE;
+        for (int k = B->rowptr[jcol] - BASE; k < B->rowptr[jcol + 1] - BASE; k++) {
+          int kcol = B->colidx[k] - BASE;
+          if (marker[kcol] != i) {
+            marker[kcol] = i;
+            ++counter;
+          }
+        }
+      }
+    } // for each row
+
+    prefixSum(&counter, &C->rowptr[C->m], prefix_sum_workspace);
+
+#pragma omp barrier
+#pragma omp master
+    {
+      C->colidx = new int[C->rowptr[C->m]];
+      C->values = new T[C->rowptr[C->m]];
+      C->rowptr[C->m] += BASE;
+    }
+#pragma omp barrier
+
+    for (int i = 0; i < C->n; ++i) {
+      marker[i] = -1;
+    }
+
+    for (int i = iBegin; i < iEnd; i++) {
+      C->rowptr[i] = counter + BASE;
+      for (int j = A->rowptr[i] - BASE; j < A->rowptr[i + 1] - BASE; j++) {
+        int jcol = A->colidx[j] - BASE;
+        for (int k = B->rowptr[jcol] - BASE; k < B->rowptr[jcol + 1] - BASE; k++) {
+          int kcol = B->colidx[k] - BASE;
+          if (marker[kcol] != i) {
+            marker[kcol] = i;
+            C->colidx[counter] = kcol + BASE;
+            ++counter;
+          }
+        }
+      }
+
+      bool SORT = true;
+      if (SORT) {
+        for (int j = C->rowptr[i] + 1 - BASE; j < counter; j++) {
+          int c = C->colidx[j];
+          T v = C->values[j];
+
+          int k = j - 1;
+          while (k >= C->rowptr[i] - BASE && C->colidx[k] > c) {
+            C->colidx[k + 1] = C->colidx[k];
+            C->values[k + 1] = C->values[k];
+            --k;
+          }
+
+          C->colidx[k + 1] = c;
+          C->values[k + 1] = v;
+        }
+      }
+    } // for each row
   }
 
-  int counter = 0;
-  for (int i = 0; i < A->m; i++) {
-    for (int j = A->rowptr[i] - BASE; j < A->rowptr[i + 1] - BASE; j++) {
-      int jcol = A->colidx[j] - BASE;
-      for (int k = B->rowptr[jcol] - BASE; k < B->rowptr[jcol + 1] - BASE; k++) {
-        int kcol = B->colidx[k] - BASE;
-        if (marker[kcol] != i) {
-          marker[kcol] = i;
-          ++counter;
-        }
-      }
-    }
-    C->rowptr[i + 1] = counter + BASE;
-  } // for each row
-
-  C->colidx = new int[counter];
-  C->values = new T[counter];
-
-  for (int i = 0; i < C->n; ++i) {
-    marker[i] = -1;
-  }
-
-  counter = 0;
-  for (int i = 0; i < A->m; i++) {
-    for (int j = A->rowptr[i] - BASE; j < A->rowptr[i + 1] - BASE; j++) {
-      int jcol = A->colidx[j] - BASE;
-      for (int k = B->rowptr[jcol] - BASE; k < B->rowptr[jcol + 1] - BASE; k++) {
-        int kcol = B->colidx[k] - BASE;
-        if (marker[kcol] != i) {
-          marker[kcol] = i;
-          C->colidx[counter] = kcol + BASE;
-          ++counter;
-        }
-      }
-    }
-
-    bool SORT = true;
-    if (SORT) {
-      for (int j = C->rowptr[i] + 1 - BASE; j < C->rowptr[i + 1] - BASE; j++) {
-        int c = C->colidx[j];
-        T v = C->values[j];
-
-        int k = j - 1;
-        while (k >= C->rowptr[i] - BASE && C->colidx[k] > c) {
-          C->colidx[k + 1] = C->colidx[k];
-          C->values[k + 1] = C->values[k];
-          --k;
-        }
-
-        C->colidx[k + 1] = c;
-        C->values[k + 1] = v;
-      }
-    }
-  } // for each row
-
-  delete[] marker;
+  delete[] marker_array;
 }
 
 void inspectADB(CSR *C, const CSR *A, const CSR *B)
