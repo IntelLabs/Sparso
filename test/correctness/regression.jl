@@ -886,7 +886,7 @@ const set_matrix_property_test7 = Test(
         TestPattern(r"Func Transpose matrix discovered:.*\n[\s]*A is transpose of B",
                      "Test that A is recognized as transpose of B."
         ),
-        TestPattern(r"Loop0 Transpose matrix discovered:.*\n[\s]*B is transpose of C",
+        TestPattern(r"Loop0 Transpose matrix discovered:.*\n[\s]*A is transpose of B\n[\s]*B is transpose of C",
                      "Test that A is recognized as transpsoe of C."
         ),
 
@@ -910,7 +910,7 @@ const prop_symmetric_value_test1 = Test(
     "prop-symmetric-value-test1",
     "prop-symmetric-value-test1.jl",
     [
-        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :E, :F, :S])),
+        TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :E, :F, :G, :S])),
                      "Test that B E F S is recognized as symmetric in value."
         ),
         exception_pattern

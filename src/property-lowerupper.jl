@@ -237,12 +237,12 @@ type LowerUpperProperty <: MatrixProperty
                     property_upper_map[k] = mat_property[k].upper_of
                 elseif mat_property[k].lower_of != DEFAULT_PROP_VAL
                     property_lower_map[k] = mat_property[k].lower_of
-                elseif mat_property[k].constant_structured < 0
-                    property_upper_map[k] = NEG_PROP_VAL
-                    property_lower_map[k] = NEG_PROP_VAL
+                #elseif mat_property[k].constant_structured < 0
+                #    property_upper_map[k] = NEG_PROP_VAL
+                #    property_lower_map[k] = NEG_PROP_VAL
                 end
-            else
-                property_upper_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL
+            #else
+            #    property_upper_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL
             end
         end
 
