@@ -73,37 +73,37 @@ function abiatic(Hdmat, d, nqbits, T)
       s = t/T
       w = wi
       spmv_time -= time()
-      s1 = -im*((1 - s)*Hdmat*w + s*d.*w)
+      s1 = -im*(-(1 - s)*Hdmat*w + s*d.*w)
       spmv_time += time()
 
       s = (t + 0.25*h)/T
       w = wi + 0.25*h*s1
       spmv_time -= time()
-      s2 = -im*((1 - s)*Hdmat*w + s*d.*w)
+      s2 = -im*(-(1 - s)*Hdmat*w + s*d.*w)
       spmv_time += time()
 
       s = (t + c30*h)/T
       w = wi + c31*h*s1 + c32*h*s2
       spmv_time -= time()
-      s3 = -im*((1 - s)*Hdmat*w + s*d.*w)
+      s3 = -im*(-(1 - s)*Hdmat*w + s*d.*w)
       spmv_time += time()
 
       s = (t + c40*h)/T
       w = wi + c41*h*s1 + c42*h*s2 + c43*h*s3
       spmv_time -= time()
-      s4 = -im*((1 - s)*Hdmat*w + s*d.*w)
+      s4 = -im*(-(1 - s)*Hdmat*w + s*d.*w)
       spmv_time += time()
 
       s = (t + h)/T
       w = wi + c51*h*s1 + c52*h*s2 + c53*h*s3 + c54*h*s4
       spmv_time -= time()
-      s5 = -im*((1 - s)*Hdmat*w + s*d.*w)
+      s5 = -im*(-(1 - s)*Hdmat*w + s*d.*w)
       spmv_time += time()
 
       s = (t + 0.5*h)/T
       w = wi + c61*h*s1 + c62*h*s2 + c63*h*s3 + c64*h*s4 + c65*h*s5
       spmv_time -= time()
-      s6 = -im*((1 - s)*Hdmat*w + s*d.*w)
+      s6 = -im*(-(1 - s)*Hdmat*w + s*d.*w)
       spmv_time += time()
 
       w = wi + h*(cw1*s1 + cw3*s3 + cw4*s4 + cw5*s5)
@@ -153,7 +153,7 @@ function abiatic(Hdmat, d, nqbits, T)
 
     for k = 1:nit
       spmv_time -= time()
-      uk = (1 - s)*Hdmat*q1 + s*d.*q1
+      uk = -(1 - s)*Hdmat*q1 + s*d.*q1
       spmv_time += time()
 
       alpha[k] = dot(q1, uk)
@@ -246,7 +246,6 @@ for i=1:nsets
     Hdmat[i,flip+1] = 1
   end
 end
-Hdmat = tunnelstr*Hdmat
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
 #ccall((:store_matrix_market, SparseAccelerator.LIB_PATH), Void,
