@@ -248,11 +248,9 @@ for i=1:nsets
 end
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
-println(issym(Hdmat))
-
-ccall((:store_matrix_market, SparseAccelerator.LIB_PATH), Void,
-       (Ptr{Cchar}, Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
-       ARGS[3], Hdmat.m, Hdmat.n, Hdmat.colptr, Hdmat.rowval, Hdmat.nzval)
+#ccall((:store_matrix_market, SparseAccelerator.LIB_PATH), Void,
+       #(Ptr{Cchar}, Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+       #ARGS[3], Hdmat.m, Hdmat.n, Hdmat.colptr, Hdmat.rowval, Hdmat.nzval)
 
 spmv_test(Hdmat)
 t = -time()
