@@ -737,6 +737,18 @@ const single_def_test1 = Test(
     ]
 )
 
+const single_def_test2 = Test(
+    "single-def-test2",
+    "single-def-test2.jl",
+    [
+        TestPattern(Regex("Single-defs discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A B are recognized as single-defs in the loop."
+        ),
+        exception_pattern
+    ]
+)
+
+
 const set_matrix_property_test1 = Test(
     "set-matrix-property-test1",
     "set-matrix-property-test1.jl",
@@ -1029,6 +1041,7 @@ const all_tests = [
     call_replacement_test12,
     name_resolution_test1,
     single_def_test1,
+    single_def_test2,
     constant_value_test1,
     set_matrix_property_test1,
     set_matrix_property_test2,
