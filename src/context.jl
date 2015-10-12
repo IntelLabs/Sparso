@@ -1077,7 +1077,6 @@ function generate_and_delete_knobs(
             push!(derivatives, (M, DERIVATIVE_TYPE_UPPER_TRIANGULAR, prop.upper_of))
         end
         if prop.transpose_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.transpose_of)
-            dprintln(1, 1, "making ", M, "as transpose of ", prop.transpose_of)
             push!(derivatives, (M, DERIVATIVE_TYPE_TRANSPOSE, prop.transpose_of))
         end
     end
