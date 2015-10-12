@@ -252,18 +252,4 @@ Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
        #(Ptr{Cchar}, Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
        #ARGS[3], Hdmat.m, Hdmat.n, Hdmat.colptr, Hdmat.rowval, Hdmat.nzval)
 
-spmv_test(Hdmat)
-t = -time()
-spmv_test(Hdmat)
-t += time()
-
-println("spmv_test takes $t ($(12.*100*nnz(Hdmat)/t/1e9) gbps)")
-
-spmv_test_reordering(Hdmat)
-t = -time()
-spmv_test_reordering(Hdmat)
-t += time()
-
-println("spmv_test_reordering takes $t ($(12.*100*nnz(Hdmat)/t/1e9) gbps)")
-
-#abiatic(Hdmat, d, nqbits, T)
+abiatic(Hdmat, d, nqbits, T)
