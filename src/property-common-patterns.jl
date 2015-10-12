@@ -58,8 +58,14 @@ function prop_post_assign_action(
     vRHS = get_property_val(call_sites, RHS) 
     vLHS = get_property_val(call_sites, LHS)
 
-    if vRHS !=call_sites.extra.local_map[sym_default_id] && vLHS != vRHS
-        set_property_val(call_sites, LHS, vRHS)
+    if vRHS != vLHS
+        if vRHS == call_sites.extra.local_map[sym_negative_id]
+            set_property_val(call_sites, LHS, vRHS)
+        elseif vRHS != call_sites.extra.local_map[sym_default_id] # vRHS is positive         
+            if vLHS != call_sites.extra.local_map[sym_negative_id]
+                set_property_val(call_sites, LHS, vRHS)
+            end
+        end
     end
     return true
 end

@@ -504,6 +504,7 @@ end
 
 
 @doc """
+Data-flow based property propagate
 """
 function propagate_property(
     property_map            :: Dict, 
