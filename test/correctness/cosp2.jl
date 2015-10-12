@@ -228,7 +228,7 @@ end
 
 function CoSP2_ref(X, flops)
   set_matrix_property(Dict(
-      :S => SA_SYMM_VALUED, 
+      :X => SA_SYMM_VALUED, 
     )
   )
 

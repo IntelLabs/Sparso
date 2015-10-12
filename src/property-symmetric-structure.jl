@@ -104,7 +104,7 @@ type SymmetricStructureProperty <: MatrixProperty
     end
 
     const prop_spmatmul_witheps_pattern = ExprPattern(
-        "prop_Aspmatmul_witheps_pattern",
+        "prop_spmatmul_witheps_pattern",
         (:call, GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC, Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
