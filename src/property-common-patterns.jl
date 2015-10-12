@@ -17,6 +17,23 @@ function prop_propagate_last_symbol_property(
     return true
 end
 
+function prop_propagate_first_arg(
+    ast               :: Expr,
+    call_sites        :: CallSites,
+    fknob_creator :: AbstractString,
+    fknob_deletor :: AbstractString,
+    matrices_to_track :: Tuple,
+    reordering_power  :: Int,
+    reordering_FAR    :: Tuple
+)
+    A = ast.args[2]
+    if isa(A, SymbolNode)
+        A = A.name
+    end
+    set_property_val(call_sites, ast,  A)
+    return true
+end
+
 @doc """ Pre-assignment check """
 function prop_pre_assign_check(
     ast               :: Expr,

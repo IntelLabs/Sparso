@@ -710,10 +710,10 @@ function find_properties_of_matrices(
     for k in sort_by_str_key(structure_proxies)
         v = structure_proxies[k]
         if v.lower_of != nothing
-            dprintln(1, 1, k, " is lower of ", string(v.lower_of))
+            dprintln(1, 1, k, " is lower of ", v.lower_of)
         end
         if v.upper_of != nothing
-            dprintln(1, 1, k, " is upper of ", string(v.upper_of))
+            dprintln(1, 1, k, " is upper of ", v.upper_of)
         end
     end
 
@@ -721,7 +721,7 @@ function find_properties_of_matrices(
     for k in sort_by_str_key(structure_proxies)
         v = structure_proxies[k]
         if v.transpose_of != nothing
-            dprintln(1, 1, k, " is transpose of ", string(v.transpose_of))
+            dprintln(1, 1, k, " is transpose of ", v.transpose_of)
         end
     end
 

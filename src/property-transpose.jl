@@ -13,28 +13,13 @@ type TransposeProperty <: MatrixProperty
     const DEFAULT_PROP_VAL = nothing
     const NEG_PROP_VAL = :NEGATIVE_PROPERTY
 
-    @doc """ Post-processing function for spmatmul_witheps. """
-    function post_ctranspose_action(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator :: AbstractString,
-        fknob_deletor :: AbstractString,
-        matrices_to_track :: Tuple,
-        reordering_power  :: Int,
-        reordering_FAR    :: Tuple
-    )
-        A = ast.args[2]
-        set_property_val(call_sites, ast,  A)
-        return true
-    end
-
     const prop_ctranspose_pattern = ExprPattern(
         "prop_spones_pattern",
         (:call, GlobalRef(Main, :ctranspose), SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
-        post_ctranspose_action,
+        prop_propagate_first_arg,
         "",
         "",
         (),
