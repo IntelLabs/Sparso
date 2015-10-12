@@ -236,16 +236,17 @@ T = parse(Int, ARGS[2])
 nsets = 2^nqbits
 d = 4*collect(-nsets/2 : nsets/2 - 1)
 
-tunnelstr = 1
+tunnelstr = -1
 
 hdmat_time = -time()
 Hdmat = zeros(nsets, nsets)
 for i=1:nsets
   for j=0:nqbits-1
     flip = (i - 1)$(1 << j) # flip jth bit in zero-based indexing
-    Hdmat[i,flip+1] = -tunnelstr
+    Hdmat[i,flip+1] = 1
   end
 end
+Hdmat = tunnelstr*Hdmat
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
 #ccall((:store_matrix_market, SparseAccelerator.LIB_PATH), Void,
