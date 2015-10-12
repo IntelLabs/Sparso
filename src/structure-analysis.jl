@@ -170,7 +170,7 @@ function set_property_val(
         pmap = call_sites.extra.property_map
         if value != pmap[:DEFAULT_PROPERTY] && (!haskey(pmap, sym_name) || pmap[sym_name] != value)
             call_sites.extra.changed = true
-            dprintln(1, 1, "val changed: ", sym_name, value)
+            dprintln(1, 1, "val changed: ", sym_name, " -> ",  value)
         end
     end
     
@@ -392,9 +392,13 @@ type RegionInfo
 end
 
 include("property-constant-structure.jl")
+
+include("property-common-patterns.jl")
 include("property-symmetric-value.jl")
 include("property-symmetric-structure.jl")
+include("property-structure-only.jl")
 include("property-lowerupper.jl")
+include("property-transpose.jl")
 
 
 @doc """
@@ -637,7 +641,9 @@ function find_properties_of_matrices(
         ConstantStructureProperty(),
         SymmetricValueProperty(),
         SymmetricStructureProperty(),
-        LowerUpperProperty()
+        StructureOnlyProperty(),
+        LowerUpperProperty(),
+        TransposeProperty()
     ]
 
     for pass in structure_property_passes
@@ -671,10 +677,10 @@ function find_properties_of_matrices(
     for k in sort_by_str_key(structure_proxies)
         v = structure_proxies[k]
         if v.lower_of != nothing
-            dprintln(1, 1, k, " is lower of ", v.lower_of)
+            dprintln(1, 1, k, " is lower of ", string(v.lower_of))
         end
         if v.upper_of != nothing
-            dprintln(1, 1, k, " is upper of ", v.upper_of)
+            dprintln(1, 1, k, " is upper of ", string(v.upper_of))
         end
     end
 
@@ -682,7 +688,7 @@ function find_properties_of_matrices(
     for k in sort_by_str_key(structure_proxies)
         v = structure_proxies[k]
         if v.transpose_of != nothing
-            dprintln(1, 1, k, " is transpose of ", v.transpose_of)
+            dprintln(1, 1, k, " is transpose of ", string(v.transpose_of))
         end
     end
 
