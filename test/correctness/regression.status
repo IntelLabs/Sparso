@@ -2,7 +2,7 @@ Final report:
 sanity-test1: Pass
 sanity-test2: Pass
 sanity-test3: Pass
-spmv-sanity-test1: FAIL. See spmv-sanity-test1.log
+spmv-sanity-test1: Pass
 context-test1: Pass
 context-test2: Pass
 context-test2-without-reordering: Pass
@@ -37,6 +37,7 @@ set-matrix-property-test4: FAIL. See set-matrix-property-test4.log
     B is renamed and thus the annotation does not work.
 set-matrix-property-test5: Pass
 set-matrix-property-test6: Pass
+set-matrix-property-test7: Pass
 constant-structure-test1: FAIL. See constant-structure-test1.log
     R is not found as loop constant structured.
 symmetric-value-test1: Pass
@@ -46,6 +47,6 @@ symmetric-value-test3: Pass
 symmetric-value-test4: Pass
 lower-upper-test1: Pass
 lower-upper-test2: Pass
-Total: 44
-Pass : 39
-Fail : 5
+Total: 45
+Pass : 41
+Fail : 4

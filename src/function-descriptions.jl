@@ -209,6 +209,27 @@ const SpMV!_7_parameters_Desc = FunctionDescription(
     ])
 )
 
+@doc """ w = (alpha*A*x + beta*y + gamma) .* z """
+const SpMV!_8_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV!",
+    (Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number, Vector),
+    Set(1),                           # Argument 1 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 3, ROW_ROW),
+          (0, 6, ROW_ROW),
+          (0, 8, ROW_ROW),
+          (1, 3, ROW_ROW),
+          (1, 6, ROW_ROW),
+          (1, 8, ROW_ROW),
+          (3, 4, COLUMN_ROW_INVERSE),
+          (3, 6, ROW_ROW),
+          (3, 8, ROW_ROW),
+          (6, 8, ROW_ROW)
+    ])
+)
+
 const star_Desc = FunctionDescription(
     "Main", 
     "*",                              # *(A::SparseMatrixCSC, x::Vector)
@@ -685,6 +706,7 @@ function_descriptions  = [
     SpMV_5_parameters_Desc,
     SpMV_6_parameters_Desc,
     SpMV!_7_parameters_Desc,
+    SpMV!_8_parameters_Desc,
     star_Desc,
     star1_Desc,
     star2_Desc,

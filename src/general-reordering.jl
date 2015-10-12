@@ -738,7 +738,7 @@ function reordering(
         build_vertex(seed, false, graph)
         
         recursive  = false
-        vist_expressions(region, cfg, call_sites, recursive, build_inter_dependence_graph)
+        visit_expressions(region, cfg, call_sites, recursive, build_inter_dependence_graph)
 
         color_inter_dependence_graph(liveness, graph)
 

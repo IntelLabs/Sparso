@@ -269,6 +269,11 @@ extern double *getTempVector(int l); // defined in knob.cpp
 
 extern "C" {
 
+// context insensitive version of SpMV
+// Since we don't know if A in CSC is symmetric
+// we resort into SpMV in CSC.
+// transpose to CSR and then performing CSR SpMV
+// turns out to be slower
 void CSR_MultiplyWithVector(
   double *w,
   double alpha, const CSR_Handle *A, const double *x,
@@ -276,18 +281,73 @@ void CSR_MultiplyWithVector(
   double gamma,
   const double *z)
 {
-  if (w == x) {
-    double *temp_vector = getTempVector(((CSR *)A)->m);
-#pragma omp parallel for
-    for (int i = 0; i < ((CSR *)A)->m; ++i) {
-      temp_vector[i] = x[i];
+  CSR *AT = ((CSR *)A);
+
+  int base = AT->getBase();
+
+  int *rowptr = AT->rowptr - base;
+  int *colidx = AT->colidx - base;
+  double *values = AT->values - base;
+
+  x -= base;
+
+//#define MEASURE_LOAD_BALANCE
+#ifdef MEASURE_LOAD_BALANCE
+  double barrierTimes[omp_get_max_threads()];
+  double tBegin = omp_get_wtime();
+#endif
+  
+  double *temp_buffer_array = MALLOC(double, omp_get_max_threads()*AT->n);
+
+#pragma omp parallel
+  {
+    int iBegin, iEnd;
+    getLoadBalancedPartition(&iBegin, &iEnd, rowptr + base, AT->m);
+    iBegin += base;
+    iEnd += base;
+
+    int tid = omp_get_thread_num();
+    double *temp_buffer = temp_buffer_array + tid*AT->n;
+    for (int i = 0; i < AT->n; ++i) {
+      temp_buffer[i] = 0;
+    }
+    temp_buffer -= base;
+
+    for (int i = iBegin; i < iEnd; ++i) {
+      double xi = x[i];
+      for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+        temp_buffer[colidx[j]] += xi*values[j];
+      }
     }
 
-    multiplyWithVector(w, alpha, (CSR *)A, temp_vector, beta, y, gamma, z);
+#pragma omp barrier
+
+#pragma omp for
+    for (int i = 0; i < AT->n; ++i) {
+      double sum = temp_buffer_array[i];
+      for (int j = 1; j < omp_get_num_threads(); ++j) {
+        sum += temp_buffer_array[j*AT->n + i];
+      }
+      if (z) {
+        if (beta == 0) {
+          w[i] = (alpha*sum + gamma)*z[i];
+        }
+        else {
+          w[i] = (alpha*sum + beta*y[i] + gamma)*z[i];
+        }
+      }
+      else {
+        if (beta == 0) {
+          w[i] = alpha*sum + gamma;
+        }
+        else {
+          w[i] = alpha*sum + beta*y[i] + gamma;
+        }
+      }
+    }
   }
-  else {
-    multiplyWithVector(w, alpha, (CSR *)A, x, beta, y, gamma, z);
-  }
+
+  FREE(temp_buffer_array);
 }
 
 void CSR_MultiplyWithDenseMatrix(

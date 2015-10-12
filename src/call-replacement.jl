@@ -1087,7 +1087,7 @@ Replace it into the following instead:
 function match_replace_an_two_statements_pattern(
     first_expr  :: Expr,
     second_expr :: Expr,
-    symbol_info :: Sym2TypeMap,
+    call_sites  :: CallSites,
     patterns    :: Vector
 )      
     # Check that the result is one of the input parameter of f, in which case
@@ -1102,6 +1102,7 @@ function match_replace_an_two_statements_pattern(
     #if !is_an_arg(expr.args[1], prev_expr.args[2])
     #    return false
     #end
+    symbol_info = call_sites.symbol_info    
     for pattern in patterns
         if match_skeletons(first_expr,  pattern.first_skeleton,  symbol_info, first_expr, second_expr) &&
            match_skeletons(second_expr, pattern.second_skeleton, symbol_info, first_expr, second_expr)
@@ -1170,7 +1171,7 @@ function replace_calls(
             
             if prev_expr != nothing
                 # Try to merge this and the previous expression
-                match_replace_an_two_statements_pattern(prev_expr, expr, symbol_info, two_statements_patterns)
+                match_replace_an_two_statements_pattern(prev_expr, expr, call_sites, two_statements_patterns)
             end
             
             prev_expr = expr
