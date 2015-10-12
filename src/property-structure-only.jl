@@ -29,7 +29,7 @@ type StructureOnlyProperty <: MatrixProperty
 
     const prop_speye_pattern = ExprPattern(
         "prop_speye_pattern",
-        (:call, GlobalRef(Main, :speye), Any),
+        (:call, GlobalRef(Main, :speye), Any, Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
