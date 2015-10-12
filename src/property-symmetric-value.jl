@@ -268,7 +268,7 @@ type SymmetricValueProperty <: MatrixProperty
             end
         end
 
-        dprintln(1, 1, "\nBefore symmetric analysis:")
+        dprintln(1, 1, "\nBefore symmetric_valued analysis:")
         dprint_property_map(1, property_map)
 
         cnt = propagate_property(property_map, region_info, prop_symmetric_propagation_patterns, 
@@ -276,7 +276,7 @@ type SymmetricValueProperty <: MatrixProperty
                 nothing
         )
     
-        dprintln(1, 1, "\nAfter symmetric analysis (", cnt, " iterations):")
+        dprintln(1, 1, "\nAfter symmetric_valued analysis (", cnt, " iterations):")
         dprint_property_map(1, property_map)
 
         # copy back result

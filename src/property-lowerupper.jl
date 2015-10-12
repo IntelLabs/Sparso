@@ -26,21 +26,6 @@ type LowerUpperProperty <: MatrixProperty
         return true
     end
 
-    @doc """ Post-processing function for spmatmul_witheps. """
-    function post_tril_triu_action(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator :: AbstractString,
-        fknob_deletor :: AbstractString,
-        matrices_to_track :: Tuple,
-        reordering_power  :: Int,
-        reordering_FAR    :: Tuple
-    )
-        A = ast.args[2]
-        set_property_val(call_sites, ast,  A)
-        return true
-    end
-
     @doc """ Post-processing function. Propagate the structure of the last arg. """
     function post_add_sub_action(
         ast               :: Expr,
@@ -145,7 +130,7 @@ type LowerUpperProperty <: MatrixProperty
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
-        post_tril_triu_action,
+        prop_propagate_first_arg, 
         "",
         "",
         (),
@@ -159,7 +144,7 @@ type LowerUpperProperty <: MatrixProperty
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
-        post_tril_triu_action,
+        prop_propagate_first_arg, 
         "",
         "",
         (),
