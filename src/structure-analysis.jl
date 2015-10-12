@@ -68,7 +68,7 @@ function dprint_property_proxies(
     end
 end
 
-const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
+const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor, Factorization]
 
 #
 # data types shared by analysis passes 
@@ -654,6 +654,12 @@ function find_properties_of_matrices(
     # filter out matrix type
     is_matrix_type = (x) -> any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
     mfilter = (x) -> filter(is_matrix_type, x)
+
+    delete!(structure_proxies, sym_default_id)
+    delete!(structure_proxies, sym_negative_id)
+    #for (k, v) in structure_proxies
+    #    dprintln(1, 1, k, " ", symbol_info[k])
+    #end
 
     dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(structure_proxies)))
