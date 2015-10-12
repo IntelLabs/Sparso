@@ -24,6 +24,7 @@ function foo()
         G = S + B - F # symm
         H = NS - B + G
         G = G + G - G
+        H = G 
     end
 end
 

@@ -28,6 +28,7 @@ function prop_pre_assign_check(
     assert(typeof(LHS) <: Sym)
     vLHS = get_property_val(call_sites, LHS)
 
+    # skip if ast already has a negative property
     return vLHS != call_sites.extra.local_map[sym_negative_id]
 end
 
@@ -56,13 +57,22 @@ function prop_post_assign_action(
     assert(typeof(LHS) <: Sym)
     RHS = get_symexpr(ast.args[2])
     vRHS = get_property_val(call_sites, RHS) 
-    vLHS = get_property_val(call_sites, LHS)
 
-    if vRHS != vLHS
-        if vRHS == call_sites.extra.local_map[sym_negative_id]
-            set_property_val(call_sites, LHS, vRHS)
-        elseif vRHS != call_sites.extra.local_map[sym_default_id] # vRHS is positive         
-            if vLHS != call_sites.extra.local_map[sym_negative_id]
+    if !is_property_val_set(call_sites, LHS)
+        set_property_val(call_sites, LHS, vRHS)
+    else
+        vLHS = get_property_val(call_sites, LHS)
+        assert(vLHS != call_sites.extra.local_map[sym_negative_id])
+
+        if vRHS != vLHS
+            if vRHS == call_sites.extra.local_map[sym_negative_id]
+                # vLHS: def or positive, vRHS: negative
+                set_property_val(call_sites, LHS, vRHS)
+            elseif vRHS != call_sites.extra.local_map[sym_default_id] # vRHS is positive
+                # vLHS: def, vRHS: positive -> no change
+                # set_property_val(call_sites, LHS, vRHS)
+            else
+                # vLHS: pos, vRHS: def -> back to default
                 set_property_val(call_sites, LHS, vRHS)
             end
         end

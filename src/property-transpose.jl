@@ -69,11 +69,11 @@ type TransposeProperty <: MatrixProperty
             if haskey(mat_property, k) 
                 if mat_property[k].transpose_of != DEFAULT_PROP_VAL
                     property_map[k] = mat_property[k].transpose_of
-                elseif mat_property[k].constant_structured < 0
-                    property_map[k] = NEG_PROP_VAL
+                #elseif mat_property[k].constant_structured < 0
+                #    property_map[k] = NEG_PROP_VAL
                 end
-            else
-                property_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL
+            #else
+            #    property_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL
             end
         end
 

@@ -256,12 +256,8 @@ type SymmetricValueProperty <: MatrixProperty
 
         for k in keys(region_info.depend_map)
             # always prefer predefined values
-            if haskey(mat_property, k) 
-                if mat_property[k].symmetric_valued != DEFAULT_PROP_VAL 
-                    property_map[k] = mat_property[k].symmetric_valued
-                end
-            #else
-            #    property_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL 
+            if haskey(mat_property, k) && mat_property[k].symmetric_valued != DEFAULT_PROP_VAL 
+                property_map[k] = mat_property[k].symmetric_valued
             end
         end
 

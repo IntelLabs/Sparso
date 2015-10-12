@@ -129,8 +129,9 @@ end
 @doc """
 Context used for analyzing one statement
 """
-type ASTContextArgs{ValTp}
-    changed         :: Bool                  # any property has been changed ?
+type StmtContextArgs{ValTp}
+    changed         :: Set{Sym}              # symbols property has been changed?
+    unchangable     :: Set{Sym}              # symbols whose property cannot be changed 
     property_map    :: Dict{Sym, ValTp}      # symbol -> property
     local_map       :: Dict{Symexpr, ValTp}  # symbol|expr -> property
 end
@@ -142,17 +143,18 @@ function get_property_val(
     call_sites  :: CallSites,
     sym_name    :: Symexpr
 )
-    @assert(isa(call_sites.extra, ASTContextArgs))
+    @assert(isa(call_sites.extra, StmtContextArgs))
     if in(typeof(sym_name), [Expr])
         pmap = call_sites.extra.local_map 
     else
         pmap = call_sites.extra.property_map
     end
 
-    if !haskey(pmap, sym_name)
-        pmap[sym_name] = pmap[sym_default_id]
+    if haskey(pmap, sym_name)
+        return pmap[sym_name]
+    else
+        return pmap[sym_default_id]
     end
-    return pmap[sym_name]
 end
 
 @doc """
@@ -163,18 +165,38 @@ function set_property_val(
     sym_name    :: Symexpr,
     value       :: Any
 )
-    @assert(isa(call_sites.extra, ASTContextArgs))
+    @assert(isa(call_sites.extra, StmtContextArgs))
     if in(typeof(sym_name), [ Expr])
+        pmap = call_sites.extra.local_map 
+        @assert(!in(sym_name, call_sites.extra.unchangable))
+    else
+        pmap = call_sites.extra.property_map
+        # 
+        if in(sym_name, call_sites.extra.unchangable)
+            dprintln(1, 1, "WW: reject property change (", sym_name, " -> ", value,") because ", sym_name, " in unchangeable set")
+            return 
+        end
+        if !haskey(pmap, sym_name) || pmap[sym_name] != value
+            push!(call_sites.extra.changed, sym_name)
+        end
+        dprintln(1, 1, "set_property_val: ", sym_name, " -> ",  value)
+    end
+ 
+    pmap[sym_name] = value
+end
+
+function is_property_val_set(
+    call_sites  :: CallSites,
+    sym_name    :: Symexpr
+)
+    @assert(isa(call_sites.extra, StmtContextArgs))
+    if in(typeof(sym_name), [Expr])
         pmap = call_sites.extra.local_map 
     else
         pmap = call_sites.extra.property_map
-        if value != pmap[:DEFAULT_PROPERTY] && (!haskey(pmap, sym_name) || pmap[sym_name] != value)
-            call_sites.extra.changed = true
-            dprintln(1, 1, "val changed: ", sym_name, " -> ",  value)
-        end
     end
-    
-    pmap[sym_name] = value
+
+    return haskey(pmap, sym_name)
 end
 
 
@@ -254,11 +276,6 @@ function build_dependence(
 
             # this is not direct type of args
             args_real_types = expr_skeleton(ast, symbol_info)[2:end]
-
-            # a quick hack for cholfact_int32 call
-            #if func_name == "cholfact_int32"
-            #    return ret_set
-            #end
 
             # a quick hack for setfield! call
             if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
@@ -519,9 +536,11 @@ function propagate_property(
     @assert(typeof(negative_prop_value) <: PropertyValType)
     @assert(ctx_arg_initializer == nothing || isa(ctx_arg_initializer, Function))
 
+    unchangeable_set = Set{Sym}(keys(property_map))
+
     # ctx_args is attached to call_sites so that
     # pattern functions can pass back their results
-    ctx_args = ASTContextArgs{PropertyValType}(false, property_map, Dict{Expr, PropertyValType}())
+    ctx_args = StmtContextArgs{PropertyValType}(Set{Sym}(), unchangeable_set, property_map, Dict{Expr, PropertyValType}())
 
     call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.symbol_info,
                         propagation_patterns,
@@ -531,19 +550,26 @@ function propagate_property(
     cnt = 0
     while !converged
         converged = true
+        old_pmap = copy(property_map)
+        ctx_args.changed = Set{Sym}()
         for stmt in region_info.stmts
             expr = stmt.expr
             if typeof(expr) != Expr
                 continue
             end
-            ctx_args.changed = false
             ctx_args.local_map = new_symexpr_property_map(PropertyValType, default_prop_value, negative_prop_value)
             if ctx_arg_initializer != nothing
                 ctx_arg_initializer(ctx_args)
             end
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
-            if ctx_args.changed 
-                converged = false 
+        end
+        if !isempty(ctx_args.changed)
+            for s in ctx_args.changed 
+                old_val = haskey(old_pmap, s) ? old_pmap[s] : old_pmap[sym_default_id]
+                if property_map[s] != old_val
+                    converged = false 
+                    break
+                end
             end
         end
         cnt = cnt + 1
