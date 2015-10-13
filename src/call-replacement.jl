@@ -989,7 +989,28 @@ function match_replace(
     #end
 
     symbol_info = call_sites.symbol_info
-    if match_skeletons(ast, pattern.skeleton, symbol_info)
+
+    match_filter_val = 0 # unknown
+    match_filter = nothing
+    if isdefined(call_sites.extra, :pattern_match_filter)
+        match_filter = call_sites.extra.pattern_match_filter
+        key = tuple(ast, pattern)
+        if haskey(match_filter, key)
+            match_filter_val = match_filter[key]
+            assert(match_filter_val != 0)
+        end
+    end
+
+    if match_filter_val == 0
+        matched = match_skeletons(ast, pattern.skeleton, symbol_info)
+        if match_filter != nothing
+            match_filter[key] = matched ? 1 : -1;
+        end
+    else
+        matched = match_filter_val > 0 ? true : false 
+    end
+
+    if matched
         # Check sub-expr_patterns
         if length(pattern.sub_expr_patterns) == 1 && 
            pattern.sub_expr_patterns[1] == :NO_SUB_PATTERNS

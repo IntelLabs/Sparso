@@ -48,6 +48,15 @@ type LowerUpperProperty <: MatrixProperty
         return true
     end
 
+    function post_ilu_action(
+        ast               :: Expr,
+        call_sites        :: CallSites,
+        fknob_creator :: AbstractString,
+        fknob_deletor :: AbstractString
+    )
+        return true
+    end
+
     @doc """ Post-processing function for * operation. """
     function post_multi_action(
         ast               :: Expr,
@@ -81,6 +90,20 @@ type LowerUpperProperty <: MatrixProperty
 
         return true
     end
+
+    const prop_ilu_pattern = ExprPattern(
+        "prop_spdiagm_pattern",
+        (:call, GlobalRef(SparseAccelerator, :ilu), SparseMatrixCSC),
+        (:NO_SUB_PATTERNS,),
+        do_nothing,
+        (:NO_CHANGE, ),
+        post_ilu_action,
+        "",
+        "",
+        (),
+        0,
+        ()
+    )
 
     const prop_spdiagm_pattern = ExprPattern(
         "prop_spdiagm_pattern",
