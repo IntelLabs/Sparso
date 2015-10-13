@@ -130,10 +130,11 @@ end
 Context used for analyzing one statement
 """
 type StmtContextArgs{ValTp}
-    changed         :: Set{Sym}              # symbols property has been changed?
-    unchangable     :: Set{Sym}              # symbols whose property cannot be changed 
-    property_map    :: Dict{Sym, ValTp}      # symbol -> property
-    local_map       :: Dict{Symexpr, ValTp}  # symbol|expr -> property
+    changed             :: Set{Sym}              # symbols property has been changed?
+    unchangable         :: Set{Sym}              # symbols whose property cannot be changed 
+    property_map        :: Dict{Sym, ValTp}      # symbol -> property
+    local_map           :: Dict{Symexpr, ValTp}  # symbol|expr -> property
+    pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
 end
 
 @doc """
@@ -343,6 +344,8 @@ type RegionInfo
     constants           :: Set
     single_defs         :: Set
 
+    pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
+
     function RegionInfo(
         region          :: Region, 
         symbol_info     :: Sym2TypeMap,
@@ -354,6 +357,8 @@ type RegionInfo
         info.symbol_info = symbol_info
         info.liveness = liveness
         info.cfg = cfg
+
+        info.pattern_match_filter = Dict{Tuple{Expr, ExprPattern}, Int}()
 
         if isa(region, LoopRegion)
             first_bb_idx = sort(collect(region.loop.members))[1]
@@ -540,7 +545,10 @@ function propagate_property(
 
     # ctx_args is attached to call_sites so that
     # pattern functions can pass back their results
-    ctx_args = StmtContextArgs{PropertyValType}(Set{Sym}(), unchangeable_set, property_map, Dict{Expr, PropertyValType}())
+    ctx_args = StmtContextArgs{PropertyValType}(Set{Sym}(), unchangeable_set, 
+                property_map, Dict{Expr, PropertyValType}(),
+                region_info.pattern_match_filter,
+                )
 
     call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.symbol_info,
                         propagation_patterns,
