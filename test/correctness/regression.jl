@@ -737,6 +737,18 @@ const single_def_test1 = Test(
     ]
 )
 
+const single_def_test2 = Test(
+    "single-def-test2",
+    "single-def-test2.jl",
+    [
+        TestPattern(Regex("Single-defs discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
+                     "Test ipm-ref that A B are recognized as single-defs in the loop."
+        ),
+        exception_pattern
+    ]
+)
+
+
 const set_matrix_property_test1 = Test(
     "set-matrix-property-test1",
     "set-matrix-property-test1.jl",
@@ -874,7 +886,7 @@ const set_matrix_property_test7 = Test(
         TestPattern(r"Func Transpose matrix discovered:.*\n[\s]*A is transpose of B",
                      "Test that A is recognized as transpose of B."
         ),
-        TestPattern(r"Loop0 Transpose matrix discovered:.*\n[\s]*B is transpose of C",
+        TestPattern(r"Loop0 Transpose matrix discovered:.*\n[\s]*A is transpose of B\n[\s]*B is transpose of C",
                      "Test that A is recognized as transpsoe of C."
         ),
 
@@ -883,9 +895,9 @@ const set_matrix_property_test7 = Test(
 )
 
 
-const constant_structure_test1 = Test(
-    "constant-structure-test1",
-    "constant-structure-test1.jl ipm/mps/osa-14",
+const prop_constant_structure_test1 = Test(
+    "prop-constant-structure-test1",
+    "prop-constant-structure-test1.jl ipm/mps/osa-14",
     [
         TestPattern(Regex("Loop-4 Constant structures discovered:.*\\n.*" * gen_set_regex_string([:A, :B, :D, :R])),
                      "Test that A B D R are recognized as constant in structure."
@@ -894,20 +906,20 @@ const constant_structure_test1 = Test(
     ]
 )
 
-const symmetric_value_test1 = Test(
-    "symmetric-value-test1",
-    "symmetric-value-test1.jl",
+const prop_symmetric_value_test1 = Test(
+    "prop-symmetric-value-test1",
+    "prop-symmetric-value-test1.jl",
     [
         TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :E, :F, :G, :S])),
-                     "Test that B E F G S is recognized as symmetric in value."
+                     "Test that B E F S is recognized as symmetric in value."
         ),
         exception_pattern
     ]
 )
 
-const symmetric_value_test2 = Test(
-    "symmetric-value-test2",
-    "symmetric-value-test2.jl",
+const prop_symmetric_value_test2 = Test(
+    "prop-symmetric-value-test2",
+    "prop-symmetric-value-test2.jl",
     [
         TestPattern(r"Value symmetry discovered:.*\n.*\[.*:A.*\]",
                      "Test that A is recognized as symmetric in value."
@@ -916,9 +928,9 @@ const symmetric_value_test2 = Test(
     ]
 )
 
-const symmetric_value_test3 = Test(
-    "symmetric-value-test3",
-    "symmetric-value-test3.jl",
+const prop_symmetric_value_test3 = Test(
+    "prop-symmetric-value-test3",
+    "prop-symmetric-value-test3.jl",
     [
         TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:B, :C, :G, :S])),
                      "Test that B E F G S are recognized as symmetric in value."
@@ -927,9 +939,9 @@ const symmetric_value_test3 = Test(
     ]
 )
 
-const symmetric_value_test4 = Test(
-    "symmetric-value-test4",
-    "symmetric-value-test4.jl",
+const prop_symmetric_value_test4 = Test(
+    "prop-symmetric-value-test4",
+    "prop-symmetric-value-test4.jl",
     [
         TestPattern(Regex("Loop0 Value symmetry discovered:.*\\n.*" * gen_set_regex_string([:A])),
                      "Test that B E F G S are recognized as symmetric in value."
@@ -939,9 +951,9 @@ const symmetric_value_test4 = Test(
 )
 
 
-const symmetric_structure_test1 = Test(
-    "symmetric-structure-test1",
-    "symmetric-structure-test1.jl",
+const prop_symmetric_structure_test1 = Test(
+    "prop-symmetric-structure-test1",
+    "prop-symmetric-structure-test1.jl",
     [
         TestPattern(Regex("Structure symmetry discovered:.*\\n.*" * gen_set_regex_string([:A, :B])),
                      "Test that A B are recognized as symmetric in structure."
@@ -950,9 +962,21 @@ const symmetric_structure_test1 = Test(
     ]
 )
 
-const lower_upper_test1 = Test(
-    "lower-upper-test1",
-    "lower-upper-test1.jl",
+const prop_structure_only_test1 = Test(
+    "porp-structure-only-test1",
+    "prop-structure-only-test1.jl",
+    [
+        TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:B, :C, :E])),
+                     "Test that B C E are recognized as pattern-only structure."
+        ),
+        exception_pattern
+    ]
+)
+
+
+const prop_lower_upper_test1 = Test(
+    "prop-lower-upper-test1",
+    "prop-lower-upper-test1.jl",
     [
         TestPattern(r"Func Upper/Lower matrix discovered:.*\n[\s]*D is upper of A.*\n[\s]*GenSym\(0\) is upper of A",
                      "Test D and GenSym(0) are upper part of A."
@@ -962,12 +986,24 @@ const lower_upper_test1 = Test(
 )
 
 
-const lower_upper_test2 = Test(
-    "lower-upper-test2",
-    "lower-upper-test2.jl",
+const prop_lower_upper_test2 = Test(
+    "prop-lower-upper-test2",
+    "prop-lower-upper-test2.jl",
     [
         TestPattern(r"Loop0 Upper/Lower matrix discovered:.*\n[\s]*C is lower of A.*\n[\s]*D is upper of A.*\n[\s]*E is lower of A.*\n[\s]*F is upper of A.*\n[\s]*L is lower of A",
                      "Test that A B are recognized as symmetric in structure."
+        ),
+        exception_pattern
+    ]
+)
+
+
+const prop_transpose_test1 = Test(
+    "prop-transpose-test1",
+    "prop-transpose-test1.jl",
+    [
+        TestPattern(r"Func Transpose matrix discovered:.*\n[\s]*At is transpose of A.*\n[\s]*Att is transpose of At.*\n[\s]*B is transpose of A.*",
+                     "Test D and GenSym(0) are upper part of A."
         ),
         exception_pattern
     ]
@@ -1005,6 +1041,7 @@ const all_tests = [
     call_replacement_test12,
     name_resolution_test1,
     single_def_test1,
+    single_def_test2,
     constant_value_test1,
     set_matrix_property_test1,
     set_matrix_property_test2,
@@ -1013,14 +1050,16 @@ const all_tests = [
     set_matrix_property_test5,
     set_matrix_property_test6,
     set_matrix_property_test7,
-    constant_structure_test1,
-    symmetric_value_test1,
-    symmetric_value_test2,
-    symmetric_value_test3,
-    symmetric_value_test4,
+    prop_constant_structure_test1,
+    prop_symmetric_value_test1,
+    prop_symmetric_value_test2,
+    prop_symmetric_value_test3,
+    prop_symmetric_value_test4,
 #    symmetric_structure_test1,
-    lower_upper_test1,
-    lower_upper_test2,
+    prop_structure_only_test1,
+    prop_lower_upper_test1,
+    prop_lower_upper_test2,
+    prop_transpose_test1,
 ]
 
 const fast_tests = [

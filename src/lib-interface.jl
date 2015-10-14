@@ -232,6 +232,7 @@ function fwdTriSolve!(
            ),
             L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
             pointer(b), pointer(b), fknob)
+    b
 end
 
 @doc """ 
@@ -247,6 +248,7 @@ function bwdTriSolve!(
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
                U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval),
                pointer(b), pointer(b), fknob)
+    b
 end
 
 function speye_int32(m::Integer)
@@ -311,6 +313,7 @@ function reorder_matrix!(
                Ptr{Cint}, Ptr{Cint}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(P), pointer(inverse_P))
+    A
 end
 
 @doc """ Inversely reorder vector V with permutation vector P """
@@ -321,6 +324,7 @@ function inverse_reorder_vector!(
     ccall((:reorderVectorWithInversePermInplace, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(P), length(V))
+    V
 end
 
 function set_reordering_decision_maker(
@@ -407,6 +411,7 @@ function SpMV!(
                 length(z) == 0 ? C_NULL : z,
                 fknob)
         end
+        w
     else
         # use Julia implementation
         w[:] = alpha * A * x + beta * y + gamma
@@ -519,6 +524,7 @@ function abs!(
     ccall((:CSR_abs, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
+    w
   else
     w[:] = abs(x)
   end
@@ -532,6 +538,7 @@ function exp!(
     ccall((:CSR_exp, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
+    w
   else
     w[:] = exp(x)
   end
@@ -545,6 +552,7 @@ function log1p!(
     ccall((:CSR_log1p, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
+    w
   else
     w[:] = log1p(x)
   end
@@ -561,6 +569,7 @@ function min!(
     ccall((:min, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Cdouble),
           length(x), w, x, alpha)
+    w
   else
     w[:] = min(x, alpha)
   end
@@ -586,6 +595,7 @@ function element_wise_divide!(
     ccall((:pointwiseDivide, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
+    w
   else
     w[:] = x./y
   end
@@ -613,6 +623,7 @@ function element_wise_multiply!(
     ccall((:pointwiseMultiply, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
+    w
   else
     w[:] = x.*y
   end
@@ -643,6 +654,7 @@ function WAXPBY!(
     ccall((:waxpby, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
           length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
+    w
   else
     w[:] = alpha*x + beta*y
   end
@@ -673,6 +685,7 @@ function WAXPB!(
     ccall((:waxpb, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
           length(x), pointer(w), alpha, pointer(x), beta)
+    w
   else
     w[:] = alpha*x + beta
   end
@@ -949,11 +962,13 @@ function cholfact_inverse_divide!(
         # This case should never happen
         assert(false)
         y[:] = R \ b
+        return y
     end
 
     ccall((:CholFactInverseDivide, LIB_PATH), Void,
           (Ptr{Void}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
           R, y, b, fknob)
+    y
 end
 
 @doc """ 

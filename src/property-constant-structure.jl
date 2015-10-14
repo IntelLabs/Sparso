@@ -34,7 +34,7 @@ type ConstantStructureProperty <: MatrixProperty
                 if mat_property[k].constant_structured!=0 
                     property_map[k] = mat_property[k].constant_structured 
                 end
-            else
+            elseif !isempty(region_info.depend_map[k])
                 property_map[k] = in(k, region_info.single_defs) ? 0 : -1
             end
         end

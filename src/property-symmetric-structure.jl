@@ -8,27 +8,6 @@ type SymmetricStructureProperty <: MatrixProperty
     name                :: AbstractString
 
     @doc """ Post-processing function. Propagate the structure of the last arg. """
-    function post_assign_action(
-        ast               :: Expr,
-        call_sites        :: CallSites,
-        fknob_creator :: AbstractString,
-        fknob_deletor :: AbstractString,
-        matrices_to_track :: Tuple,
-        reordering_power  :: Int,
-        reordering_FAR    :: Tuple
-    )
-        LHS = ast.args[1]
-        assert(typeof(LHS) <: Sym)
-        RHS = get_symexpr(ast.args[2])
-        vRHS = get_property_val(call_sites, RHS) 
-        vLHS = get_property_val(call_sites, LHS)
-        if vRHS !=0 && vLHS != vRHS
-            set_property_val(call_sites, LHS, vRHS)
-        end
-        return true
-    end
-
-    @doc """ Post-processing function. Propagate the structure of the last arg. """
     function post_add_sub_action(
         ast               :: Expr,
         call_sites        :: CallSites,
@@ -89,8 +68,6 @@ type SymmetricStructureProperty <: MatrixProperty
         return true
     end
 
-
-
     @doc """ Post-processing function for * operation. """
     function post_multi_action(
         ast               :: Expr,
@@ -126,24 +103,8 @@ type SymmetricStructureProperty <: MatrixProperty
         return true
     end
 
-    @doc """
-    Pre-processing function: A function that will be called when no pattern
-    could handle an AST.
-    """
-    function last_resort(
-        ast           :: Expr,
-        call_sites    :: CallSites,
-        fknob_creator :: AbstractString,
-        fknob_deletor :: AbstractString,
-        matrices_to_track :: Tuple,
-        reordering_power  :: Int,
-        reordering_FAR    :: Tuple
-    )
-        return true
-    end
-
-    const CS_spmatmul_witheps_pattern = ExprPattern(
-        "CS_Aspmatmul_witheps_pattern",
+    const prop_spmatmul_witheps_pattern = ExprPattern(
+        "prop_spmatmul_witheps_pattern",
         (:call, GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC, Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -156,8 +117,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_A_mul_Bc_pattern = ExprPattern(
-        "CS_A_mul_Bc_pattern",
+    const prop_A_mul_Bc_pattern = ExprPattern(
+        "prop_A_mul_Bc_pattern",
         (:call, GlobalRef(Main, :A_mul_Bc), SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -170,8 +131,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_add_pattern = ExprPattern(
-        "CS_add_pattern",
+    const prop_add_pattern = ExprPattern(
+        "prop_add_pattern",
         (:call, GlobalRef(Main, :+), SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -184,8 +145,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_add3_pattern = ExprPattern(
-        "CS_add3_pattern",
+    const prop_add3_pattern = ExprPattern(
+        "prop_add3_pattern",
         (:call, GlobalRef(Main, :+), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -198,8 +159,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_sub_pattern = ExprPattern(
-        "CS_sub_pattern",
+    const prop_sub_pattern = ExprPattern(
+        "prop_sub_pattern",
         (:call, GlobalRef(Main, :-), SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -212,8 +173,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_sub3_pattern = ExprPattern(
-        "CS_sub3_pattern",
+    const prop_sub3_pattern = ExprPattern(
+        "prop_sub3_pattern",
         (:call, GlobalRef(Main, :-), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -226,8 +187,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_multi_pattern = ExprPattern(
-        "CS_multi_pattern",
+    const prop_multi_pattern = ExprPattern(
+        "prop_multi_pattern",
         (:call, GlobalRef(Main, :*), Any, Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -240,8 +201,8 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_multi3_pattern = ExprPattern(
-        "CS_multi3_pattern",
+    const prop_multi3_pattern = ExprPattern(
+        "prop_multi3_pattern",
         (:call, GlobalRef(Main, :*), Any, Any, Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
@@ -254,51 +215,20 @@ type SymmetricStructureProperty <: MatrixProperty
         ()
     )
 
-    const CS_assign_pattern = ExprPattern(
-        "CS_assign_pattern",
-        (:(=), SparseMatrixCSC, SparseMatrixCSC),
-        (:NO_SUB_PATTERNS,),
-        do_nothing,
-        (:NO_CHANGE, ),
-        post_assign_action,
-        "",
-        "",
-        (),
-        0,
-        ()
-    )
-
-    # This is the only pattern that will always be matched, justed based on its name.
-    # It should always be put as the last pattern, and when it is matched, 
-    # the last_resort() function will be called.
-    const CS_last_resort_pattern = ExprPattern(
-        "CS_last_resort_pattern", # Useless
-        (),                       # Useless
-        (:NO_SUB_PATTERNS,),      # Useless
-        last_resort,
-        (:NO_CHANGE, ),           # Useless
-        do_nothing,               # Useless
-        "",                       # Useless
-        "",                       # Useless
-        (),
-        0,
-        ()
-    )
-
     @doc """
     Patterns used for discovering matrix structures. 
     """
-    CS_symmetric_propagation_patterns = [
-        CS_assign_pattern,
-        CS_add_pattern,
-        CS_add3_pattern,
-        CS_sub_pattern,
-        CS_sub3_pattern,
-        CS_multi_pattern,
-        CS_multi3_pattern,
-        CS_A_mul_Bc_pattern,
-        CS_spmatmul_witheps_pattern,
-        CS_last_resort_pattern
+    prop_symmetric_propagation_patterns = [
+        prop_assign_pattern,
+        prop_add_pattern,
+        prop_add3_pattern,
+        prop_sub_pattern,
+        prop_sub3_pattern,
+        prop_multi_pattern,
+        prop_multi3_pattern,
+        prop_A_mul_Bc_pattern,
+        prop_spmatmul_witheps_pattern,
+        prop_last_resort_pattern
     ]
 
 

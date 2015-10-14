@@ -39,13 +39,22 @@ type ContextExtra
     prev_stmt_idx            :: StatementIndex
     live_in_before_prev_expr :: Set{Sym}
     live_in_before_expr      :: Set{Sym}
-    
+
+    # Some patterns (those contain :t1!2, etc.) may hoist some subtrees of the
+    # current statement before it. That splits one statement into more than one.
+    # Such patterns should be matched at the last, because otherwise, other 
+    # patterns may not be able to match what they should: they cannot find the
+    # subtrees to match, which are no longer in the same statement.
+    non_splittable_patterns  :: Vector{Pattern}
+    splittable_patterns      :: Vector{Pattern}
+
     ContextExtra(_matrix_properties, _ast_may_change) = new(
             _matrix_properties, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
-            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0, Set{Sym}(), Set{Sym}())
+            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0, Set{Sym}(), Set{Sym}(),
+            Vector{Pattern}(), Vector{Pattern}())
 end
 
 # Below are the patterns that we would like to replace a function with another,
@@ -146,7 +155,7 @@ function gather_context_sensitive_info(
         if arg == :r
             M = ast
         else
-            new_arg = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
+            new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
             assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
                    typeof(new_arg) == GenSym)
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
@@ -175,7 +184,7 @@ function gather_context_sensitive_info(
                 call_sites.extra.reordering_decider_power = reordering_power
                 call_sites.extra.reordering_FAR           = []
                 for arg in reordering_FAR
-                    new_arg = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
+                    new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
                     assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
                     M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
                     push!(call_sites.extra.reordering_FAR, M)
@@ -593,6 +602,29 @@ const CS_SpMV_pattern6 = ExprPattern(
 )
 
 @doc """
+    (-1/a)*A*x + b*y => SpMV(-1/a, A, x, b, y)
+"""
+const CS_SpMV_pattern7 = ExprPattern(
+    "CS_SpMV_pattern7",
+    (:call, GlobalRef(Main, :+), 
+      Expr(:call, GlobalRef(Main, :/), 
+        Expr(:call, GlobalRef(Main, :-),      
+            Expr(:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector)),
+        Number),     
+      Expr(:call, GlobalRef(Main, :*), Number, Vector)), 
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+      TypedExprNode(Float64, :call, GlobalRef(Main, :/), -1, :a2_3), :a2_2_2_2, :a2_2_2_3, :a3_2, :a3_3),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:a3,),
+    70,
+    (:a3, :a4, :a6, :r)
+)            
+
+@doc """
 The following patterns are potentially related with SpMV!. In SpMP library, SpMV!
 is implemented in such a way that the result and the inputs are written and read
 in parallel. Thus the result and the inputs cannot share space to avoid any race
@@ -746,8 +778,6 @@ const CS_SpMV!_pattern4 = ExprPattern(
     (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
-
-
 @doc """ spmatmul_witheps(X, X', eps), X is symmetric => SpSquareWithEps(X, eps) """
 const SpSquareWithEps_pattern1 = ExprPattern(
     "SpSquareWithEps_pattern1",
@@ -771,6 +801,7 @@ CS_transformation_patterns = [
     CS_cholsolve_pattern,
     CS_fwdTriSolve!_pattern,
     CS_bwdTriSolve!_pattern,
+    CS_SpMV_pattern7,
     CS_SpMV_pattern1,
     CS_SpMV_pattern2,
     CS_SpMV_pattern3,
@@ -1081,7 +1112,6 @@ function generate_and_delete_knobs(
             push!(derivatives, (M, DERIVATIVE_TYPE_UPPER_TRIANGULAR, prop.upper_of))
         end
         if prop.transpose_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.transpose_of)
-            dprintln(1, 1, "making ", M, "as transpose of ", prop.transpose_of)
             push!(derivatives, (M, DERIVATIVE_TYPE_TRANSPOSE, prop.transpose_of))
         end
     end
@@ -1190,11 +1220,12 @@ function-specific context info (mknobs and fknobs).
 function context_sensitive_transformation(
     actions         :: Vector{Action},
     region          :: LoopRegion,
+    lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
     cfg             :: CFG
 )
-    matrix_properties = find_properties_of_matrices(region, symbol_info, liveness, cfg)
+    matrix_properties = find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
 
     # We need to walk the AST recursively twice: first, match/replace and gather
     # context info. We cannot add context info into the AST yet, because
@@ -1210,9 +1241,11 @@ function context_sensitive_transformation(
     dprintln(1, 0, "\nContext-sensitive transformation:")
     recursive      = true
     ast_may_change = true
-    call_sites = CallSites(Set{CallSite}(), region, symbol_info, liveness,
+    call_sites = CallSites(Set{CallSite}(), region, lambda, symbol_info, liveness,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
+    # All patterns are non-splittable.
+    call_sites.extra.non_splittable_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
@@ -1253,15 +1286,16 @@ function AST_context_sensitive_transformation(
     actions     :: Vector{Action},
     func_region :: FunctionRegion,
     regions     :: Vector{LoopRegion},
+    lambda      :: LambdaInfo,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG
 )
-    func_region.symbol_property = find_properties_of_matrices(func_region, symbol_info, liveness, cfg)
+    func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
 
     # Discover context info for each loop region
     for region in regions
-        context_sensitive_transformation(actions, region, symbol_info, liveness, cfg)
+        context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
     end
 
     dprintln(1, 0, "\nContext-sensitive actions to take:")

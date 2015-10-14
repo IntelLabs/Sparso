@@ -120,12 +120,10 @@ of the typed func_ast. Note that all the symbols' scope is function-wise, even
 though in the source code, they might appear to have local or nested scopes: 
 symbol renaming seems to have been done to make them function-wise.
 """
-function build_symbol_dictionary(func_ast :: Expr)
+function build_symbol_dictionary(lambda :: LambdaInfo)
     symbol_info = Sym2TypeMap()
     
     # Record Symbols' types
-    assert(func_ast.head == :lambda)
-    lambda = lambdaExprToLambdaInfo(func_ast)
     for i in lambda.var_defs
         symbol_info[i[2].name] = i[2].typ
     end
@@ -334,6 +332,7 @@ field.
 type CallSites
     sites       :: Set{CallSite}
     region      :: Region
+    lambda      :: LambdaInfo
     symbol_info :: Sym2TypeMap
     liveness    :: Liveness
     patterns    :: Vector{Pattern}
@@ -371,6 +370,7 @@ actions for changing the CFG.
 """
 function AST_transformation(
     func_ast    :: Expr, 
+    lambda      :: LambdaInfo,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG, 
@@ -379,7 +379,7 @@ function AST_transformation(
     func_region = FunctionRegion(func_ast) 
     regions = region_formation(func_region, cfg, loop_info)
     actions = Vector{Action}()
-    actions = AST_context_sensitive_transformation(actions, func_region, regions, symbol_info, liveness, cfg)
+    actions = AST_context_sensitive_transformation(actions, func_region, regions, lambda, symbol_info, liveness, cfg)
 end
 
 @doc """ 
@@ -406,7 +406,8 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # Build the common facilities: symbols' type dictionary, liveness
         # info, and control flow graph.
         LivenessAnalysis.set_use_inplace_naming_convention()
-        symbol_info = build_symbol_dictionary(func_ast)
+        lambda      = lambdaExprToLambdaInfo(func_ast)
+        symbol_info = build_symbol_dictionary(lambda)
         liveness    = LivenessAnalysis.from_expr(func_ast, no_mod = LivenessAnalysis.create_unmodified_args_dict())
         cfg         = liveness.cfg
         loop_info   = Loops.compute_dom_loops(cfg)
@@ -427,7 +428,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             # it has been changed or not. This is important: otherwise, we would
             # have to rebuild liveness in order for subsequent optimizations (
             # like call replacement) to continue.  
-            actions = AST_transformation(func_ast, symbol_info, liveness, cfg, loop_info)
+            actions = AST_transformation(func_ast, lambda, symbol_info, liveness, cfg, loop_info)
             CFG_transformation(actions, cfg)
         end
 
@@ -437,13 +438,15 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # only one or two statements. It should not change liveness of statements
         # either. 
         if replace_calls_enabled
-            replace_calls(func_ast, symbol_info, liveness, cfg)
+            actions = replace_calls(func_ast, lambda, symbol_info, liveness, cfg)
+            CFG_transformation(actions, cfg)
         end
 
         # Now create a new function based on the CFG
         body_reconstructed   = CFGs.createFunctionBody(cfg)
-        func_ast.args[3].args = body_reconstructed
-        new_ast = func_ast
+         func_ast.args[3].args = body_reconstructed
+         new_ast = func_ast
+        #new_ast = lambdaInfoToLambdaExpr(lambda, Expr(:body, body_reconstructed...))
 
         dprintln(1, 0, "\nNew AST:")
         dprintln(1, 1, new_ast)
