@@ -14,7 +14,7 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     set_matrix_property(:L, SA_LOWER_OF, :A)
     set_matrix_property(:U, SA_UPPER_OF, :A)
     set_matrix_property(Dict(
-        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
+        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED | SA_CONST_VALUED,
         :U => SA_CONST_VALUED
         )
     )
