@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER)#, SA_REPLACE_CALLS)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
 function mylogsumexp(b)
   # does logsumexp across column
@@ -101,7 +101,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
   t0 = time()
   it = 1
   for it=1:100
-    set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
+    #set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
 
     spmv_time -= time()
     Xw = X*x

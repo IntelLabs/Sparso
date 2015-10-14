@@ -56,7 +56,7 @@ function dprint_property_proxies(
     end
 end
 
-const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor]
+const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor, Factorization]
 
 #
 # data types shared by analysis passes 
@@ -117,11 +117,20 @@ end
 @doc """
 Context used for analyzing one statement
 """
-type ASTContextArgs{ValTp}
-    changed             :: Bool                  # any property has been changed ?
-    property_map        :: Dict{Sym, ValTp}      # symbol -> property
-    local_map           :: Dict{Symexpr, ValTp}  # symbol|expr -> property
-    live_in_before_expr :: Set{Sym}    
+type StmtContextArgs{ValTp}
+    changed                 :: Set{Sym}              # symbols property has been changed?
+    unchangable             :: Set{Sym}              # symbols whose property cannot be changed 
+    property_map            :: Dict{Sym, ValTp}      # symbol -> property
+    local_map               :: Dict{Symexpr, ValTp}  # symbol|expr -> property
+    live_in_before_expr     :: Set{Sym}
+
+    # Some patterns (those contain :t1!2, etc.) may hoist some subtrees of the
+    # current statement before it. That splits one statement into more than one.
+    # Such patterns should be matched at the last, because otherwise, other 
+    # patterns may not be able to match what they should: they cannot find the
+    # subtrees to match, which are no longer in the same statement.    
+    non_splittable_patterns :: Vector{ExprPattern}
+    splittable_patterns     :: Vector{ExprPattern}
 end
 
 @doc """
@@ -131,17 +140,18 @@ function get_property_val(
     call_sites  :: CallSites,
     sym_name    :: Symexpr
 )
-    @assert(isa(call_sites.extra, ASTContextArgs))
+    @assert(isa(call_sites.extra, StmtContextArgs))
     if in(typeof(sym_name), [Expr])
         pmap = call_sites.extra.local_map 
     else
         pmap = call_sites.extra.property_map
     end
 
-    if !haskey(pmap, sym_name)
-        pmap[sym_name] = pmap[sym_default_id]
+    if haskey(pmap, sym_name)
+        return pmap[sym_name]
+    else
+        return pmap[sym_default_id]
     end
-    return pmap[sym_name]
 end
 
 @doc """
@@ -152,18 +162,38 @@ function set_property_val(
     sym_name    :: Symexpr,
     value       :: Any
 )
-    @assert(isa(call_sites.extra, ASTContextArgs))
+    @assert(isa(call_sites.extra, StmtContextArgs))
     if in(typeof(sym_name), [ Expr])
+        pmap = call_sites.extra.local_map 
+        @assert(!in(sym_name, call_sites.extra.unchangable))
+    else
+        pmap = call_sites.extra.property_map
+        # 
+        if in(sym_name, call_sites.extra.unchangable)
+            dprintln(1, 1, "WW: reject property change (", sym_name, " -> ", value,") because ", sym_name, " in unchangeable set")
+            return 
+        end
+        if !haskey(pmap, sym_name) || pmap[sym_name] != value
+            push!(call_sites.extra.changed, sym_name)
+        end
+        dprintln(1, 1, "set_property_val: ", sym_name, " -> ",  value)
+    end
+ 
+    pmap[sym_name] = value
+end
+
+function is_property_val_set(
+    call_sites  :: CallSites,
+    sym_name    :: Symexpr
+)
+    @assert(isa(call_sites.extra, StmtContextArgs))
+    if in(typeof(sym_name), [Expr])
         pmap = call_sites.extra.local_map 
     else
         pmap = call_sites.extra.property_map
-        if value != pmap[:DEFAULT_PROPERTY] && (!haskey(pmap, sym_name) || pmap[sym_name] != value)
-            call_sites.extra.changed = true
-            dprintln(1, 1, "val changed: ", sym_name, value)
-        end
     end
-    
-    pmap[sym_name] = value
+
+    return haskey(pmap, sym_name)
 end
 
 
@@ -244,11 +274,6 @@ function build_dependence(
             # this is not direct type of args
             args_real_types = expr_skeleton(ast, symbol_info)[2:end]
 
-            # a quick hack for cholfact_int32 call
-            #if func_name == "cholfact_int32"
-            #    return ret_set
-            #end
-
             # a quick hack for setfield! call
             if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
                 @assert(ast.args[2].typ == args_real_types[2])
@@ -308,6 +333,7 @@ type RegionInfo
     depend_map          :: Dict 
     reverse_depend_map  :: Dict 
 
+    lambda              :: LambdaInfo
     symbol_info         :: Sym2TypeMap
     liveness            :: Liveness
     cfg                 :: CFG
@@ -316,13 +342,15 @@ type RegionInfo
     single_defs         :: Set
 
     function RegionInfo(
-        region          :: Region, 
+        region          :: Region,
+        lambda          :: LambdaInfo,
         symbol_info     :: Sym2TypeMap,
         liveness        :: Liveness,
         cfg             :: CFG,
     )
         info = new()
         info.region = region
+        info.lambda = lambda
         info.symbol_info = symbol_info
         info.liveness = liveness
         info.cfg = cfg
@@ -347,7 +375,7 @@ type RegionInfo
         info.depend_map = Dict{Sym, Set{Sym}}()
         info.depend_map[sym_negative_id] = Set{Union{GenSym, Symbol}}()
 
-        call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
+        call_sites  = CallSites(Set{CallSite}(), region, lambda, symbol_info,
                                 liveness, [],
                                 Vector{Action}(), info.depend_map)
 
@@ -381,9 +409,13 @@ type RegionInfo
 end
 
 include("property-constant-structure.jl")
+
+include("property-common-patterns.jl")
 include("property-symmetric-value.jl")
 include("property-symmetric-structure.jl")
+include("property-structure-only.jl")
 include("property-lowerupper.jl")
+include("property-transpose.jl")
 
 
 @doc """
@@ -489,11 +521,12 @@ end
 
 
 @doc """
+Data-flow based property propagate
 """
 function propagate_property(
     property_map            :: Dict, 
     region_info             :: RegionInfo,
-    propagation_patterns    :: Array,
+    propagation_patterns    :: Vector, #{Pattern},
     PropertyValType         :: Type,
     default_prop_value      :: Any,
     negative_prop_value     :: Any,
@@ -503,32 +536,47 @@ function propagate_property(
     @assert(typeof(negative_prop_value) <: PropertyValType)
     @assert(ctx_arg_initializer == nothing || isa(ctx_arg_initializer, Function))
 
+    unchangeable_set = Set{Sym}(keys(property_map))
+
     # ctx_args is attached to call_sites so that
     # pattern functions can pass back their results
-    ctx_args = ASTContextArgs{PropertyValType}(false, property_map, Dict{Expr, PropertyValType}(), Set{Sym}())
+    ctx_args = StmtContextArgs{PropertyValType}(Set{Sym}(), unchangeable_set, 
+                                                property_map, Dict{Expr, PropertyValType}(), 
+                                                Set{Sym}(), Vector{Pattern}(), Vector{Pattern}())
 
-    call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.symbol_info,
+    call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.lambda, 
+                            region_info.symbol_info,
                             region_info.liveness, propagation_patterns,
                             Vector{Action}(), ctx_args)
 
+    # All patterns are non-splittable.
+    call_sites.extra.non_splittable_patterns = propagation_patterns
+    
     converged = false
     cnt = 0
     while !converged
         converged = true
+        old_pmap = copy(property_map)
+        ctx_args.changed = Set{Sym}()
         for stmt in region_info.stmts
             expr = stmt.expr
             if typeof(expr) != Expr
                 continue
             end
-            ctx_args.changed = false
             ctx_args.local_map = new_symexpr_property_map(PropertyValType, default_prop_value, negative_prop_value)
             if ctx_arg_initializer != nothing
                 ctx_arg_initializer(ctx_args)
             end
             call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, region_info.liveness)
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
-            if ctx_args.changed 
-                converged = false 
+        end
+        if !isempty(ctx_args.changed)
+            for s in ctx_args.changed 
+                old_val = haskey(old_pmap, s) ? old_pmap[s] : old_pmap[sym_default_id]
+                if property_map[s] != old_val
+                    converged = false 
+                    break
+                end
             end
         end
         cnt = cnt + 1
@@ -542,11 +590,12 @@ A region is currently defined as a loop region.
 """
 function find_properties_of_matrices(
     region          :: Region,
+    lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
     cfg             :: CFG,
 )
-    region_info = RegionInfo(region, symbol_info, liveness, cfg)
+    region_info = RegionInfo(region, lambda, symbol_info, liveness, cfg)
     region_name = region_info.name
 
     dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_info.name * " -----\n")
@@ -627,7 +676,9 @@ function find_properties_of_matrices(
         ConstantStructureProperty(),
         SymmetricValueProperty(),
         SymmetricStructureProperty(),
-        LowerUpperProperty()
+        StructureOnlyProperty(),
+        LowerUpperProperty(),
+        TransposeProperty()
     ]
 
     for pass in structure_property_passes
@@ -638,6 +689,12 @@ function find_properties_of_matrices(
     # filter out matrix type
     is_matrix_type = (x) -> any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
     mfilter = (x) -> filter(is_matrix_type, x)
+
+    delete!(structure_proxies, sym_default_id)
+    delete!(structure_proxies, sym_negative_id)
+    #for (k, v) in structure_proxies
+    #    dprintln(1, 1, k, " ", symbol_info[k])
+    #end
 
     dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(structure_proxies)))
