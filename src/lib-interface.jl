@@ -1188,7 +1188,8 @@ function matrix_market_read(
     end
 end
 
-function lbfgs_compute_direction(
+function lbfgs_compute_direction!(
+    dx,
     k     :: Int,
     it    :: Int,
     n     :: Int,
@@ -1197,11 +1198,9 @@ function lbfgs_compute_direction(
     dfk)
 
     if use_SPMP
-      r = zeros(n)
       ccall((:LBFGSComputeDirection, LIB_PATH), Void,
             (Cint, Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
-            k, it, n, S, Y, dfk, r)
-      r
+            k, it, n, S, Y, dfk, dx)
     else
       a = zeros(k)
 
@@ -1237,9 +1236,32 @@ function lbfgs_compute_direction(
         r = r + si*(a[i] - b)
       end
 
-      -r
+      dx[:] = -r
     end
 end 
+
+function lbfgs_loss_function1(yXw::Vector, w::Vector, lambda::Number)
+  m = length(yXw)
+
+  if use_SPMP
+    ccall((:LBFGSLossFunction1, LIB_PATH), Cdouble,
+          (Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Cdouble),
+          m, length(w), yXw, w, lambda)
+  else
+    s = sum(log1p(exp(-abs(yXw))) - min(yXw, 0))
+    s/m + (lambda/2)*norm(x)^2
+  end 
+end
+
+function lbfgs_loss_function2!(temp::Vector, y::Vector, yXw::Vector)
+  if use_SPMP
+    ccall((:LBFGSLossFunction2, LIB_PATH), Void,
+          (Ptr{Cdouble}, Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          temp, length(y), y, yXw)
+  else
+    temp[:] = y./(1 + exp(yXw))
+  end
+end
 
 function get_spmp_spmv_time()
   ccall((:GetSpMPSpMVTime, LIB_PATH), Cdouble, ())
