@@ -243,6 +243,8 @@ void multiplyWithVector(
   double gamma,
   const double *z)
 {
+  assert(A);
+
   if (A->values) {
     if (z) {
       SpMV_<double, true, true>(

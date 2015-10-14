@@ -629,10 +629,13 @@ void SpMV(
     assert(fknob);
     MatrixKnob *mknob = GetMatrixKnob(fknob, 0);
     assert(mknob);
+    assert(mknob->constant_valued);
 
     CreateOptimizedRepresentation(
         mknob, m, n, A_colptr, A_rowval,
         mknob->is_structure_only ? NULL : A_nzval);
+
+    assert(mknob->A);
 
     double current_spmv_time = -omp_get_wtime();
     if (w == x) {
