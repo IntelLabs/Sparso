@@ -45,8 +45,8 @@ type ContextExtra
     # Such patterns should be matched at the last, because otherwise, other 
     # patterns may not be able to match what they should: they cannot find the
     # subtrees to match, which are no longer in the same statement.
-    non_splittable_patterns  :: Vector{Pattern}
-    splittable_patterns      :: Vector{Pattern}
+    non_splitting_patterns  :: Vector{Pattern}
+    splitting_patterns      :: Vector{Pattern}
 
     ContextExtra(_matrix_properties, _ast_may_change) = new(
             _matrix_properties, _ast_may_change, :nothing, 0, [],
@@ -1245,7 +1245,7 @@ function context_sensitive_transformation(
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
     # All patterns are non-splittable.
-    call_sites.extra.non_splittable_patterns = copy(CS_transformation_patterns)
+    call_sites.extra.non_splitting_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs

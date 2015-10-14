@@ -18,8 +18,8 @@ type CallReplacementExtra
     # Such patterns should be matched at the last, because otherwise, other 
     # patterns may not be able to match what they should: they cannot find the
     # subtrees to match, which are no longer in the same statement.
-    non_splittable_patterns  :: Vector{Pattern}
-    splittable_patterns      :: Vector{Pattern}
+    non_splitting_patterns  :: Vector{Pattern}
+    splitting_patterns      :: Vector{Pattern}
     
     CallReplacementExtra() = new(Set{Sym}(), Set{Sym}(), Set{Sym}(), nothing, 0,
                                  Vector{Pattern}(), Vector{Pattern}())
@@ -86,12 +86,7 @@ arg at that position, and any other pattern name means a sub pattern to match.
 Substitute is a tuple showing how to replace the Expr according to the pattern.
 Symbolic arguments are used here: :NO_CHANGE means that no replacement is needed
 (the pattern is for matching only); :a1 means the Expr's args[1], :a1_2 means
-the Expr's args[1].args[2], :n1_2 means the negative :a1_2, etc. In addition, 
-properties of the argument may also be specified. For example, :a1_2_livein means
-the Expr's args[1].args[2] and it is live into the expression.
-
-TODO: so far, we handle only live in property. But other properties, if needed,
-should be easy to add.
+the Expr's args[1].args[2], :n1_2 means the negative :a1_2, etc.
 
 Pre_ and post_processing are optional call backs before and after replace. Usually
 they do nothing.
@@ -163,15 +158,21 @@ end
 
 @doc """
 Argument Description. Used for describing an argument in a pattern.
-type_or_symbol: a type, or a symbol representing an argument.
+type_or_symbol: a type of, or a symbol for, an argument.
 properties:     a combination of properties. 
 relations:      relation with other argument/variable.
  
 For example,
     AD(SparseMatrixCSC, SA_HAS_FREE_MEMORY | SA_CONST_VALUED, [(SA_TRANSPOSE_OF, :a1])
-which means: the current argument has SparseMatrixCSC type, it has free memory
-available at the program point the argument is executed, and it is a 
-transposition of args[1] in the same expression.
+means: the current argument has SparseMatrixCSC type, it has free memory
+available at the program point the argument is executed, it is 
+is constant valued (in the current region), and it is a transposition of
+args[1] in the same expression.
+
+For another example,
+    AD(:f2_3, SA_SYMM_STRUCTURED) 
+means that in a TwoStatementPattern, an argument that is the same as the 
+first_expr.args[2].args[3], and it is symmetric in structure.
 
 A symbol can be simple or more complicated like :a1_2, :f1_2, :s1_2, :n1, etc.
 For example:
@@ -184,11 +185,6 @@ For example:
 When you use AD, you need to describe at least properties or relations. 
 Otherwise, you can directly describe it in a type or a symbol, without using
 AD.
- that contains it, and that
-the argument is constant valued.
-    AD(:f2_3, SA_SYMM_STRUCTURED) 
-means that in a TwoStatementPattern, an argument that is the same as the 
-first_expr.args[2].args[3], and it is symmetric in structure.
 """
 type AD
     type_or_symbol :: Any
@@ -209,8 +205,8 @@ end
 @doc """ SpMV(a, A, x) """
 const SpMV_3_parameters_pattern = ExprPattern(
     "SpMV_3_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     Number, SparseMatrixCSC, Vector),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+      Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -224,7 +220,7 @@ const SpMV_3_parameters_pattern = ExprPattern(
 
 const SpMV_4_parameters_pattern = ExprPattern(
     "SpMV_4_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      Number, SparseMatrixCSC, Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -239,8 +235,8 @@ const SpMV_4_parameters_pattern = ExprPattern(
 
 const SpMV_6_parameters_pattern = ExprPattern(
     "SpMV_6_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+      Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -327,8 +323,8 @@ const vector_add_number_pattern = ExprPattern(
 @doc """ SparseAccelerator.WAXPBY(a, x, b, y) """
 const WAXPBY_4_parameters_pattern = ExprPattern(
     "WAXPBY_4_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
-     Number, Vector, Number, Vector),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+      Number, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -347,8 +343,7 @@ const dot_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :dot), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
-     :a2, :a3),
+    (:call, GlobalRef(SparseAccelerator, :dot), :a2, :a3),
     do_nothing,
     "",
     "",
@@ -363,7 +358,7 @@ const dot_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(Main, :norm), Vector), 2),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
+    (:call, GlobalRef(SparseAccelerator, :dot),
      :a2_2, :a2_2),
     do_nothing,
     "",
@@ -379,7 +374,7 @@ const dot_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(SparseAccelerator, :norm), Vector), 2),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
+    (:call, GlobalRef(SparseAccelerator, :dot),
      :a2_2, :a2_2),
     do_nothing,
     "",
@@ -410,7 +405,7 @@ const sum_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :sum), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum)),
+    (:call, GlobalRef(SparseAccelerator, :sum),
      :a2),
     do_nothing,
     "",
@@ -427,8 +422,8 @@ const mean_pattern1 = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, GlobalRef(Main, :(/)),
-      TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum), :a2),
-      TypedExprNode(Function, :call, TopNode(:getfield), :Base, QuoteNode(:arraylen), :a2)
+      (:call, GlobalRef(SparseAccelerator, :sum), :a2),
+      (:call, GlobalRef(Base, :arraylen), :a2)
     ),
     do_nothing,
     "",
@@ -444,7 +439,7 @@ const minimum_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :minimum), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:minimum)),
+    (:call, GlobalRef(SparseAccelerator, :minimum),
      :a2),
     do_nothing,
     "",
@@ -460,7 +455,7 @@ const abs!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :abs!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:abs!)),
+    (:call, GlobalRef(SparseAccelerator, :abs!),
      :a2, :a3),
     do_nothing,
     "",
@@ -479,7 +474,7 @@ const abs!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :abs), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:abs!)),
+    (:call, GlobalRef(SparseAccelerator, :abs!),
      :t2, :a2),
     do_nothing,
     "",
@@ -495,7 +490,7 @@ const exp!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :exp!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:exp!)),
+    (:call, GlobalRef(SparseAccelerator, :exp!),
      :a2, :a3),
     do_nothing,
     "",
@@ -514,7 +509,7 @@ const exp!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :exp), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:exp!)),
+    (:call, GlobalRef(SparseAccelerator, :exp!),
      :t2, :a2),
     do_nothing,
     "",
@@ -533,7 +528,7 @@ const log1p!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :log), Expr(:call, GlobalRef(Main, :+), 1, Vector{Float64})),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:log1p!)),
+    (:call, GlobalRef(SparseAccelerator, :log1p!),
      :t2_3, :a2_3), # If use :t2 instead of :t2_3, since arg2 is an Expr and thus will be hoisted ahead of the statement and replaced with a symbol, the next :a2_3 will be meaningless.
     do_nothing,
     "",
@@ -552,7 +547,7 @@ const min!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :min), Vector{Float64}, Number),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:min!)),
+    (:call, GlobalRef(SparseAccelerator, :min!),
      :t2, :a2, :a3),
     do_nothing,
     "",
@@ -601,7 +596,7 @@ const SpMV_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      :a2, :a3),
     do_nothing,
     "",
@@ -617,7 +612,7 @@ const SpMV_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     do_nothing,
     "",
@@ -633,7 +628,7 @@ const SpMV_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      :a2, :a3, :a4),
     do_nothing,
     "",
@@ -649,7 +644,7 @@ const SpMV_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     do_nothing,
     "",
@@ -669,12 +664,12 @@ const SpMV_pattern5 = ExprPattern(
     (:call, GlobalRef(Main, :+), 
       Expr(:call, GlobalRef(Main, :/), 
         Expr(:call, GlobalRef(Main, :-),      
-            Expr(:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector)),
+              Expr(:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector)),
         Number),     
       Expr(:call, GlobalRef(Main, :*), Number, Vector)), 
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      Expr(:call, GlobalRef(Main, :/), -1, :a2_3), :a2_2_2_2, :a2_2_2_3, :a3_2, :a3_3),
     do_nothing,
     "",
@@ -690,7 +685,7 @@ const SpMV!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :a2, :a3, :a4),
     do_nothing,
     "",
@@ -706,7 +701,7 @@ const SpMV!_pattern2 = ExprPattern(
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_6_parameters_pattern),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     do_nothing,
     "",
@@ -722,7 +717,7 @@ const SpMV!_pattern3 = ExprPattern(
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_3_parameters_pattern),
     do_nothing,
-    (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (GlobalRef(SparseAccelerator, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     do_nothing,
     "",
@@ -738,7 +733,7 @@ const SpMV!_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :a6, :a2, :a3, :a4, :a5, :a6, 0.0),
     do_nothing,
     "",
@@ -768,7 +763,7 @@ const WAXPBY_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector, Vector),
     (nothing, nothing, nothing, number_times_vector_pattern),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
      1, :a2, :n3_2, :a3_3),
     do_nothing,
     "",
@@ -785,7 +780,7 @@ const WAXPBY!_pattern1 = ExprPattern(
            Expr(:call, GlobalRef(SparseAccelerator, :WAXPBY), Number, Vector, Number, Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5),
     do_nothing,
     "",
@@ -804,7 +799,7 @@ const WAXPBY!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector{Float64}, Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
      :t2!3, 1, :a2, -1, :a3),
     do_nothing,
     "",
@@ -823,7 +818,7 @@ const WAXPBY!_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
      :t2, -1, :a2, 0, :a2),
     do_nothing,
     "",
@@ -839,7 +834,7 @@ const WAXPB!_pattern1 = ExprPattern(
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_minus_number_pattern),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
      :a1, 1, :a2_2, :n2_3),
     do_nothing,
     "",
@@ -855,7 +850,7 @@ const WAXPB!_pattern2 = ExprPattern(
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_add_number_pattern),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
      :a1, 1, :a2_2, :a2_3),
     do_nothing,
     "",
@@ -874,7 +869,7 @@ const WAXPB!_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :+), Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
      :t3, 1, :a3, :a2),
     do_nothing,
     "",
@@ -890,7 +885,7 @@ const element_wise_multiply_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :.*), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_multiply)),
+    (:call, GlobalRef(SparseAccelerator, :element_wise_multiply),
      :a2, :a3),
     do_nothing,
     "",
@@ -906,7 +901,7 @@ const element_wise_divide_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :./), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_divide)),
+    (:call, GlobalRef(SparseAccelerator, :element_wise_divide),
      :a2, :a3),
     do_nothing,
     "",
@@ -922,7 +917,7 @@ const trace_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :trace), SparseMatrixCSC),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:trace)),
+    (:call, GlobalRef(SparseAccelerator, :trace),
      :a2),
     do_nothing,
     "",
@@ -943,7 +938,7 @@ const SpAdd_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :-), SparseMatrixCSC{Float64, Int32}, SparseMatrixCSC{Float64, Int32}),
     (nothing, nothing,           number_times_matrix_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpAdd)),
+    (:call, GlobalRef(SparseAccelerator, :SpAdd),
      :a2_2, :a2_3, -1, :a3),
     do_nothing,
     "",
@@ -1004,11 +999,11 @@ expr_patterns = [
 const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "SpMV!_two_statements_pattern1",
     (:(=), Any, 
-           Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+           Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
                  Number, SparseMatrixCSC, Vector, Number, Vector, Number)),
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5, :f2_6, :f2_7),
     (:(=), :f1, :s1),
     do_nothing,
@@ -1029,11 +1024,11 @@ const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
 const WAXPBY!_two_statements_pattern1 = TwoStatementsPattern(
     "WAXPBY!_two_statements_pattern1",
     (:(=), Any,
-           Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
+           Expr(:call, GlobalRef(SparseAccelerator, :WAXPBY),
                  Number, Vector, Number, Vector)),
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5),
     (:(=), :f1, :s1),
     do_nothing,
@@ -1434,15 +1429,36 @@ function match_replace(
     #    return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
     #end
 
-    # For debugging purpose only
+   # For debugging purpose only
     trace_pattern_match = false
     if false #pattern == abs!_pattern2 #&& ast.head == :call && ast.args[1] == GlobalRef(Main, :+)
         trace_pattern_match = true
         println("... Matching ", pattern.name, " with ", ast)
     end
     
-    live_in = call_sites.extra.live_in_before_expr
-    if match_skeletons(ast, pattern.skeleton, call_sites, live_in, nothing, nothing, trace_pattern_match)
+    live_in          = call_sites.extra.live_in_before_expr
+    symbol_info      = call_sites.symbol_info
+    match_filter_val = 0 # unknown
+    match_filter     = nothing
+    if isdefined(call_sites.extra, :pattern_match_filter)
+        match_filter = call_sites.extra.pattern_match_filter
+        key = tuple(ast, pattern)
+        if haskey(match_filter, key)
+            match_filter_val = match_filter[key]
+            assert(match_filter_val != 0)
+        end
+    end
+
+    if match_filter_val == 0
+        matched = match_skeletons(ast, pattern.skeleton, call_sites, live_in, nothing, nothing, trace_pattern_match)
+        if match_filter != nothing
+            match_filter[key] = matched ? 1 : -1;
+        end
+    else
+        matched = match_filter_val > 0 ? true : false 
+    end
+
+    if matched
         # Check sub-expr_patterns
         if length(pattern.sub_expr_patterns) == 1 && 
            pattern.sub_expr_patterns[1] == :NO_SUB_PATTERNS
@@ -1552,7 +1568,7 @@ function match_replace_an_expr_pattern(
     ast        :: Any,
     call_sites :: CallSites
 )
-    println(".................matching ast:", ast)
+#    println(".................matching ast:", ast)
     
     if typeof(ast) <: Expr
         # First, do non-splittable patterns. Either top-down or bottom-up
@@ -1564,7 +1580,7 @@ function match_replace_an_expr_pattern(
 #    println("\tTop down:")
 
         top_down_match_replace_an_expr_pattern(ast, call_sites, 
-                                               call_sites.extra.non_splittable_patterns)
+                                               call_sites.extra.non_splitting_patterns)
 
 #    println("\tBottom up:")
         
@@ -1573,7 +1589,7 @@ function match_replace_an_expr_pattern(
         # if top-down, a subtree might be hoisted up, and its internal nodes
         # won't be able to be processed subsequently.
         bottom_up_match_replace_an_expr_pattern(ast, call_sites, 
-                                                call_sites.extra.splittable_patterns)
+                                                call_sites.extra.splitting_patterns)
     end
     return nothing
 end
@@ -1701,13 +1717,13 @@ function separate_expr_patterns(
 #        println("\targ: ", arg)
             if may_split_statement(arg)
                 splittable = true
-                push!(call_sites.extra.splittable_patterns, pattern)
+                push!(call_sites.extra.splitting_patterns, pattern)
 #println("\tseparate: ", pattern.name, " splittable")    
                 break
             end
         end
         if !splittable
-            push!(call_sites.extra.non_splittable_patterns, pattern)
+            push!(call_sites.extra.non_splitting_patterns, pattern)
 #println("\tseparate: ", pattern.name, " non-splittable")    
         end
     end

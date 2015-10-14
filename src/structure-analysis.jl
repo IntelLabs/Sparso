@@ -122,6 +122,7 @@ type StmtContextArgs{ValTp}
     unchangable             :: Set{Sym}              # symbols whose property cannot be changed 
     property_map            :: Dict{Sym, ValTp}      # symbol -> property
     local_map               :: Dict{Symexpr, ValTp}  # symbol|expr -> property
+    pattern_match_filter    :: Dict{Tuple{Expr, ExprPattern}, Int}
     live_in_before_expr     :: Set{Sym}
 
     # Some patterns (those contain :t1!2, etc.) may hoist some subtrees of the
@@ -129,8 +130,8 @@ type StmtContextArgs{ValTp}
     # Such patterns should be matched at the last, because otherwise, other 
     # patterns may not be able to match what they should: they cannot find the
     # subtrees to match, which are no longer in the same statement.    
-    non_splittable_patterns :: Vector{ExprPattern}
-    splittable_patterns     :: Vector{ExprPattern}
+    non_splitting_patterns :: Vector{ExprPattern}
+    splitting_patterns     :: Vector{ExprPattern}
 end
 
 @doc """
@@ -341,6 +342,8 @@ type RegionInfo
     constants           :: Set
     single_defs         :: Set
 
+    pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
+
     function RegionInfo(
         region          :: Region,
         lambda          :: LambdaInfo,
@@ -354,6 +357,8 @@ type RegionInfo
         info.symbol_info = symbol_info
         info.liveness = liveness
         info.cfg = cfg
+
+        info.pattern_match_filter = Dict{Tuple{Expr, ExprPattern}, Int}()
 
         if isa(region, LoopRegion)
             first_bb_idx = sort(collect(region.loop.members))[1]
@@ -542,15 +547,15 @@ function propagate_property(
     # pattern functions can pass back their results
     ctx_args = StmtContextArgs{PropertyValType}(Set{Sym}(), unchangeable_set, 
                                                 property_map, Dict{Expr, PropertyValType}(), 
+                                                region_info.pattern_match_filter,
                                                 Set{Sym}(), Vector{Pattern}(), Vector{Pattern}())
-
     call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.lambda, 
                             region_info.symbol_info,
                             region_info.liveness, propagation_patterns,
                             Vector{Action}(), ctx_args)
 
     # All patterns are non-splittable.
-    call_sites.extra.non_splittable_patterns = propagation_patterns
+    call_sites.extra.non_splitting_patterns = propagation_patterns
     
     converged = false
     cnt = 0
