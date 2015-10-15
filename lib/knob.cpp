@@ -583,26 +583,45 @@ static double getWidthAfterPermutation(const CSR *A, const int *col_perm)
     return (double)total_width/A->m;
 }
 
-double *getTempVector(int l)
+template<class T>
+T *getTempVector(int l)
 {
-    static double *temp_vector = NULL;
+    static T *temp_vector = NULL;
     static int temp_vector_len = -1;
 
     if (!temp_vector) {
-        temp_vector = (double *)malloc(sizeof(double)*l);
+        temp_vector = (T *)malloc(sizeof(T)*l);
         temp_vector_len = l;
     }
     else if (l > temp_vector_len) {
-        temp_vector = (double *)realloc(temp_vector, sizeof(double)*l);
+        temp_vector = (T *)realloc(temp_vector, sizeof(T)*l);
         temp_vector_len = l;
     }
 
     return temp_vector;
 }
 
+template<class T>
+void reorderVectorWithInversePermInplace_(T *v, const int *inversePerm, int len)
+{
+    T *temp = getTempVector<T>(len);
+
+    if (inversePerm) {
+#pragma omp parallel for
+        for (int i = 0; i < len; ++i) {
+            assert(inversePerm[i] >= 0 && inversePerm[i] < len);
+            temp[i] = v[inversePerm[i]];
+        }
+#pragma omp parallel for
+        for (int i = 0; i < len; ++i) {
+            v[i] = temp[i];
+        }
+    }
+}
+
 void reorderVectorWithInversePermInplace(double *v, const int *inversePerm, int len)
 {
-  return SpMP::reorderVectorWithInversePerm(v, getTempVector(len), inversePerm, len);
+    reorderVectorWithInversePermInplace_(v, inversePerm, len);
 }
 
 void multiplyWithVector(
@@ -612,16 +631,24 @@ void multiplyWithVector(
   double gamma,
   const double *z);
 
-void SpMV(
+void multiplyWithVector(
+  double _Complex *w,
+  double alpha, const CSR *A, const double _Complex *x,
+  double beta, const double _Complex *y,
+  double gamma,
+  const double _Complex *z);
+
+template<class T> // T: vector type
+void SpMV_(
     int m, int n,
-    double *w,
+    T *w,
     double alpha,
     int *A_colptr, int *A_rowval, double *A_nzval,
-    double *x,
+    T *x,
     double beta,
-    double *y,
+    T *y,
     double gamma,
-    double *z,
+    T *z,
     FunctionKnob *fknob)
 {
     knob_spmv_time -= omp_get_wtime();
@@ -639,7 +666,7 @@ void SpMV(
 
     double current_spmv_time = -omp_get_wtime();
     if (w == x) {
-        double *temp_vector = getTempVector(n);
+        T *temp_vector = getTempVector<T>(n);
 
 #pragma omp parallel for
         for (int i = 0; i < n; ++i) {
@@ -728,16 +755,16 @@ void SpMV(
 
                 mknob->reordering_info = fknob->reordering_info;
 
-                reorderVectorWithInversePermInplace(
+                reorderVectorWithInversePermInplace_<T>(
                     x, fknob->reordering_info.col_inverse_perm, n);
                 if (y && y != x)
-                    reorderVectorWithInversePermInplace(
+                    reorderVectorWithInversePermInplace_<T>(
                         y, fknob->reordering_info.row_inverse_perm, m);
                 if (z && z != x && z != y)
-                    reorderVectorWithInversePermInplace(
+                    reorderVectorWithInversePermInplace_<T>(
                         z, fknob->reordering_info.row_inverse_perm, m);
                 if (w != x && w != y && w != z)
-                    reorderVectorWithInversePermInplace(
+                    reorderVectorWithInversePermInplace_<T>(
                         w, fknob->reordering_info.row_inverse_perm, m);
 
                 if (LOG_REORDERING) {
@@ -761,6 +788,36 @@ void SpMV(
     }
 
     knob_spmv_time += omp_get_wtime();
+}
+
+void SpMV(
+    int m, int n,
+    double *w,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double *x,
+    double beta,
+    double *y,
+    double gamma,
+    double *z,
+    FunctionKnob *fknob)
+{
+    return SpMV_<double>(m, n, w, alpha, A_colptr, A_rowval, A_nzval, x, beta, y, gamma, z, fknob);
+}
+
+void SpMVComplex(
+    int m, int n,
+    double _Complex *w,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double _Complex *x,
+    double beta,
+    double _Complex *y,
+    double gamma,
+    double _Complex *z,
+    FunctionKnob *fknob)
+{
+    return SpMV_<double _Complex>(m, n, w, alpha, A_colptr, A_rowval, A_nzval, x, beta, y, gamma, z, fknob);
 }
 
 static void TriangularSolve_(
@@ -996,7 +1053,7 @@ static void TriangularSolve_(
 
             m->reordering_info = fknob->reordering_info;
 
-            double *temp_vector = getTempVector(L->m);
+            double *temp_vector = getTempVector<double>(L->m);
 
             reorderVectorWithInversePermInplace(
                 b, fknob->reordering_info.col_inverse_perm, L->m);

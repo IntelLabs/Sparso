@@ -8,18 +8,18 @@ using namespace std;
 using namespace SpMP;
 
 // w = (alpha*A*x + beta*y + gamma)*z
-template<class T, bool HAS_VALUE = true, bool HAS_Z = false>
+template<class T1, class T2, bool HAS_VALUE = true, bool HAS_Z = false>
 inline
 static void SpMV_(
   int m,
-  T *w,
-  T alpha,
-  const int *rowptr, const int *colidx, const T* values,
-  const T *x,
-  T beta,
-  const T *y,
-  T gamma,
-  const T *z)
+  T2 *w,
+  T1 alpha,
+  const int *rowptr, const int *colidx, const T1* values,
+  const T2 *x,
+  T1 beta,
+  const T2 *y,
+  T1 gamma,
+  const T2 *z)
 {
   assert(w != x);
 
@@ -51,7 +51,7 @@ static void SpMV_(
       if (0 == beta) {
         if (0 == gamma) {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
+            T2 sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
               if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
@@ -66,7 +66,7 @@ static void SpMV_(
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
+            T2 sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
               if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
@@ -85,7 +85,7 @@ static void SpMV_(
         // alpha == 1 && beta != 0
         if (0 == gamma) {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
+            T2 sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
               if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
@@ -101,7 +101,7 @@ static void SpMV_(
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
+            T2 sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
               if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
@@ -122,7 +122,7 @@ static void SpMV_(
       if (0 == beta) {
         if (0 == gamma) {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
+            T2 sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
               if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
@@ -140,7 +140,7 @@ static void SpMV_(
           if (HAS_Z) {
             if (HAS_VALUE) {
               for (int i = iBegin; i < iEnd; ++i) {
-                T sum = 0;
+                T2 sum = 0;
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += values[j]*x[colidx[j]];
                 }
@@ -149,7 +149,7 @@ static void SpMV_(
             }
             else {
               for (int i = iBegin; i < iEnd; ++i) {
-                T sum = 0;
+                T2 sum = 0;
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += x[colidx[j]];
                 }
@@ -160,7 +160,7 @@ static void SpMV_(
           else {
             if (HAS_VALUE) {
               for (int i = iBegin; i < iEnd; ++i) {
-                T sum = 0;
+                T2 sum = 0;
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += values[j]*x[colidx[j]];
                 }
@@ -169,7 +169,7 @@ static void SpMV_(
             }
             else {
               for (int i = iBegin; i < iEnd; ++i) {
-                T sum = 0;
+                T2 sum = 0;
                 for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
                   sum += x[colidx[j]];
                 }
@@ -182,24 +182,47 @@ static void SpMV_(
       else {
         // alpha != 1 && beta != 0
         if (0 == gamma) {
-          for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
-            for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
-              if (HAS_VALUE) {
-                sum += values[j]*x[colidx[j]];
+          if (HAS_Z) {
+            for (int i = iBegin; i < iEnd; ++i) {
+              T2 sum = 0;
+              for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                if (HAS_VALUE) {
+                  sum += values[j]*x[colidx[j]];
+                }
+                else {
+                  sum += x[colidx[j]];
+                }
               }
-              else {
-                sum += x[colidx[j]];
+              sum = alpha*sum + beta*y[i];
+              w[i] = z[i]*sum;
+            }
+          }
+          else {
+            if (HAS_VALUE) {
+              for (int i = iBegin; i < iEnd; ++i) {
+                T2 sum = 0;
+                for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                  sum += values[j]*x[colidx[j]];
+                }
+                sum = alpha*sum + beta*y[i];
+                w[i] = sum;
               }
             }
-            sum = alpha*sum + beta*y[i];
-            if (HAS_Z) w[i] = z[i]*sum;
-            else w[i] = sum;
+            else {
+              for (int i = iBegin; i < iEnd; ++i) {
+                T2 sum = 0;
+                for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
+                  sum += x[colidx[j]];
+                }
+                sum = alpha*sum + beta*y[i];
+                w[i] = sum;
+              }
+            }
           }
         }
         else {
           for (int i = iBegin; i < iEnd; ++i) {
-            T sum = 0;
+            T2 sum = 0;
             for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
               if (HAS_VALUE) {
                 sum += values[j]*x[colidx[j]];
@@ -247,21 +270,52 @@ void multiplyWithVector(
 
   if (A->values) {
     if (z) {
-      SpMV_<double, true, true>(
+      SpMV_<double, double, true, true>(
         A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
     }
     else {
-      SpMV_<double, true, false>(
+      SpMV_<double, double, true, false>(
         A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
     }
   }
   else {
     if (z) {
-      SpMV_<double, false, true>(
+      SpMV_<double, double, false, true>(
         A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
     }
     else {
-      SpMV_<double, false, false>(
+      SpMV_<double, double, false, false>(
+        A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
+    }
+  }
+}
+
+void multiplyWithVector(
+  double _Complex *w,
+  double alpha, const CSR *A, const double _Complex *x,
+  double beta, const double _Complex *y,
+  double gamma,
+  const double _Complex *z)
+{
+  assert(A);
+
+  if (A->values) {
+    if (z) {
+      SpMV_<double, double _Complex, true, true>(
+        A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
+    }
+    else {
+      SpMV_<double, double _Complex, true, false>(
+        A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
+    }
+  }
+  else {
+    if (z) {
+      SpMV_<double, double _Complex, false, true>(
+        A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
+    }
+    else {
+      SpMV_<double, double _Complex, false, false>(
         A->m, w, alpha, A->rowptr, A->colidx, A->values, x, beta, y, gamma, z);
     }
   }
@@ -269,19 +323,18 @@ void multiplyWithVector(
 
 extern double *getTempVector(int l); // defined in knob.cpp
 
-extern "C" {
-
 // context insensitive version of SpMV
 // Since we don't know if A in CSC is symmetric
 // we resort into SpMV in CSC.
 // transpose to CSR and then performing CSR SpMV
 // turns out to be slower
-void CSR_MultiplyWithVector(
-  double *w,
-  double alpha, const CSR_Handle *A, const double *x,
-  double beta, const double *y,
+template<class T> // T: vector type
+void CSR_MultiplyWithVector_(
+  T *w,
+  double alpha, const CSR_Handle *A, const T *x,
+  double beta, const T *y,
   double gamma,
-  const double *z)
+  const T *z)
 {
   CSR *AT = ((CSR *)A);
 
@@ -299,7 +352,7 @@ void CSR_MultiplyWithVector(
   double tBegin = omp_get_wtime();
 #endif
   
-  double *temp_buffer_array = MALLOC(double, omp_get_max_threads()*AT->n);
+  T *temp_buffer_array = MALLOC(T, omp_get_max_threads()*AT->n);
 
 #pragma omp parallel
   {
@@ -309,14 +362,14 @@ void CSR_MultiplyWithVector(
     iEnd += base;
 
     int tid = omp_get_thread_num();
-    double *temp_buffer = temp_buffer_array + tid*AT->n;
+    T *temp_buffer = temp_buffer_array + tid*AT->n;
     for (int i = 0; i < AT->n; ++i) {
       temp_buffer[i] = 0;
     }
     temp_buffer -= base;
 
     for (int i = iBegin; i < iEnd; ++i) {
-      double xi = x[i];
+      T xi = x[i];
       for (int j = rowptr[i]; j < rowptr[i + 1]; ++j) {
         temp_buffer[colidx[j]] += xi*values[j];
       }
@@ -326,7 +379,7 @@ void CSR_MultiplyWithVector(
 
 #pragma omp for
     for (int i = 0; i < AT->n; ++i) {
-      double sum = temp_buffer_array[i];
+      T sum = temp_buffer_array[i];
       for (int j = 1; j < omp_get_num_threads(); ++j) {
         sum += temp_buffer_array[j*AT->n + i];
       }
@@ -350,6 +403,29 @@ void CSR_MultiplyWithVector(
   }
 
   FREE(temp_buffer_array);
+}
+
+extern "C"
+{
+
+void CSR_MultiplyWithVector(
+  double *w,
+  double alpha, const CSR_Handle *A, const double *x,
+  double beta, const double *y,
+  double gamma,
+  const double *z)
+{
+  return CSR_MultiplyWithVector_<double>(w, alpha, A, x, beta, y, gamma, z);
+}
+
+void CSR_MultiplyWithComplexVector(
+  double _Complex *w,
+  double alpha, const CSR_Handle *A, const double _Complex *x,
+  double beta, const double _Complex *y,
+  double gamma,
+  const double _Complex *z)
+{
+  return CSR_MultiplyWithVector_<double _Complex>(w, alpha, A, x, beta, y, gamma, z);
 }
 
 void CSR_MultiplyWithDenseMatrix(
