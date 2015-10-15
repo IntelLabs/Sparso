@@ -1,5 +1,5 @@
 @doc """ Set is_constant_structured perperty for mat_property in a region """
-type SymmetricStructureProperty <: MatrixProperty 
+type SymmetricStructureProperty <: MatrixPropertyPass 
 
     @doc "set_property_for method"
     set_property_for    :: Function
@@ -241,7 +241,7 @@ type SymmetricStructureProperty <: MatrixProperty
     )
         # symmetric structure is a superset of symmetric value
         for (sym, v) in mat_property
-            if v.symmetric_valued > 0 && v.symmetric_structured == 0
+            if !v.symmetric_structured.predefined
                 v.symmetric_structured = v.symmetric_valued
             end
         end

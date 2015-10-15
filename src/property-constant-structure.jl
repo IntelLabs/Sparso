@@ -1,5 +1,5 @@
 @doc """ Set is_constant_structured perperty for mat_property in a region """
-type ConstantStructureProperty <: MatrixProperty 
+type ConstantStructureProperty <: MatrixPropertyPass 
 
     @doc """ set_property_for method"""
     set_property_for    :: Function
@@ -12,36 +12,37 @@ type ConstantStructureProperty <: MatrixProperty
         region_info         :: RegionInfo,
         mat_property        :: Dict
     )
-        # constant structure is a subset of constant value
+        # constant value is a subset of constant structure
         for (sym, v) in mat_property
-            if v.constant_valued > 0 && v.constant_structured == 0
-                v.constant_structured = v.constant_valued
+            if v.constant_valued.final_val == PROP_POSITIVE_VAL  
+                v.constant_structured.final_val = PROP_POSITIVE_VAL
             end
         end
 
-        # property values: 
-        #  -1: not constant 
-        #  0: unknow 
-        #  1: constant 
-        #  2: external(constant)
-        #  3: specified by set_matrix_property statement
-        #  4: inherited from parent region (constant)
-        property_map = new_sym_property_map(Int, 0, -1)
+        property_map = new_sym_property_map()
+
+        # property_map[k] and mat_property[k] share values
+        for k in keys(mat_property)
+            property_map[k] = mat_property[k].constant_structured
+            if mat_property[k].constant_valued.final_val == PROP_POSITIVE_VAL
+                property_map[k].predefined = true
+                property_map[k].final_val = PROP_POSITIVE_VAL
+                push!(property_map[k].vals, PROP_POSITIVE_VAL)
+            end
+        end
 
         for k in keys(region_info.depend_map)
             # always prefer predefined values
-            if haskey(mat_property, k) 
-                if mat_property[k].constant_structured!=0 
-                    property_map[k] = mat_property[k].constant_structured 
-                end
-            elseif !isempty(region_info.depend_map[k])
-                property_map[k] = in(k, region_info.single_defs) ? 0 : -1
+            if !mat_property[k].constant_structured.predefined &&
+                !isempty(region_info.depend_map[k]) &&
+                !in(k, region_info.single_defs)
+                    property_map[k].final_val = PROP_NEGATIVE_VAL
             end
         end
 
         for rk in keys(region_info.reverse_depend_map)
-            if !haskey(property_map, rk) # rk is not in def set
-                property_map[rk] = 2
+            if !haskey(region_info.depend_map, rk) # rk is not in def set
+                property_map[rk].final_val = PROP_POSITIVE_VAL
             end
         end
 
@@ -51,13 +52,13 @@ type ConstantStructureProperty <: MatrixProperty
         #    end
         #end
 
-        dprint_property_map(1, property_map)
+        dprint_property_map(2, property_map)
 
         # propagate non-constant property 
         # 
         working_set = []
         for (k, v) in property_map
-            if v < 0
+            if v.final_val == PROP_NEGATIVE_VAL
                 push!(working_set, k)
             end
         end
@@ -68,29 +69,24 @@ type ConstantStructureProperty <: MatrixProperty
                 continue
             end
             for d in region_info.reverse_depend_map[s]
-                if property_map[d] >= 0
-                    if property_map[d] == 3
-                        # always favor annotation
-                        dprintln(1, 1, "WW annotation overwrites non_constant ", d)
-                    elseif property_map[d] == 4
-                        # always favor inherit result
-                        dprintln(1, 1, "WW inherit overwrites non_constant ", d)
-                    else
-                        property_map[d] = -1
-                        push!(working_set, d)
-                    end
+                if property_map[d].predefined
+                    # always favor annotation
+                    dprintln(1, 1, "WW fail to overwrites predefined ", d)
+                elseif property_map[d].final_val != PROP_NEGATIVE_VAL
+                    property_map[d].final_val = PROP_NEGATIVE_VAL
+                    push!(working_set, d)
                 end
             end
         end
 
         dprintln(1, 1, "\nAfter non-constant propagation:")
-        dprint_property_map(1, property_map)
+        dprint_property_map(2, property_map)
 
 
         # propagate constant property 
         working_set = []
         for (k, v) in property_map
-            if v > 0
+            if v.final_val == PROP_POSITIVE_VAL
                 push!(working_set, k)
             end
         end
@@ -103,38 +99,36 @@ type ConstantStructureProperty <: MatrixProperty
             # check every symbol that depends on s
             # 
             for rd in region_info.reverse_depend_map[s]
-                if haskey(property_map, rd) && property_map[rd] != 0
+                if haskey(property_map, rd) && property_map[rd].final_val != nothing
                     continue
                 end
                 constant = true
                 for d in region_info.depend_map[rd]
-                    if haskey(property_map, d) && property_map[d] == 0 
+                    if haskey(property_map, d) && property_map[d].final_val == nothing 
                         constant = false
                     end
                 end
                 if constant
-                    property_map[rd] = 1
+                    property_map[rd].final_val = PROP_POSITIVE_VAL
                     push!(working_set, rd)
                 end
             end
         end
 
         dprintln(1, 1, "\nAfter constant propagation:")
-        dprint_property_map(1, property_map)
+        dprint_property_map(2, property_map)
 
         # copy back result
-        #delete!(property_map, sym_default_property_key)
-        #delete!(property_map, sym_negative_property_key)
-        for (k, v) in property_map
-            #if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES) 
-                if !haskey(mat_property, k)
-                    mat_property[k] = StructureProxy()
-                end
-                mat_property[k].constant_structured = v
-            #else
-            #    dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
-            #end
-        end
+        #for (k, v) in property_map
+        #    #if any(t -> symbol_info[k]<:t, MATRIX_RELATED_TYPES) 
+        #        if !haskey(mat_property, k)
+        #            mat_property[k] = MatrixPropertyValues()
+        #        end
+        #        mat_property[k].constant_structured = v
+        #    #else
+        #    #    dprintln(1, 1, "WW skip ", k, " ", symbol_info[k])
+        #    #end
+        #end
     end 
 
     @doc """ Constructor """
