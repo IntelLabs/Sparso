@@ -296,9 +296,9 @@ TODO: get ride of is_structure_only. It seems to be internal to the library only
 type MatrixProperties
     constant_valued        :: Bool
     constant_structured    :: Bool
-    is_symmetric           :: Bool
-    is_structure_symmetric :: Bool
-    is_structure_only      :: Bool
+    is_symmetric           :: Union{Bool, Symbol}
+    is_structure_symmetric :: Union{Bool, Symbol}
+    is_structure_only      :: Union{Bool, Symbol}
     is_single_def          :: Bool
     lower_of               :: Any
     upper_of               :: Any

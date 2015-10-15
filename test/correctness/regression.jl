@@ -963,7 +963,7 @@ const prop_symmetric_structure_test1 = Test(
 )
 
 const prop_structure_only_test1 = Test(
-    "porp-structure-only-test1",
+    "prop-structure-only-test1",
     "prop-structure-only-test1.jl",
     [
         TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:B, :C, :E])),
