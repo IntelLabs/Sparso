@@ -111,4 +111,28 @@ void LBFGSComputeDirection(int k, int it, int n, const double *S, const double *
   }
 }
 
+// s = sum(log1p(exp(-abs(yXw)) - min(yXw,0)))
+// fk = s/m + (lambda/2)*norm(w)^2
+double LBFGSLossFunction1(
+  int m, int n, const double *yXw, const double *w, double lambda)
+{
+  double s = 0;
+#pragma omp parallel for reduction(+:s)
+  for (int i = 0; i < m; ++i) {
+    s += log1p(exp(-fabs(yXw[i]))) - std::min(yXw[i], 0.);
+  }
+
+  return s/m + (lambda/2)*dot(n, w, w);
+}
+
+// temp = y./(1 + exp(yXw))
+void LBFGSLossFunction2(
+  double *temp, int n, const double *y, const double *yXw)
+{
+#pragma omp parallel for
+  for (int i = 0; i < n; ++i) {
+    temp[i] = y[i]/(1 + exp(yXw[i]));
+  }
+}
+
 } // extern "C"

@@ -74,14 +74,20 @@ void reorderVectorWithInversePermInplace(double *v, const int *inversePerm, int 
 
 // w = alpha*x + beta*w
 void waxpby(int n, double *w, double alpha, const double *x, double beta, const double *y);
+void waxpby_complex(int n, double _Complex *w, double _Complex alpha, const double _Complex *x, double _Complex beta, const double _Complex *y);
 // return dot(x*y)
 double dot(int n, const double *x, const double *y);
+double _Complex dot_complex(int n, const double _Complex *x, const double _Complex *y);
+double norm_complex(int n, const double _Complex *x);
 // w = x./y
 void pointwiseDivide(int n, double *w, const double *x, const double *y);
 // w = x.*y
 void pointwiseMultiply(int n, double *w, const double *x, const double *y);
+// w = alpha*x.*y
+void pointwiseMultiplyRealWithComplex(int n, double _Complex *w, const double *x, const double _Complex *y);
 // w = alpha*x + beta
 void waxpb(int n, double *w, double alpha, const double *x, double beta);
+void waxpb_complex(int n, double _Complex *w, double _Complex alpha, const double _Complex *x, double _Complex beta);
 // sum(x)
 double sum(int n, const double *x);
 // minimum(x)
@@ -89,6 +95,7 @@ double minimum(int n, const double *x);
 // w = min(x, alpha)
 void min(int n, double *w, const double *x, double alpha); 
 void CSR_abs(int n, double *w, const double *x);
+void CSR_abs_complex(int n, double *w, const double _Complex *x);
 void CSR_exp(int n, double *w, const double *x);
 void CSR_log1p(int n, double *w, const double *x);
 

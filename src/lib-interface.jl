@@ -429,6 +429,51 @@ SpMV!(
 SpMV!(y :: Vector, A :: SparseMatrixCSC, x :: Vector, fknob :: Ptr{Void} = C_NULL) = 
     SpMV!(y, one(eltype(x)), A, x, zero(eltype(y)), y, zero(eltype(x)), fknob)
 
+@doc """ w = alpha*A*x + beta*y """
+function SpMV!(
+    w     :: Vector{Complex128}, 
+    alpha :: Number, 
+    A     :: SparseMatrixCSC, 
+    x     :: Vector{Complex128}, 
+    beta  :: Number, 
+    y     :: Vector{Complex128}, 
+    fknob :: Ptr{Void} = C_NULL # fknob == C_NULL => A is symmetric so we can directly call CSR_MultiplyWithVector with CSC matrix
+)
+    assert(length(w) == length(y) || length(y) == 0)
+
+    if use_SPMP
+        if fknob == C_NULL
+          A1 = create_CSR(A)
+          ccall((:CSR_MultiplyWithComplexVector, LIB_PATH), Void,
+                (Ptr{Complex128}, Cdouble, Ptr{Void}, Ptr{Complex128}, Cdouble, Ptr{Complex128}, Cdouble, Ptr{Complex128}),
+                pointer(w), alpha, A1, pointer(x), beta, length(y) == 0 ? C_NULL : pointer(y), 0, C_NULL)
+          destroy_CSR(A1)
+        else
+          ccall((:SpMVComplex, LIB_PATH), Void,
+                (Cint, Cint,
+                 Ptr{Complex128},
+                 Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
+                 Ptr{Complex128},
+                 Cdouble, Ptr{Complex128},
+                 Cdouble,
+                 Ptr{Complex128},
+                 Ptr{Void}),
+                size(A, 1), size(A, 2),
+                w,
+                alpha, A.colptr, A.rowval, A.nzval,
+                x,
+                beta, length(y) == 0 ? C_NULL : y,
+                0,
+                C_NULL,
+                fknob)
+        end
+    else
+        # use Julia implementation
+        w[:] = alpha * A * x + beta * y
+    end
+end
+
+
 @doc """ alpha*A*x + beta*y + gamma """
 function SpMV(
     alpha :: Number, 
@@ -479,11 +524,41 @@ function dot(
   end
 end
 
+@doc """ Dot product of vector x and y """
+function dot(
+    x :: Vector{Complex128}, 
+    y :: Vector{Complex128}
+)
+  assert(length(x) == length(y))
+
+  if use_SPMP
+    ccall((:dot, LIB_PATH), Complex128,
+          (Cint, Ptr{Complex128}, Ptr{Complex128}),
+          length(x), pointer(x), pointer(y))
+  else
+    dot(x, y)
+  end
+end
+
 @doc """ 2-norm of vector x """
 function norm(
     x :: Vector
 )
   sqrt(dot(x, x))
+end
+
+@doc """ 2-norm of vector x """
+function norm(
+    x :: Vector{Complex128}
+)
+
+  if use_SPMP
+    ccall((:norm_complex, LIB_PATH), Cdouble,
+          (Cint, Ptr{Complex128}),
+          length(x), pointer(x))
+  else
+    norm(x)
+  end
 end
 
 @doc """ sum of vector x """
@@ -518,6 +593,19 @@ function abs!(
   if use_SPMP
     ccall((:CSR_abs, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), w, x)
+  else
+    w[:] = abs(x)
+  end
+end
+
+function abs!(
+    w :: Vector{Float64},
+    x :: Vector{Complex128}
+)
+  if use_SPMP
+    ccall((:CSR_abs_complex, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Complex128}),
           length(x), w, x)
   else
     w[:] = abs(x)
@@ -618,6 +706,23 @@ function element_wise_multiply!(
   end
 end
 
+@doc """" w = x.*y """
+function element_wise_multiply!(
+    w :: Vector{Complex128}, 
+    x :: Vector{Float64}, 
+    y :: Vector{Complex128}
+)
+  assert(length(x) == length(y))
+
+  if use_SPMP
+    ccall((:pointwiseMultiplyRealWithComplex, LIB_PATH), Void,
+          (Cint, Ptr{Complex128}, Ptr{Float64}, Ptr{Complex128}),
+          length(x), pointer(w), pointer(x), pointer(y))
+  else
+    w[:] = x.*y
+  end
+end
+
 @doc """" Alocate space for and return element-wise multiplication of two vectors. """
 function element_wise_multiply(
     x :: Vector, 
@@ -648,6 +753,26 @@ function WAXPBY!(
   end
 end
 
+@doc """ w = alpha*x + beta*y """
+function WAXPBY!(
+    w     :: Vector{Complex128}, 
+    alpha :: Number, 
+    x     :: Vector{Complex128}, 
+    beta  :: Number, 
+    y     :: Vector{Complex128}
+)
+  assert(length(x) == length(y))
+  assert(length(x) == length(w))
+
+  if use_SPMP
+    ccall((:waxpby_complex, LIB_PATH), Void,
+          (Cint, Ptr{Complex128}, Complex128, Ptr{Complex128}, Complex128, Ptr{Complex128}),
+          length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
+  else
+    w[:] = alpha*x + beta*y
+  end
+end
+
 @doc """ Allocate space for and return alpha*x + beta*y """
 function WAXPBY(
     alpha :: Number,
@@ -672,6 +797,24 @@ function WAXPB!(
   if use_SPMP
     ccall((:waxpb, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
+          length(x), pointer(w), alpha, pointer(x), beta)
+  else
+    w[:] = alpha*x + beta
+  end
+end
+
+@doc """ w = alpha*x + beta """
+function WAXPB!(
+    w     :: Vector{Complex128}, 
+    alpha :: Number, 
+    x     :: Vector{Complex128}, 
+    beta  :: Number
+)
+  assert(length(w) == length(x))
+
+  if use_SPMP
+    ccall((:waxpb_complex, LIB_PATH), Void,
+          (Cint, Ptr{Complex128}, Complex128, Ptr{Complex128}, Complex128),
           length(x), pointer(w), alpha, pointer(x), beta)
   else
     w[:] = alpha*x + beta
@@ -1188,7 +1331,8 @@ function matrix_market_read(
     end
 end
 
-function lbfgs_compute_direction(
+function lbfgs_compute_direction!(
+    dx,
     k     :: Int,
     it    :: Int,
     n     :: Int,
@@ -1197,11 +1341,9 @@ function lbfgs_compute_direction(
     dfk)
 
     if use_SPMP
-      r = zeros(n)
       ccall((:LBFGSComputeDirection, LIB_PATH), Void,
             (Cint, Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
-            k, it, n, S, Y, dfk, r)
-      r
+            k, it, n, S, Y, dfk, dx)
     else
       a = zeros(k)
 
@@ -1237,9 +1379,32 @@ function lbfgs_compute_direction(
         r = r + si*(a[i] - b)
       end
 
-      -r
+      dx[:] = -r
     end
 end 
+
+function lbfgs_loss_function1(yXw::Vector, w::Vector, lambda::Number)
+  m = length(yXw)
+
+  if use_SPMP
+    ccall((:LBFGSLossFunction1, LIB_PATH), Cdouble,
+          (Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Cdouble),
+          m, length(w), yXw, w, lambda)
+  else
+    s = sum(log1p(exp(-abs(yXw))) - min(yXw, 0))
+    s/m + (lambda/2)*norm(x)^2
+  end 
+end
+
+function lbfgs_loss_function2!(temp::Vector, y::Vector, yXw::Vector)
+  if use_SPMP
+    ccall((:LBFGSLossFunction2, LIB_PATH), Void,
+          (Ptr{Cdouble}, Cint, Ptr{Cdouble}, Ptr{Cdouble}),
+          temp, length(y), y, yXw)
+  else
+    temp[:] = y./(1 + exp(yXw))
+  end
+end
 
 function get_spmp_spmv_time()
   ccall((:GetSpMPSpMVTime, LIB_PATH), Cdouble, ())
