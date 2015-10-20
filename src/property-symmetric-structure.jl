@@ -94,7 +94,7 @@ type SymmetricStructureProperty <: MatrixPropertyPass
         len = length(args)
         
         if len == 1
-            v = get_property_val(call_sites, get_symexpr(args[1]))
+            v = get_property_val(call_sites, get_symexpr(args[1])).final_val
             set_property_val(call_sites, ast, v) 
         elseif len == 2
         elseif len == 3

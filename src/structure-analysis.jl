@@ -204,7 +204,7 @@ function is_property_negative(
 end
 
 # Symbol types unimportant to analysis
-const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString]
+const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString, Complex]
 
 @doc """
 """
