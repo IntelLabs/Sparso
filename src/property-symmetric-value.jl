@@ -99,13 +99,17 @@ type SymmetricValueProperty <: MatrixPropertyPass
 
         # remove all scalars so that only matrics/vectors are left in args
         is_scalar_type = x -> (type_of_ast_node(x, symbol_info) <: Number)
-        args = filter(x -> !is_scalar_type(x), ast.args[2:end])
-        #dump(args)
+        is_complex_type = x -> (type_of_ast_node(x, symbol_info) <: Complex)
+        args = filter(x -> !is_scalar_type(x) && !is_complex_type(x), ast.args[2:end])
         len = length(args)
         
         if len == 1
-            v = get_property_val(call_sites, get_symexpr(args[1])).final_val
-            set_property_final_val(call_sites, ast, v) 
+            #dump(args)
+            if isa(args[1], GlobalRef) && args[1].name == :im
+            else
+                v = get_property_val(call_sites, get_symexpr(args[1])).final_val
+                set_property_final_val(call_sites, ast, v) 
+            end
         elseif len == 2
         elseif len == 3
         end
