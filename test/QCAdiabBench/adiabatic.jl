@@ -253,10 +253,17 @@ function abiatic_sa(Hdmat, d, nqbits, T)
   variance = zeros(1)
   meanenergy[1] = dot(vec(abs(Phi0at0).^2), d)
   variance[1] = dot(vec(abs(Phi0at0).^2), (d - meanenergy[1]).^2)
-  wi = Phi0at0
+  wi = Array{Complex128}(Phi0at0)
   # If it is the last iteration, then lastit = 1, otherwise lastit = 0
   lastit = 0
   spmv_time = 0
+
+  s1 = Array{Complex128}(length(d))
+  s2 = Array{Complex128}(length(d))
+  s3 = Array{Complex128}(length(d))
+  s4 = Array{Complex128}(length(d))
+  s5 = Array{Complex128}(length(d))
+  s6 = Array{Complex128}(length(d))
 
   while lastit == 0
       # Stretch the step if within 10% of b-t
@@ -339,6 +346,8 @@ function abiatic_sa(Hdmat, d, nqbits, T)
 
   alpha = zeros(nit)
   beta = zeros(nit + 1)
+
+  uk = Array{Float64}(length(d))
 
   for i = 1:length(Tv)
     s = Tv[i]/T
@@ -674,5 +683,7 @@ abiatic(Hdmat, d, nqbits, T)
 SparseAccelerator.set_knob_log_level(1)
 srand(0)
 abiatic_opt(Hdmat, d, nqbits, T)
+srand(0)
+@acc abiatic_sa(Hdmat, d, nqbits, T)
 srand(0)
 @acc abiatic_sa(Hdmat, d, nqbits, T)

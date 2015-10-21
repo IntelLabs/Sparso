@@ -415,12 +415,12 @@ end
 
 @doc """ w = alpha*A*x + beta*y + gamma """
 SpMV!(
-    w     :: Vector, 
+    w     :: Vector{Float64}, 
     alpha :: Number, 
     A     :: SparseMatrixCSC, 
-    x     :: Vector, 
+    x     :: Vector{Float64}, 
     beta  :: Number, 
-    y     :: Vector, 
+    y     :: Vector{Float64}, 
     gamma :: Number,
     fknob :: Ptr{Void} = C_NULL) =
     SpMV!(w, alpha, A, x, beta, y, gamma, Array{Float64,1}[], fknob)
@@ -473,6 +473,18 @@ function SpMV!(
     end
 end
 
+@doc """ w = alpha*A*x + beta*y + gamma """
+# TODO: need a real 8 args SpMV!
+SpMV!(
+    w     :: Vector{Complex128}, 
+    alpha :: Number, 
+    A     :: SparseMatrixCSC, 
+    x     :: Vector{Complex128}, 
+    beta  :: Number, 
+    y     :: Vector{Complex128}, 
+    gamma :: Number,
+    fknob :: Ptr{Void} = C_NULL) =
+    SpMV!(w, alpha, A, x, beta, y, fknob)
 
 @doc """ alpha*A*x + beta*y + gamma """
 function SpMV(
@@ -725,13 +737,24 @@ end
 
 @doc """" Alocate space for and return element-wise multiplication of two vectors. """
 function element_wise_multiply(
-    x :: Vector, 
-    y :: Vector
+    x :: Vector{Float64}, 
+    y :: Vector{Float64}
 )
   w = Array(Cdouble, length(x))
   element_wise_multiply!(w, x, y)
   w
 end
+
+@doc """" Alocate space for and return element-wise multiplication of two vectors. """
+function element_wise_multiply(
+    x :: Vector{Float64}, 
+    y :: Vector{Complex128}
+)
+  w = Array(Complex128, length(x))
+  element_wise_multiply!(w, x, y)
+  w
+end
+
 
 @doc """ w = alpha*x + beta*y """
 function WAXPBY!(
@@ -776,11 +799,23 @@ end
 @doc """ Allocate space for and return alpha*x + beta*y """
 function WAXPBY(
     alpha :: Number,
-    x     :: Vector, 
+    x     :: Vector{Float64}, 
     beta  :: Number, 
-    y     :: Vector
+    y     :: Vector{Float64}
 )
   w = Array(Cdouble, length(x))
+  WAXPBY!(w, alpha, x, beta, y)
+  w
+end
+
+@doc """ Allocate space for and return alpha*x + beta*y """
+function WAXPBY(
+    alpha :: Number,
+    x     :: Vector{Complex128}, 
+    beta  :: Number, 
+    y     :: Vector{Complex128}
+)
+  w = Array(Complex128, length(x))
   WAXPBY!(w, alpha, x, beta, y)
   w
 end
