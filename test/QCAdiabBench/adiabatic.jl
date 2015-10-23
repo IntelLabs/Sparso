@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
 function abiatic(Hdmat, d, nqbits, T)
   total_time = -time()
@@ -143,6 +143,7 @@ function abiatic(Hdmat, d, nqbits, T)
   alpha = zeros(nit)
   beta = zeros(nit + 1)
 
+  dot_time = 0
   for i = 1:length(Tv)
     s = Tv[i]/T
 
@@ -154,9 +155,13 @@ function abiatic(Hdmat, d, nqbits, T)
       uk = -(1 - s)*Hdmat*q1 + s*d.*q1
       spmv_time += time()
 
+      dot_time -= time()
       alpha[k] = dot(q1, uk)
+      dot_time += time()
       uk -= beta[k]*q0 + alpha[k]*q1
+      dot_time -= time()
       beta[k + 1] = norm(uk)
+      dot_time += time()
       if beta[k + 1] == 0
         println("Error")
         return
@@ -185,7 +190,7 @@ function abiatic(Hdmat, d, nqbits, T)
   end
 
   println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time")
+  println("spmv_time = $spmv_time, dot_time = $dot_time")
 end
 
 function print_result(Tv, spectralgap, optimalenergy, meanenergy, variance)
@@ -349,6 +354,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
 
   uk = Array{Float64}(length(d))
 
+  dot_time = 0
   for i = 1:length(Tv)
     s = Tv[i]/T
 
@@ -360,9 +366,11 @@ function abiatic_sa(Hdmat, d, nqbits, T)
       uk = -(1 - s)*Hdmat*q1 + s*d.*q1
       spmv_time += time()
 
+      dot_time -= time()
       alpha[k] = dot(q1, uk)
       uk -= beta[k]*q0 + alpha[k]*q1
       beta[k + 1] = norm(uk)
+      dot_time += time()
       if beta[k + 1] == 0
         println("Error")
         return
@@ -388,7 +396,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
   print_result(Tv, spectralgap, optimalenergy, meanenergy, variance)
 
   println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time")
+  println("spmv_time = $spmv_time, dot_time = $dot_time")
 end
 
 
@@ -601,6 +609,8 @@ function abiatic_opt(Hdmat, d, nqbits, T)
   temp2 = Array{Float64}(length(d))
   uk = Array{Float64}(length(d))
 
+  dot_time = 0
+  
   for i = 1:length(Tv)
     s = Tv[i]/T
 
@@ -614,11 +624,18 @@ function abiatic_opt(Hdmat, d, nqbits, T)
       SparseAccelerator.SpMV!(uk, s - 1, Hdmat, q1, s, temp2, 0, fknob_spmv7)
       spmv_time += time()
 
-      alpha[k] = SparseAccelerator.dot(q1, uk)
+      dot_time -= time()
+      #alpha[k] = SparseAccelerator.dot(q1, uk)
+      alpha[k] = dot(q1, uk)
+      dot_time += time()
       #uk -= beta[k]*q0 + alpha[k]*q1
       SparseAccelerator.WAXPBY!(uk, 1, uk, -beta[k], q0)
       SparseAccelerator.WAXPBY!(uk, 1, uk, -alpha[k], q1)
-      beta[k + 1] = SparseAccelerator.norm(uk)
+      dot_time -= time()
+      #beta[k + 1] = SparseAccelerator.norm(uk)
+      beta[k + 1] = norm(uk)
+      dot_time += time()
+
       if beta[k + 1] == 0
         println("Error")
         return
@@ -657,7 +674,7 @@ function abiatic_opt(Hdmat, d, nqbits, T)
   end
 
   println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time")
+  println("spmv_time = $spmv_time, dot_time = $dot_time")
 end
 
 nqbits = parse(Int, ARGS[1])
@@ -684,6 +701,6 @@ SparseAccelerator.set_knob_log_level(1)
 srand(0)
 abiatic_opt(Hdmat, d, nqbits, T)
 srand(0)
-@acc abiatic_sa(Hdmat, d, nqbits, T)
-srand(0)
-@acc abiatic_sa(Hdmat, d, nqbits, T)
+#@acc abiatic_sa(Hdmat, d, nqbits, T)
+#srand(0)
+#@acc abiatic_sa(Hdmat, d, nqbits, T)

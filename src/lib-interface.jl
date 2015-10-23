@@ -532,7 +532,7 @@ function dot(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(x), pointer(y))
   else
-    dot(x, y)
+    Base.dot(x, y)
   end
 end
 
@@ -548,7 +548,7 @@ function dot(
           (Cint, Ptr{Complex128}, Ptr{Complex128}),
           length(x), pointer(x), pointer(y))
   else
-    dot(x, y)
+    Base.dot(x, y)
   end
 end
 
@@ -564,12 +564,12 @@ function norm(
     x :: Vector{Complex128}
 )
 
-  if use_SPMP
+  if use_SPMP 
     ccall((:norm_complex, LIB_PATH), Cdouble,
           (Cint, Ptr{Complex128}),
           length(x), pointer(x))
   else
-    norm(x)
+    Base.norm(x)
   end
 end
 
@@ -582,7 +582,7 @@ function sum(
           (Cint, Ptr{Cdouble}),
           length(x), x)
   else
-    sum(x)
+    Base.sum(x)
   end
 end
 
@@ -594,7 +594,7 @@ function minimum(
           (Cint, Ptr{Cdouble}),
           length(x), x)
   else
-    minimum(x)
+    Base.minimum(x)
   end
 end
 
@@ -607,7 +607,7 @@ function abs!(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
   else
-    w[:] = abs(x)
+    w[:] = Base.abs(x)
   end
 end
 
@@ -620,7 +620,7 @@ function abs!(
           (Cint, Ptr{Cdouble}, Ptr{Complex128}),
           length(x), w, x)
   else
-    w[:] = abs(x)
+    w[:] = Base.abs(x)
   end
 end
 
@@ -633,7 +633,7 @@ function exp!(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
   else
-    w[:] = exp(x)
+    w[:] = Base.exp(x)
   end
 end
 
@@ -646,7 +646,7 @@ function log1p!(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
   else
-    w[:] = log1p(x)
+    w[:] = Base.log1p(x)
   end
 end
 
@@ -662,7 +662,7 @@ function min!(
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Cdouble),
           length(x), w, x, alpha)
   else
-    w[:] = min(x, alpha)
+    w[:] = Base.min(x, alpha)
   end
 end
 
