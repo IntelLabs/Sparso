@@ -105,7 +105,7 @@ template<class T>
 T dot_(int n, const T *x, const T *y)
 {
   T sum = 0;
-#pragma omp parallel for reduction(+:sum)
+#pragma omp parallel for reduction(+:sum) if (n>4096)
   for (int i = 0; i < n; ++i) {
     sum += x[i]*y[i];
   }

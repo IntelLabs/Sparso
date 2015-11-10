@@ -144,24 +144,22 @@ function abiatic(Hdmat, d, nqbits, T)
   beta = zeros(nit + 1)
 
   dot_time = 0
+
   for i = 1:length(Tv)
     s = Tv[i]/T
 
     q0 = zeros(nsets)
     q1 = x0/norm(x0)
 
+    dot_time -= time()
     for k = 1:nit
       spmv_time -= time()
       uk = -(1 - s)*Hdmat*q1 + s*d.*q1
       spmv_time += time()
 
-      dot_time -= time()
       alpha[k] = dot(q1, uk)
-      dot_time += time()
       uk -= beta[k]*q0 + alpha[k]*q1
-      dot_time -= time()
       beta[k + 1] = norm(uk)
-      dot_time += time()
       if beta[k + 1] == 0
         println("Error")
         return
@@ -170,6 +168,7 @@ function abiatic(Hdmat, d, nqbits, T)
       q0 = q1
       q1 = uk/beta[k + 1]
     end
+    dot_time += time()
 
     TT = SymTridiagonal(alpha, beta[2:nit])
 
@@ -203,10 +202,10 @@ end
 function abiatic_sa(Hdmat, d, nqbits, T)
   total_time = -time()
 
-       set_matrix_property(Dict(
-            :Hdmat => SA_SYMM_VALUED, 
-            )
-        )
+  set_matrix_property(Dict(
+       :Hdmat => SA_SYMM_VALUED | SA_STRUCTURE_ONLY, 
+       )
+  )
 
   nsets = 2^nqbits
   Phi0at0 = 1/sqrt(2^nqbits)*ones(nsets)
@@ -361,24 +360,25 @@ function abiatic_sa(Hdmat, d, nqbits, T)
     q0 = zeros(nsets)
     q1 = x0/norm(x0)
 
+    dot_time -= time()
     for k = 1:nit
       spmv_time -= time()
       uk = -(1 - s)*Hdmat*q1 + s*d.*q1
       spmv_time += time()
 
-      dot_time -= time()
       alpha[k] = dot(q1, uk)
       uk -= beta[k]*q0 + alpha[k]*q1
       beta[k + 1] = norm(uk)
-      dot_time += time()
       if beta[k + 1] == 0
         println("Error")
         return
       end
 
       q0 = q1
-      q1 = uk/beta[k + 1]
+      #q1 = uk/beta[k + 1]
+      q1 = SparseAccelerator.WAXPB(1/beta[k+1], uk, 0) 
     end
+    dot_time += time()
 
     TT = SymTridiagonal(alpha, beta[2:nit])
 
@@ -607,16 +607,22 @@ function abiatic_opt(Hdmat, d, nqbits, T)
   beta = zeros(nit + 1)
 
   temp2 = Array{Float64}(length(d))
+  temp3 = Array{Float64}(length(d))
   uk = Array{Float64}(length(d))
+  temp_q1 = Array{Float64}(length(d))
 
   dot_time = 0
+  wax_time = 0
   
   for i = 1:length(Tv)
     s = Tv[i]/T
 
     q0 = zeros(nsets)
-    q1 = x0/SparseAccelerator.norm(x0)
+    #q1 = x0/SparseAccelerator.norm(x0)
+    SparseAccelerator.WAXPB!(temp_q1, 1/SparseAccelerator.norm(x0), x0, 0) 
+    q1 = temp_q1
 
+    dot_time -= time()
     for k = 1:nit
       spmv_time -= time()
       #uk = -(1 - s)*Hdmat*q1 + s*d.*q1
@@ -624,17 +630,20 @@ function abiatic_opt(Hdmat, d, nqbits, T)
       SparseAccelerator.SpMV!(uk, s - 1, Hdmat, q1, s, temp2, 0, fknob_spmv7)
       spmv_time += time()
 
-      dot_time -= time()
-      #alpha[k] = SparseAccelerator.dot(q1, uk)
-      alpha[k] = dot(q1, uk)
-      dot_time += time()
+      wax_time -= time()
+      alpha[k] = SparseAccelerator.dot(q1, uk)
+      wax_time += time()
+      #alpha[k] = dot(q1, uk)
       #uk -= beta[k]*q0 + alpha[k]*q1
-      SparseAccelerator.WAXPBY!(uk, 1, uk, -beta[k], q0)
-      SparseAccelerator.WAXPBY!(uk, 1, uk, -alpha[k], q1)
-      dot_time -= time()
-      #beta[k + 1] = SparseAccelerator.norm(uk)
-      beta[k + 1] = norm(uk)
-      dot_time += time()
+      #SparseAccelerator.WAXPBY!(uk, 1, uk, -beta[k], q0)
+      #SparseAccelerator.WAXPBY!(uk, 1, uk, -alpha[k], q1)
+      SparseAccelerator.WAXPBY!(temp3, beta[k], q0, alpha[k], q1)
+      SparseAccelerator.WAXPBY!(uk, 1, uk, -1, temp3)
+
+      wax_time -= time()
+      beta[k + 1] = SparseAccelerator.norm(uk)
+      wax_time += time()
+      #beta[k + 1] = norm(uk)
 
       if beta[k + 1] == 0
         println("Error")
@@ -642,8 +651,11 @@ function abiatic_opt(Hdmat, d, nqbits, T)
       end
 
       q0 = q1
-      q1 = uk/beta[k + 1]
+      #q1 = uk/beta[k + 1]
+      SparseAccelerator.WAXPB!(temp_q1, 1/beta[k+1], uk, 0) 
+      q1 = temp_q1
     end
+    dot_time += time()
 
     TT = SymTridiagonal(alpha, beta[2:nit])
 
@@ -674,7 +686,7 @@ function abiatic_opt(Hdmat, d, nqbits, T)
   end
 
   println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time, dot_time = $dot_time")
+  println("spmv_time = $spmv_time, dot_time = $dot_time, wax_time = $wax_time")
 end
 
 nqbits = parse(Int, ARGS[1])
@@ -695,12 +707,11 @@ for i=1:nsets
 end
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
-srand(0)
-abiatic(Hdmat, d, nqbits, T)
-SparseAccelerator.set_knob_log_level(1)
-srand(0)
-abiatic_opt(Hdmat, d, nqbits, T)
-srand(0)
-#@acc abiatic_sa(Hdmat, d, nqbits, T)
 #srand(0)
-#@acc abiatic_sa(Hdmat, d, nqbits, T)
+#println(@time(abiatic(Hdmat, d, nqbits, T)))
+#SparseAccelerator.set_knob_log_level(1)
+srand(0)
+println(@time(abiatic_opt(Hdmat, d, nqbits, T)))
+srand(0)
+#println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
+#println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))

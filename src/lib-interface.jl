@@ -415,12 +415,12 @@ end
 
 @doc """ w = alpha*A*x + beta*y + gamma """
 SpMV!(
-    w     :: Vector{Float64}, 
+    w     :: Vector, 
     alpha :: Number, 
     A     :: SparseMatrixCSC, 
-    x     :: Vector{Float64}, 
+    x     :: Vector, 
     beta  :: Number, 
-    y     :: Vector{Float64}, 
+    y     :: Vector, 
     gamma :: Number,
     fknob :: Ptr{Void} = C_NULL) =
     SpMV!(w, alpha, A, x, beta, y, gamma, Array{Float64,1}[], fknob)
@@ -527,7 +527,7 @@ function dot(
 )
   assert(length(x) == length(y))
 
-  if use_SPMP
+  if use_SPMP #&& length(x) > 4096
     ccall((:dot, LIB_PATH), Cdouble,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(x), pointer(y))
@@ -543,7 +543,7 @@ function dot(
 )
   assert(length(x) == length(y))
 
-  if use_SPMP
+  if use_SPMP #&& length(x) >= 3072
     ccall((:dot, LIB_PATH), Complex128,
           (Cint, Ptr{Complex128}, Ptr{Complex128}),
           length(x), pointer(x), pointer(y))
@@ -564,7 +564,7 @@ function norm(
     x :: Vector{Complex128}
 )
 
-  if use_SPMP 
+  if use_SPMP #&& length(x) >= 8192
     ccall((:norm_complex, LIB_PATH), Cdouble,
           (Cint, Ptr{Complex128}),
           length(x), pointer(x))
@@ -803,7 +803,7 @@ function WAXPBY(
     beta  :: Number, 
     y     :: Vector{Float64}
 )
-  w = Array(Cdouble, length(x))
+  w = Array{Cdouble}(length(x))
   WAXPBY!(w, alpha, x, beta, y)
   w
 end
