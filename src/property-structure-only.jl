@@ -2,16 +2,13 @@
 If a matrix is structure only, it's basically an unweight matrix, whose non-zero values 
 may or may not affact computation result.
 """
-type StructureOnlyProperty <: MatrixProperty 
+type StructureOnlyProperty <: MatrixPropertyPass 
 
     @doc "pass name"
     name                :: AbstractString
 
     @doc """ set_property_for method"""
     set_property_for    :: Function
-
-    const DEFAULT_PROP_VAL = 0
-    const NEG_PROP_VAL = -1
 
     const prop_spones_pattern = ExprPattern(
         "prop_spones_pattern",
@@ -29,7 +26,7 @@ type StructureOnlyProperty <: MatrixProperty
 
     const prop_speye_pattern = ExprPattern(
         "prop_speye_pattern",
-        (:call, GlobalRef(Main, :speye), Any, Any),
+        (:call, GlobalRef(Main, :speye), Any),
         (:NO_SUB_PATTERNS,),
         do_nothing,
         (:NO_CHANGE, ),
@@ -60,49 +57,20 @@ type StructureOnlyProperty <: MatrixProperty
         region_info         :: RegionInfo,
         mat_property        :: Dict,
     )
-        property_map = new_sym_property_map(Int, DEFAULT_PROP_VAL, NEG_PROP_VAL)
+        property_map = new_sym_property_map()
 
-        println(region_info.single_defs)
-
-        for k in keys(region_info.depend_map)
-            # always prefer predefined values
-            if haskey(mat_property, k) 
-                if mat_property[k].structure_only != DEFAULT_PROP_VAL
-                    property_map[k] = mat_property[k].structure_only
-                end
-            #else
-            #    property_map[k] = in(k, region_info.single_defs) ? DEFAULT_PROP_VAL : NEG_PROP_VAL
-            end
+        for k in keys(mat_property)
+            property_map[k] = mat_property[k].structure_only
         end
-
-        for rk in keys(region_info.reverse_depend_map)
-            if !haskey(property_map, rk)  && 
-                        haskey(mat_property, rk) && mat_property[rk].structure_only != DEFAULT_PROP_VAL
-                property_map[rk] = mat_property[rk].structure_only
-            end
-        end
-
-        #inherit_property(property_map, mat_property, DEFAULT_PROP_VAL, NEG_PROP_VAL, nothing)
 
         dprintln(1, 1, "\nBefore structure_only analysis:")
-        dprint_property_map(1, property_map)
+        dprint_property_map(2, property_map)
 
-        cnt = propagate_property(property_map, region_info, prop_propagation_patterns, 
-            Int, DEFAULT_PROP_VAL, NEG_PROP_VAL,
-            nothing,
-        )
+        cnt = propagate_property(property_map, region_info, 
+                        prop_propagation_patterns, nothing)
 
         dprintln(1, 1, "\nAfter structure_only analysis (", cnt, " iterations):")
-        dprint_property_map(1, property_map)
-
-        # copy back result
-        # delete!(property_map, :NEGATIVE_PROPERTY)
-        for (k, v) in property_map
-            if !haskey(mat_property, k)
-                mat_property[k] = StructureProxy()
-            end
-            mat_property[k].structure_only = v
-        end
+        dprint_property_map(2, property_map)
     end 
 
     @doc """ Constructor """

@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cassert>
 #include <cfloat>
+#include <complex.h>
 #include <algorithm>
 
 #include <omp.h>
@@ -104,7 +105,7 @@ template<class T>
 T dot_(int n, const T *x, const T *y)
 {
   T sum = 0;
-#pragma omp parallel for reduction(+:sum)
+#pragma omp parallel for reduction(+:sum) if (n>4096)
   for (int i = 0; i < n; ++i) {
     sum += x[i]*y[i];
   }
@@ -120,8 +121,8 @@ void pointwiseDivide_(int n, T *w, const T *x, const T *y)
   }
 }
 
-template<class T>
-void pointwiseMultiply_(int n, T *w, const T *x, const T *y)
+template<class T1, class T2>
+void pointwiseMultiply_(int n, T2 *w, const T1 *x, const T2 *y)
 {
 #pragma omp parallel for
   for (int i = 0; i < n; ++i) {
@@ -136,9 +137,35 @@ void waxpby(int n, double *w, double alpha, const double *x, double beta, const 
   waxpby_(n, w, alpha, x, beta, y);
 }
 
+void waxpby_complex(int n, double _Complex *w, double _Complex alpha, const double _Complex *x, double _Complex beta, const double _Complex *y)
+{
+  waxpby_(n, w, alpha, x, beta, y);
+}
+
 double dot(int n, const double *x, const double *y)
 {
   return dot_(n, x, y);
+}
+
+double _Complex dot_complex(int n, const double _Complex *x, const double _Complex *y)
+{
+  double _Complex sum = 0;
+#pragma omp parallel for reduction(+:sum)
+  for (int i = 0; i < n; ++i) {
+    sum += x[i]*conj(y[i]);
+  }
+  return sum;
+}
+
+double norm_complex(int n, const double _Complex *x)
+{
+  double sum = 0;
+#pragma omp parallel for reduction(+:sum)
+  for (int i = 0; i < n; ++i) {
+    double temp = cabs(x[i]);
+    sum += temp*temp;
+  }
+  return sqrt(sum);
 }
 
 void pointwiseDivide(int n, double *w, const double *x, const double *y)
@@ -151,7 +178,17 @@ void pointwiseMultiply(int n, double *w, const double *x, const double *y)
   pointwiseMultiply_(n, w, x, y);
 }
 
+void pointwiseMultiplyRealWithComplex(int n, double _Complex *w, const double *x, const double _Complex *y)
+{
+  pointwiseMultiply_(n, w, x, y);
+}
+
 void waxpb(int n, double *w, double alpha, const double *x, double beta)
+{
+  waxpb_(n, w, alpha, x, beta);
+}
+
+void waxpb_complex(int n, double _Complex *w, double _Complex alpha, const double _Complex *x, double _Complex beta)
 {
   waxpb_(n, w, alpha, x, beta);
 }
@@ -189,6 +226,14 @@ void CSR_abs(int n, double *w, const double *x)
 #pragma omp parallel for
   for (int i = 0; i < n; i++) {
     w[i] = fabs(x[i]);
+  }
+}
+
+void CSR_abs_complex(int n, double *w, const double _Complex *x)
+{
+#pragma omp parallel for
+  for (int i = 0; i < n; i++) {
+    w[i] = cabs(x[i]);
   }
 }
 

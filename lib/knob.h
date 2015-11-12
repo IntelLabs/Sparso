@@ -89,6 +89,18 @@ void SpMV(
     double *z,
     FunctionKnob *fknob);
 
+void SpMVComplex(
+    int m, int n,
+    double _Complex *w,
+    double alpha,
+    int *A_colptr, int *A_rowval, double *A_nzval,
+    double _Complex *x,
+    double beta,
+    double _Complex *y,
+    double gamma,
+    double _Complex *z,
+    FunctionKnob *fknob);
+
 /**
  * @return Get cummulative time that has purely spent on SpMP SpMV.
  *         Can be useful for performance debugging to tell if
