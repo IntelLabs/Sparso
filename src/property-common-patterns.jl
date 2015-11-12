@@ -13,7 +13,7 @@ function prop_propagate_last_symbol_property(
     reordering_FAR    :: Tuple
 )
     A = get_symexpr(last(ast.args))
-    set_property_val(call_sites, ast, get_property_val(call_sites, A))
+    set_property_final_val(call_sites, ast, get_property_val(call_sites, A).final_val)
     return true
 end
 
@@ -30,7 +30,7 @@ function prop_propagate_first_arg(
     if isa(A, SymbolNode)
         A = A.name
     end
-    set_property_val(call_sites, ast,  A)
+    set_property_final_val(call_sites, ast,  A)
     return true
 end
 
@@ -46,16 +46,19 @@ function prop_pre_assign_check(
     vLHS = get_property_val(call_sites, LHS)
 
     # skip if ast already has a negative property
-    return vLHS != call_sites.extra.local_map[sym_negative_id]
+    return vLHS.final_val != PROP_NEGATIVE_VAL
 end
 
 function prop_set_output_action(
     ast               :: Expr,
     call_sites        :: CallSites,
     fknob_creator :: AbstractString,
-    fknob_deletor :: AbstractString
+    fknob_deletor :: AbstractString,
+    matrices_to_track :: Tuple,
+    reordering_power  :: Int,
+    reordering_FAR    :: Tuple
 )
-    set_property_val(call_sites, ast, 1)
+    set_property_final_val(call_sites, ast, PROP_POSITIVE_VAL)
     return true
 end
 
@@ -74,23 +77,23 @@ function prop_post_assign_action(
     assert(typeof(LHS) <: Sym)
     RHS = get_symexpr(ast.args[2])
     vRHS = get_property_val(call_sites, RHS) 
+    vLHS = get_property_val(call_sites, LHS)
 
-    if !is_property_val_set(call_sites, LHS)
-        set_property_val(call_sites, LHS, vRHS)
+    if isempty(vLHS.vals)
+        set_property_final_val(call_sites, LHS, vRHS.final_val)
     else
-        vLHS = get_property_val(call_sites, LHS)
-        assert(vLHS != call_sites.extra.local_map[sym_negative_id])
+        assert(vLHS.final_val != PROP_NEGATIVE_VAL)
 
-        if vRHS != vLHS
-            if vRHS == call_sites.extra.local_map[sym_negative_id]
-                # vLHS: def or positive, vRHS: negative
-                set_property_val(call_sites, LHS, vRHS)
-            elseif vRHS != call_sites.extra.local_map[sym_default_id] # vRHS is positive
-                # vLHS: def, vRHS: positive -> no change
+        if vRHS.final_val != vLHS.final_val
+            if vRHS.final_val == PROP_NEGATIVE_VAL
+                # vLHS: depend or positive, vRHS: negative
+                set_property_final_val(call_sites, LHS, PROP_NEGATIVE_VAL)
+            elseif vRHS.final_val == PROP_POSITIVE_VAL
+                # vLHS: depend_val, vRHS: positive -> no change
                 # set_property_val(call_sites, LHS, vRHS)
             else
-                # vLHS: pos, vRHS: def -> back to default
-                set_property_val(call_sites, LHS, vRHS)
+                # vLHS: pos, vRHS: depend_val or nothing -> back to default
+                set_property_final_val(call_sites, LHS, vRHS.final_val)
             end
         end
     end

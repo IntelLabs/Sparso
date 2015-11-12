@@ -143,15 +143,12 @@ function abiatic(Hdmat, d, nqbits, T)
   alpha = zeros(nit)
   beta = zeros(nit + 1)
 
-  dot_time = 0
-
   for i = 1:length(Tv)
     s = Tv[i]/T
 
     q0 = zeros(nsets)
     q1 = x0/norm(x0)
 
-    dot_time -= time()
     for k = 1:nit
       spmv_time -= time()
       uk = -(1 - s)*Hdmat*q1 + s*d.*q1
@@ -168,7 +165,6 @@ function abiatic(Hdmat, d, nqbits, T)
       q0 = q1
       q1 = uk/beta[k + 1]
     end
-    dot_time += time()
 
     TT = SymTridiagonal(alpha, beta[2:nit])
 
@@ -188,8 +184,7 @@ function abiatic(Hdmat, d, nqbits, T)
     @printf("%10.2f%10.4f%12.4f%12.4f%12.4f\n", Tv[i], spectralgap[i], optimalenergy, meanenergy[i], variance[i])
   end
 
-  println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time, dot_time = $dot_time")
+  println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time) spmv_time = $(spmv_time)")
 end
 
 function print_result(Tv, spectralgap, optimalenergy, meanenergy, variance)
@@ -203,8 +198,8 @@ function abiatic_sa(Hdmat, d, nqbits, T)
   total_time = -time()
 
   set_matrix_property(Dict(
-       :Hdmat => SA_SYMM_VALUED | SA_STRUCTURE_ONLY, 
-       )
+     :Hdmat => SA_SYMM_VALUED | SA_STRUCTURE_ONLY, 
+     )
   )
 
   nsets = 2^nqbits
@@ -360,7 +355,6 @@ function abiatic_sa(Hdmat, d, nqbits, T)
     q0 = zeros(nsets)
     q1 = x0/norm(x0)
 
-    dot_time -= time()
     for k = 1:nit
       spmv_time -= time()
       uk = -(1 - s)*Hdmat*q1 + s*d.*q1
@@ -378,7 +372,6 @@ function abiatic_sa(Hdmat, d, nqbits, T)
       #q1 = uk/beta[k + 1]
       q1 = SparseAccelerator.WAXPB(1/beta[k+1], uk, 0) 
     end
-    dot_time += time()
 
     TT = SymTridiagonal(alpha, beta[2:nit])
 
@@ -395,31 +388,40 @@ function abiatic_sa(Hdmat, d, nqbits, T)
 
   print_result(Tv, spectralgap, optimalenergy, meanenergy, variance)
 
-  println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time, dot_time = $dot_time")
+  println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time) spmv_time = $(spmv_time)")
 end
 
 
-function abiatic_opt(Hdmat, d, nqbits, T)
+function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
   total_time = -time()
 
-  __mknobHdmat = (SparseAccelerator.new_matrix_knob)(Hdmat, true, true, true, true, true, false)
+  if with_context_opt
+    __mknobHdmat = (SparseAccelerator.new_matrix_knob)(Hdmat, true, true, true, true, true, false)
 
-  fknob_spmv1 = (SparseAccelerator.new_function_knob)()
-  fknob_spmv2 = (SparseAccelerator.new_function_knob)()
-  fknob_spmv3 = (SparseAccelerator.new_function_knob)()
-  fknob_spmv4 = (SparseAccelerator.new_function_knob)()
-  fknob_spmv5 = (SparseAccelerator.new_function_knob)()
-  fknob_spmv6 = (SparseAccelerator.new_function_knob)()
-  fknob_spmv7 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv1 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv2 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv3 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv4 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv5 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv6 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv7 = (SparseAccelerator.new_function_knob)()
 
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
+  else
+    fknob_spmv1 = C_NULL 
+    fknob_spmv2 = C_NULL
+    fknob_spmv3 = C_NULL
+    fknob_spmv4 = C_NULL
+    fknob_spmv5 = C_NULL
+    fknob_spmv6 = C_NULL
+    fknob_spmv7 = C_NULL
+  end
 
   nsets = 2^nqbits
   Phi0at0 = 1/sqrt(2^nqbits)*ones(nsets)
@@ -606,23 +608,21 @@ function abiatic_opt(Hdmat, d, nqbits, T)
   alpha = zeros(nit)
   beta = zeros(nit + 1)
 
-  temp2 = Array{Float64}(length(d))
-  temp3 = Array{Float64}(length(d))
-  uk = Array{Float64}(length(d))
-  temp_q1 = Array{Float64}(length(d))
+  uk = Array{Float64}(nsets)
 
-  dot_time = 0
-  wax_time = 0
-  
+  temp2 = Array{Float64}(nsets)
+  temp3 = Array{Float64}(nsets)
+  temp4 = Array{Float64}(nsets)
+  temp5 = Array{Float64}(nsets)
+
   for i = 1:length(Tv)
     s = Tv[i]/T
 
     q0 = zeros(nsets)
     #q1 = x0/SparseAccelerator.norm(x0)
-    SparseAccelerator.WAXPB!(temp_q1, 1/SparseAccelerator.norm(x0), x0, 0) 
-    q1 = temp_q1
+    SparseAccelerator.WAXPB!(temp5, 1/SparseAccelerator.norm(x0), x0, 0) 
+    q1 = temp5
 
-    dot_time -= time()
     for k = 1:nit
       spmv_time -= time()
       #uk = -(1 - s)*Hdmat*q1 + s*d.*q1
@@ -630,20 +630,17 @@ function abiatic_opt(Hdmat, d, nqbits, T)
       SparseAccelerator.SpMV!(uk, s - 1, Hdmat, q1, s, temp2, 0, fknob_spmv7)
       spmv_time += time()
 
-      wax_time -= time()
-      alpha[k] = SparseAccelerator.dot(q1, uk)
-      wax_time += time()
       #alpha[k] = dot(q1, uk)
+      alpha[k] = SparseAccelerator.dot(q1, uk)
+
       #uk -= beta[k]*q0 + alpha[k]*q1
       #SparseAccelerator.WAXPBY!(uk, 1, uk, -beta[k], q0)
       #SparseAccelerator.WAXPBY!(uk, 1, uk, -alpha[k], q1)
       SparseAccelerator.WAXPBY!(temp3, beta[k], q0, alpha[k], q1)
       SparseAccelerator.WAXPBY!(uk, 1, uk, -1, temp3)
 
-      wax_time -= time()
-      beta[k + 1] = SparseAccelerator.norm(uk)
-      wax_time += time()
       #beta[k + 1] = norm(uk)
+      beta[k + 1] = SparseAccelerator.norm(uk)
 
       if beta[k + 1] == 0
         println("Error")
@@ -652,10 +649,9 @@ function abiatic_opt(Hdmat, d, nqbits, T)
 
       q0 = q1
       #q1 = uk/beta[k + 1]
-      SparseAccelerator.WAXPB!(temp_q1, 1/beta[k+1], uk, 0) 
-      q1 = temp_q1
+      SparseAccelerator.WAXPB!(temp5, 1/beta[k+1], uk, 0) 
+      q1 = temp5
     end
-    dot_time += time()
 
     TT = SymTridiagonal(alpha, beta[2:nit])
 
@@ -668,15 +664,17 @@ function abiatic_opt(Hdmat, d, nqbits, T)
 
   optimalenergy = minimum(d)
 
-  (SparseAccelerator.delete_matrix_knob)(__mknobHdmat)
+  if with_context_opt
+    (SparseAccelerator.delete_matrix_knob)(__mknobHdmat)
 
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
+  end
 
   total_time += time()
 
@@ -685,8 +683,7 @@ function abiatic_opt(Hdmat, d, nqbits, T)
     @printf("%10.2f%10.4f%12.4f%12.4f%12.4f\n", Tv[i], spectralgap[i], optimalenergy, meanenergy[i], variance[i])
   end
 
-  println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time)")
-  println("spmv_time = $spmv_time, dot_time = $dot_time, wax_time = $wax_time")
+  println("total_time = $(total_time) ode_time = $(ode_time) lanczos_time = $(lanczos_time) spmv_time = $(spmv_time)")
 end
 
 nqbits = parse(Int, ARGS[1])
@@ -707,11 +704,31 @@ for i=1:nsets
 end
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
-#srand(0)
-#println(@time(abiatic(Hdmat, d, nqbits, T)))
+
+println("\nOriginal: ")
+srand(0)
+println(@time(abiatic(Hdmat, d, nqbits, T)))
+println("\nEND Oringinal.")
+
 #SparseAccelerator.set_knob_log_level(1)
+
+println("\nManual_call_replacement:")
 srand(0)
-println(@time(abiatic_opt(Hdmat, d, nqbits, T)))
+println(@time(abiatic_opt(Hdmat, d, nqbits, T, false)))
+println("\nEND Manual_call_replacement.")
+
+
+println("\nManual_call_replacement_and_context_opt:")
 srand(0)
-#println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
-#println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
+println(@time(abiatic_opt(Hdmat, d, nqbits, T, true)))
+println("\nEND Manual_call_replacement_and_context_opt.")
+
+#println("\nSparso_call_replacement:")
+#srand(0)
+#println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T, false)))
+#println("\nEND Sparso_call_replacement.")
+
+println("\nSparso_call_replacement_and_context_opt:")
+srand(0)
+println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
+println("\nEND Sparso_call_replacement_and_context_opt.")

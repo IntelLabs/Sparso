@@ -2,8 +2,9 @@
 type FunctionRegion <: Region
     func_ast        :: Expr
     symbol_property :: Symexpr2PropertiesMap
+    property_proxies :: Any
     
-    FunctionRegion(_func_ast) = new(_func_ast, Symexpr2PropertiesMap())
+    FunctionRegion(_func_ast) = new(_func_ast, Symexpr2PropertiesMap(), nothing)
 end
 
 @doc """ 
@@ -26,6 +27,7 @@ type LoopRegion <: Region
     loop              :: Loop
     exits             :: Set{LoopExit}
     symbol_property   :: Symexpr2PropertiesMap
+    property_proxies :: Any
     immediate_members :: Set{BasicBlockIndex} 
 end
 
@@ -38,7 +40,7 @@ function loop_region_formation(
     cfg               :: CFG,
     immediate_members :: Set{BasicBlockIndex} 
 )
-    region = LoopRegion(parent, L, Set{LoopExit}(), Symexpr2PropertiesMap(), immediate_members)
+    region = LoopRegion(parent, L, Set{LoopExit}(), Symexpr2PropertiesMap(), nothing, immediate_members)
     blocks = cfg.basic_blocks
     for bb_index in L.members
         bb = blocks[bb_index]

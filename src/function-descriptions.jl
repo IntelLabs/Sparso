@@ -192,6 +192,20 @@ const SpMV_6_parameters_Desc = FunctionDescription(
     ])
 )
 
+@doc """ SparseAccelerator.SpMV!(A, x) """
+const SpMV!_3_parameters_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "SpMV!",
+    (Vector, SparseMatrixCSC, Vector),
+    Set(1),                           # Argument 1 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 2, ROW_ROW),
+          (1, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE)
+    ])
+)
+
 @doc """ w = alpha*A*x + beta*y + gamma """
 const SpMV!_7_parameters_Desc = FunctionDescription(
     "SparseAccelerator", 
@@ -259,6 +273,19 @@ const star2_Desc = FunctionDescription(
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
     Set([ (0, 2, ROW_ROW) ])
+)
+
+const A_mul_B!_Desc = FunctionDescription(
+    "Main", 
+    "A_mul_B!",
+    (Vector, SparseMatrixCSC, Vector),
+    Set(1),                           # argument 1 (w) is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 2, ROW_ROW),
+          (1, 2, ROW_ROW),
+          (2, 3, COLUMN_ROW_INVERSE)
+    ])
 )
 
 const Dot_Desc = FunctionDescription(
@@ -692,6 +719,15 @@ const asignment1_Desc = FunctionDescription(
     Set([ (1, 2, ROW_ROW) ])
 )
 
+const Printf_Desc = FunctionDescription(
+    "Base", 
+    "Printf",
+    (Any, Any),                    # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    IA_NONE                           # No inter-dependent arrays
+)
+
 function_descriptions  = [
     element_wise_multiply_Desc,
     element_wise_multiply1_Desc,
@@ -705,11 +741,13 @@ function_descriptions  = [
     SpMV_4_parameters_Desc,
     SpMV_5_parameters_Desc,
     SpMV_6_parameters_Desc,
+    SpMV!_3_parameters_Desc,
     SpMV!_7_parameters_Desc,
     SpMV!_8_parameters_Desc,
     star_Desc,
     star1_Desc,
     star2_Desc,
+    A_mul_B!_Desc,
     Dot_Desc,
     dot_Desc,
     copy_Desc,
