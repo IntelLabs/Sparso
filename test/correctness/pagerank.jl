@@ -224,6 +224,8 @@ println("\nAccelerated: ")
 SparseAccelerator.reset_spmp_spmv_time()
 SparseAccelerator.reset_knob_spmv_time()
 #SparseAccelerator.set_knob_log_level(1)
+# It seems that p has been changed by sparse accelerator
+p = repmat([1/m], m)
 @acc x = pagerank(A0, p, r, d_inv, maxiter)
 t = SparseAccelerator.get_spmp_spmv_time()
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")

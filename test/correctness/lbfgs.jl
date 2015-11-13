@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS, SA_USE_SPLITTING_PATTERNS)
 
 function mylogsumexp(b)
   # does logsumexp across column
@@ -601,11 +601,16 @@ w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
 @printf("Opt_with_reordering L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 # Expected output: L-BFGS: 33 iterations f = 0.33390367349181
 
+original_X = copy(X)
+original_y = copy(y)
 xinit, tol, k = zeros(p), 1e-10, 3
 @acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
-@printf("1stAccelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+@printf("First accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 # It seems that sparse accelerator generated code has updated xinit internally. That caused
 # strange behavior when lbfgs_ref is called again: it would return after only 1 iteration.
+
+X = original_X
+y = original_y
 xinit = zeros(p)
 @acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
 @printf("Accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])

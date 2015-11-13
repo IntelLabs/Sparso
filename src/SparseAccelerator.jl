@@ -13,7 +13,7 @@ using CompilerTools.Loops
 
 # Options user can set
 export SA_ENABLE, SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP, 
-       SA_REPLACE_CALLS, SA_REORDER, SA_CONTEXT
+       SA_REPLACE_CALLS, SA_USE_SPLITTING_PATTERNS, SA_REORDER, SA_CONTEXT
 
 export @acc
 
