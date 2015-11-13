@@ -56,6 +56,9 @@ reorder_enabled               = false
 reorder_when_beneficial       = true # By default, reordering with benefit-cost analysis
 context_sensitive_opt_enabled = false
 
+# A control used only for trace call replacement internally
+trace_call_replacement        = false
+
 @doc """ 
 Set options for SparseAccelerator. The arguments can be any one or more 
 of the following: SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP. 
@@ -100,15 +103,16 @@ end
 @doc """
 Properties of a variable/argument.
 """
-const SA_CONST_VALUED       = 1
-const SA_CONST_STRUCTURED   = 2
-const SA_SYMM_VALUED        = 4
-const SA_SYMM_STRUCTURED    = 8
-const SA_STRUCTURE_ONLY     = 16
-const SA_LOWER_OF           = 32
-const SA_UPPER_OF           = 64
-const SA_TRANSPOSE_OF       = 128
-const SA_HAS_FREE_MEMORY    = 1024 # Used only in a pattern's skeleton
+const SA_CONST_VALUED         = 1
+const SA_CONST_STRUCTURED     = 2
+const SA_SYMM_VALUED          = 4
+const SA_SYMM_STRUCTURED      = 8
+const SA_STRUCTURE_ONLY       = 16
+const SA_LOWER_OF             = 32
+const SA_UPPER_OF             = 64
+const SA_TRANSPOSE_OF         = 128
+const SA_HAS_FREE_MEMORY      = 1024 # Used only in a pattern's skeleton
+const SA_HAS_DEDICATED_MEMORY = 2048 # Difference from SA_HAS_FREE_MEMORY: not only the memory is free, but dedicated to an array, not shared/aliased with any other.
 
 # Create a path to libcsr. This is a CSR(Compressed Sparse Row format)-based
 # interface to the SPMP library.
@@ -301,21 +305,22 @@ is_symmetric          : The matrix is symmetric in value (and of course symmetri
 is_structure_symmetric: The matrix is symmetric in structure. 
 is_structure_only     : Only the structure of matrix is to be used.
 is_single_def         : The matrix is statically defined only once.
-
-TODO: get ride of is_structure_only. It seems to be internal to the library only.
+has_dedicated_memory  : The matrix (actually for vector as well) has a decidated
+                        memory space, so no worry of aliases or memory allocation.
 """
 type MatrixProperties
     constant_valued        :: Bool
     constant_structured    :: Bool
-    is_symmetric           :: Union{Bool, Symbol}
-    is_structure_symmetric :: Union{Bool, Symbol}
-    is_structure_only      :: Union{Bool, Symbol}
+    is_symmetric           :: Bool
+    is_structure_symmetric :: Bool
+    is_structure_only      :: Bool
     is_single_def          :: Bool
+    has_dedicated_memory   :: Bool
     lower_of               :: Any
     upper_of               :: Any
     transpose_of           :: Any
 
-    MatrixProperties() = new(false, false, false, false, false, false, nothing, nothing, nothing)
+    MatrixProperties() = new(false, false, false, false, false, false, false, nothing, nothing, nothing)
 end
 typealias Symexpr2PropertiesMap Dict{Symexpr, MatrixProperties}
 
@@ -364,31 +369,14 @@ type InsertOnEdge <: Action
 end
 
 @doc """ 
-All the transformations on the AST, including reusing, reordering, etc.
-This phase may change the AST. It does not change the CFG, but records the
-actions for changing the CFG.
-"""
-function AST_transformation(
-    func_ast    :: Expr, 
-    lambda      :: LambdaInfo,
-    symbol_info :: Sym2TypeMap, 
-    liveness    :: Liveness, 
-    cfg         :: CFG, 
-    loop_info   :: DomLoops
-)
-    func_region = FunctionRegion(func_ast) 
-    regions = region_formation(func_region, cfg, loop_info)
-    actions = Vector{Action}()
-    actions = AST_context_sensitive_transformation(actions, func_region, regions, lambda, symbol_info, liveness, cfg)
-end
-
-@doc """ 
 Entry of SparseAccelerator. 
 """
 function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     old_ast = copy(func_ast)
     new_ast = nothing
     try
+        println("******************************* SparseAccelerator ******************************")
+
         dprintln(1, 0, "******************************* SparseAccelerator ******************************")
         dprintln(1, 0, "Signature:")
         for i = 1 : length(func_args)
@@ -415,10 +403,15 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dprintln(1, 0, "\nFunction body showing structures:")
         dsprintln(1, 1, symbol_info, liveness, func_ast)
 
+        func_region = FunctionRegion(func_ast) 
+        regions = region_formation(func_region, cfg, loop_info)
+
         if context_sensitive_opt_enabled
             # Reordering and context-sensitive optimization: Do all analyses, and 
-            # put their intended transformation code sequence into a list. Then 
+            # put their intended transformation actions into a list. Then 
             # transform the code with the list on the CFG.
+            # This phase may change the AST. It does not change the CFG, but
+            # records the actions for changing the CFG.
             # REQUIREMENT: even though the AST and CFG can be changed, liveness
             # information regarding each statement that originally exists 
             # should still remain valid. Even though the expression contained in
@@ -428,7 +421,8 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             # it has been changed or not. This is important: otherwise, we would
             # have to rebuild liveness in order for subsequent optimizations (
             # like call replacement) to continue.  
-            actions = AST_transformation(func_ast, lambda, symbol_info, liveness, cfg, loop_info)
+            actions = Vector{Action}()
+            actions = AST_context_sensitive_transformation(actions, func_region, regions, lambda, symbol_info, liveness, cfg)
             CFG_transformation(actions, cfg)
         end
 
@@ -438,7 +432,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         # only one or two statements. It should not change liveness of statements
         # either. 
         if replace_calls_enabled
-            actions = replace_calls(func_ast, lambda, symbol_info, liveness, cfg)
+            actions = replace_calls(func_region, regions, lambda, symbol_info, liveness, cfg)
             CFG_transformation(actions, cfg)
         end
 

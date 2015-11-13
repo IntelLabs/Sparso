@@ -1,12 +1,14 @@
 # This file contains all the print parameters and routines for warnings,
 # errors, and debugging.
 
-module Base
-    # Re-define the function. Otherwise, the show of an expression may be 
-    # too verbose
-    function show_expr_type(io::IO, ty)
-        return
-    end
+import Base.show_expr_type, Base.show_linenumber
+# Re-define the function. Otherwise, the show of an expression may be too verbose
+function show_expr_type(io::IO, ty)
+    return
+end
+
+function show_linenumber(io::IO, file, line) 
+    return
 end
 
 # Buffer the messages so that indentation can be inserted before sending

@@ -100,11 +100,43 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
 
   t0 = time()
   it = 1
+
+  # Pre-allocation of space. Should get rid of once Linxiang's object removal works
+  # TODO: remove it.
+#  Xw    = Array(Cdouble, length(y))
+#  yXw   = Array(Cdouble, length(y))
+#  dfkp1 = Array(Cdouble, length(x)) 
+  temp  = Array(Cdouble, m)
+  Xw    = Array(Cdouble, m)
+  yXw   = Array(Cdouble, m)
+  dfk   = Array(Cdouble, n)
+  dfkp1 = Array(Cdouble, n) 
+  w     = Array(Cdouble, n)
+  dx    = Array(Cdouble, n)
+  
+#  temp = zeros(m)
+#  Xw = zeros(m)
+#  yXw = zeros(m)
+#  dfk = zeros(n)
+#  w = zeros(n)
+#  dx = zeros(n)
+
   for it=1:100
-    #set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
+    set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
+    set_matrix_property(Dict(
+        :temp  => SA_HAS_DEDICATED_MEMORY,
+        :Xw    => SA_HAS_DEDICATED_MEMORY,
+        :yXw   => SA_HAS_DEDICATED_MEMORY,
+        :dfk   => SA_HAS_DEDICATED_MEMORY,
+        :dfkp1 => SA_HAS_DEDICATED_MEMORY,
+        :w     => SA_HAS_DEDICATED_MEMORY,
+        :dx    => SA_HAS_DEDICATED_MEMORY,
+      )
+    )
 
     spmv_time -= time()
-    Xw = X*x
+    #Xw = X*x
+    A_mul_B!(Xw, X, x)
     spmv_time += time()
 
     yXw = y.*Xw
@@ -123,7 +155,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
 
     # Since Julia code for this is too slow we do this in C to show sufficient speedups by
     # faster SpMV. To be fair, the reference code also uses it.
-    dx = SparseAccelerator.lbfgs_compute_direction(k, it, n, S, Y, dfk)
+    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
 
     # backtracking line search using armijo criterion
     alphaMax = 1 # this is the maximum step length
@@ -216,6 +248,8 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
 
   a = zeros(k, 1)
 
+  dx    = Array(Cdouble, n)
+
   t0 = time()
   it = 1
   for it=1:100
@@ -259,7 +293,7 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
     end
 
     direction_time -= time()
-    dx = SparseAccelerator.lbfgs_compute_direction(k, it, n, S, Y, dfk)
+    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -382,6 +416,8 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
 
   a = zeros(k, 1)
 
+  dx    = Array(Cdouble, n)
+
   t0 = time()
   it = 1
 
@@ -437,7 +473,7 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
     end
 
     direction_time -= time()
-    dx = SparseAccelerator.lbfgs_compute_direction(k, it, n, S, Y, dfk)
+    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -546,10 +582,10 @@ lambda = 0
 sparsity = nnz(X)/(n*p)
 println("n=$n p=$p nnz=$(nnz(X)) stored as sparse=$sparsity")
 
-#Xt=X'
+Xt=X'
 
-#w, it = GD(X,Xt,y,lambda, zeros(p), 1e-10)
-#@printf("Grad-Decent: %d iterations f = %.14f\n", it, LogisticLoss(w,X,Xt,y,lambda)[1])
+w, it = GD(X,Xt,y,lambda, zeros(p), 1e-10)
+@printf("Grad-Decent: %d iterations f = %.14f\n", it, LogisticLoss(w,X,Xt,y,lambda)[1])
 # Expected output: Grad-Decent: 100 iterations f = 0.34398484995673
 
 w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)

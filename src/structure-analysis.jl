@@ -43,6 +43,7 @@ type MatrixPropertyValues
     symmetric_valued        :: PropertyValue
     symmetric_structured    :: PropertyValue
     structure_only          :: PropertyValue
+    has_dedicated_memory    :: PropertyValue # this array (may be a matrix or vector) has a decidated memory space, so no worry of aliases or memory allocation.
     lower_of                :: PropertyValue
     upper_of                :: PropertyValue
     transpose_of            :: PropertyValue
@@ -52,7 +53,7 @@ type MatrixPropertyValues
                             PropertyValue(), PropertyValue(),
                             PropertyValue(), PropertyValue(),
                             PropertyValue(), PropertyValue(),
-                            nothing)
+                            PropertyValue(), nothing)
 end
 
 @doc "sorter for symbol indexed map"
@@ -63,7 +64,7 @@ function dprint_property_proxies(
     pmap    :: Dict 
 )
     val_or_nothing = (x) -> x.final_val == nothing ? "-" : x.final_val
-    dprintln(1, 1, "Sym : CV CS SV SS SO Lower Upper Trans")
+    dprintln(1, 1, "Sym : CV CS SV SS SO Lower Upper Trans DM")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
         dprintln(1, 1, k, " : ", 
@@ -72,6 +73,7 @@ function dprint_property_proxies(
                     val_or_nothing(v.symmetric_valued), "  ",
                     val_or_nothing(v.symmetric_structured), "  ",
                     val_or_nothing(v.structure_only), "  ",
+                    val_or_nothing(v.has_dedicated_memory), "  ",
                     val_or_nothing(v.lower_of), " ",
                     val_or_nothing(v.upper_of), " ",
                     val_or_nothing(v.transpose_of)
@@ -128,13 +130,13 @@ type StmtContextArgs
     pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
     live_in_before_expr  :: Set{Sym}
 
-    # Some patterns (those contain :t1!2, etc.) may hoist some subtrees of the
-    # current statement before it. That splits one statement into more than one.
     # Such patterns should be matched at the last, because otherwise, other 
     # patterns may not be able to match what they should: they cannot find the
     # subtrees to match, which are no longer in the same statement.    
+    # We call such patterns splitting patterns, and the other non-splitting.
+    # We can top-down match non-splitting patterns once, and bottom-up match
+    # all patterns (including splitting and non-splitting) once.
     non_splitting_patterns :: Vector{ExprPattern}
-    splitting_patterns     :: Vector{ExprPattern}
 end
 
 @doc """
@@ -428,7 +430,8 @@ const prop_field_const_map = [
            (SA_CONST_STRUCTURED, :constant_structured),
            (SA_SYMM_VALUED, :symmetric_valued),
            (SA_SYMM_STRUCTURED, :symmetric_structured),
-           (SA_STRUCTURE_ONLY, :structure_only) ]
+           (SA_STRUCTURE_ONLY, :structure_only),
+           (SA_HAS_DEDICATED_MEMORY, :has_dedicated_memory)]
 
 @doc """
 Collect predefined maxtric property accoding from set_matrix_property statements
@@ -519,7 +522,7 @@ function propagate_property(
     ctx_args = StmtContextArgs(Set{Sym}(), 
                 property_map, Dict{Expr, PropertyValue}(),
                 region_info.pattern_match_filter,
-                Set{Sym}(), Vector{Pattern}(), Vector{Pattern}())
+                Set{Sym}(), Vector{Pattern}())
     call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.lambda, 
                             region_info.symbol_info,
                             region_info.liveness, propagation_patterns,
@@ -592,11 +595,12 @@ function find_properties_of_matrices(
 
     # symbol does not have a constant structure?
     property_proxies = find_predefined_properties(region_info)
+    predefined_symbols = keys(property_proxies)
 
     prop_fields = [:constant_valued, :constant_structured, 
                    :symmetric_valued, :symmetric_structured,
-                   :structure_only, 
-                   :lower_of, :upper_of, :transpose_of]
+                   :structure_only, :has_dedicated_memory,
+                   :lower_of, :upper_of, :transpose_of ]
 
     #inherite positive properties from parent
     if isa(region, LoopRegion)
@@ -655,7 +659,7 @@ function find_properties_of_matrices(
     dprint_property_proxies(property_proxies)
 
     # filter out matrix type
-    is_matrix_type = (x) -> any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+    is_matrix_type = (x) ->  in(x, predefined_symbols) || any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
     mfilter = (x) -> filter(is_matrix_type, x)
     has_pos_val = (v) -> v.final_val != nothing && v.final_val != PROP_NEGATIVE_VAL
 
@@ -676,6 +680,9 @@ function find_properties_of_matrices(
 
     dprintln(1, 0, "\n" * region_name * " Structure only discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.structure_only), property_proxies))))
+
+    dprintln(1, 0, "\n" * region_name * " Has_dedicated_memory discovered:")
+    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.has_dedicated_memory), property_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Upper/Lower matrix discovered:")
     for k in sort_by_str_key(property_proxies)
@@ -720,6 +727,7 @@ function find_properties_of_matrices(
             matrix_properties[s].is_symmetric = get_pos_val_or_bool(p.symmetric_valued)
             matrix_properties[s].is_structure_symmetric = get_pos_val_or_bool(p.symmetric_structured)
             matrix_properties[s].is_structure_only = get_pos_val_or_bool(p.structure_only)
+            matrix_properties[s].has_dedicated_memory = get_pos_val_or_bool(p.has_dedicated_memory)
             matrix_properties[s].lower_of = p.lower_of.final_val
             matrix_properties[s].upper_of = p.upper_of.final_val
             matrix_properties[s].transpose_of = p.transpose_of.final_val

@@ -14,7 +14,7 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     set_matrix_property(:L, SA_LOWER_OF, :A)
     set_matrix_property(:U, SA_UPPER_OF, :A)
     set_matrix_property(Dict(
-        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED | SA_CONST_VALUED,
+        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
         :U => SA_CONST_VALUED
         )
     )
@@ -62,12 +62,17 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
 
     k = 1
 
+    # Pre-allocation of space. Should get rid of once Linxiang's object removal works
+    # TODO: remove it.
+    Ap = Array(Cdouble, length(p))
     while k <= maxiter
         old_rz = rz
 
         spmv_time -= time()
-        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        #Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         #SparseAccelerator.SpMV!(Ap, A, p)
+        # TODO: remove A_mul_B!. Use A*p once object removal works
+        A_mul_B!(Ap, A, p)
         spmv_time += time()
 
         blas1_time -= time()
@@ -111,8 +116,6 @@ end
 # This code is what we expect to generate by context-sensitive optimizations except for reordering.
 # It is used for debugging purpose only
 function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxiter, do_print)
-    Ap = zeros(size(A, 1))
-
     total_time = time()
   
     trsv_time = 0.
@@ -167,7 +170,7 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
 
         spmv_time -= time()
         #Ap = A*p
-        SparseAccelerator.SpMV!(Ap, A,p,fknob_spmv)
+        Ap = SparseAccelerator.SpMV(A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
@@ -224,7 +227,6 @@ end
 # It is used for debugging purpose only
 function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
     A = copy(A)
-    Ap = zeros(size(A, 1))
 
     total_time = time()
   
@@ -291,7 +293,7 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
 
         spmv_time -= time()
         #Ap = A*p
-        SparseAccelerator.SpMV!(Ap,A,p,fknob_spmv)
+        Ap = SparseAccelerator.SpMV(A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
