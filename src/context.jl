@@ -490,8 +490,7 @@ const CS_SpMV_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     1, :a2, :a3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV), 1, :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -746,13 +745,15 @@ const CS_SpMV!_pattern2 = ExprPattern(
     (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
-@doc """ x = a * A * x => SpMV!(x, a, A, x, 0, x, 0) """
+@doc """ w = a * A * x => SpMV!(w, a, A, x, 0, x, 0) """
 const CS_SpMV!_pattern3 = ExprPattern(
     "CS_SpMV!_pattern3",
-    (:(=), Vector, Vector),
-    (nothing, nothing, SpMV_3_parameters_pattern),
-    LHS_in_RHS,
-    (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY),
+        Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+              Number, SparseMatrixCSC, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -760,7 +761,7 @@ const CS_SpMV!_pattern3 = ExprPattern(
     (:a4,),
     60,
     (:a4, :a2, :a5) # Put seed (A) at the first
-)
+)            
 
 @doc """ A_mul_B!(a, A, x, b, y) => SpMV!(y, a, A, x, b, y , 0) """
 const CS_SpMV!_pattern4 = ExprPattern(
@@ -775,6 +776,24 @@ const CS_SpMV!_pattern4 = ExprPattern(
     "DeleteFunctionKnob",
     (:a4,),
     70,
+    (:a4, :a2, :a5, :a7) # Put seed (A) at the first
+)
+
+@doc """ z = SpMV(a, A, x, b, y), z has dedicated memory => SpMV!(z, a, A, x, b, y) """
+const CS_SpMV!_pattern5 = ExprPattern(
+    "CS_SpMV!_pattern5",
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY),
+        Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+             Number, SparseMatrixCSC, Vector, Number, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+     :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, 0),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:a4,),
+    80,
     (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
@@ -810,8 +829,9 @@ CS_transformation_patterns = [
     CS_SpMV_pattern6,
     CS_SpMV!_pattern1,
     CS_SpMV!_pattern2,
-    # CS_SpMV!_pattern3, # Do not handle x = A * x case for now
+    CS_SpMV!_pattern3,
     # CS_SpMV!_pattern4] # Do not handle y = A * x + y case for now
+    CS_SpMV!_pattern5,
     SpSquareWithEps_pattern1
 ]
 
@@ -1244,9 +1264,13 @@ function context_sensitive_transformation(
     call_sites = CallSites(Set{CallSite}(), region, lambda, symbol_info, liveness,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
+println(".... match replace cs")
+global trace_call_replacement = true
     # All patterns are non-splittable.
     call_sites.extra.non_splitting_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
+
+println(".... gather nobs")
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
     # were generated in the first walk. Not all those generated are gathered,
@@ -1262,6 +1286,8 @@ function context_sensitive_transformation(
     # matrix knobs.
     add_matrix_knobs_to_function_knobs(call_sites)
 
+println(".... propagate matrx info")
+
     # Propagate matrix info from one matrix knob to another for assignment statements
     recursive  = false
     visit_expressions(region, cfg, call_sites, recursive, propagate_matrix_info)
@@ -1276,6 +1302,8 @@ function context_sensitive_transformation(
     if reorder_enabled
         reordering(actions, region, symbol_info, liveness, cfg, call_sites)
     end
+    
+    trace_call_replacement = false
 end
 
 @doc """ 
