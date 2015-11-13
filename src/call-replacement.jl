@@ -1616,9 +1616,6 @@ function top_down_match_replace_an_expr_pattern(
 )
     # Match against the Expr. Replacement may happen on the expression.
     for pattern in patterns
-if trace_call_replacement
-    println("\t\tTop down matching with ", pattern.name)    
-end
         success = match_replace(pattern, ast, call_sites)
         if success
             break
@@ -1651,9 +1648,6 @@ function bottom_up_match_replace_an_expr_pattern(
     
     # Match against the Expr. Replacement may happen on the expression.
     for pattern in patterns
-if trace_call_replacement
-    println("\t\tBottm up matching with ", pattern.name)    
-end
         success = match_replace(pattern, ast, call_sites)
         if success
             break
@@ -1667,11 +1661,7 @@ Match an expression pattern and do replacement.
 function match_replace_an_expr_pattern(
     ast        :: Any,
     call_sites :: CallSites
-)
-if trace_call_replacement
-    println(".................matching ast:", ast)
-end
-    
+)    
     if typeof(ast) <: Expr
         # First, do non-splitting patterns. Either top-down or bottom-up
         # matching should be OK. The only difference is that the patterns for
@@ -1679,18 +1669,17 @@ end
         # can be designed based on the shapes of the user source code. In
         # contrast, bottom-up patterns would be based on both the user source
         # code shape and the other patterns that might have been applied.
-
-if trace_call_replacement
-    println("\tTop down matching ast:", ast)
-    dsprint(200, 1, call_sites.symbol_info, ast)
-end
+        if trace_call_replacement
+            println("\tTop down matching ast:", ast)
+            dsprint(200, 1, call_sites.symbol_info, ast)
+        end
         top_down_match_replace_an_expr_pattern(ast, call_sites, 
                                                call_sites.extra.non_splitting_patterns)
 
-if trace_call_replacement
-    println("\tBottom up matching ast:", ast)
-    dsprint(200, 1, call_sites.symbol_info, ast)
-end
+        if trace_call_replacement
+            println("\tBottom up matching ast:", ast)
+            dsprint(200, 1, call_sites.symbol_info, ast)
+        end
 
         # Now do splitting patterns. They should be applied bottom up, because
         # every internal tree node is ensured to be processed. In constrast, 
@@ -1709,10 +1698,6 @@ end
 Match an expression pattern and do replacement.
 """
 function match_replace_an_expr_pattern(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
-#println("ASTis: ",ast)
-#println("callsteis: ",call_sites)
-#println("*****l=",call_sites.lambda)
-#flush(STDOUT)
     match_replace_an_expr_pattern(ast, call_sites)
 end    
 
@@ -1797,20 +1782,15 @@ function may_split_statement(
     if typeof(arg) == Symbol
         arg_string = string(arg)
         if length(arg_string) > 1 && (arg_string[1] == 't')
-#println("\t\t1argg: ", arg, " ssplittable")
             return true
         end
-#println("\t\t2arg: ", arg, " nnonsplittable")
     elseif typeof(arg) == Expr
         for a in arg.args
             if may_split_statement(a)
-#println("\t\t3arg: ", arg, " ssplittable")
                 return true
             end
         end
-#println("\t\t4arg: ", arg, " nnonsplittable")
     end
-#println("\t\t5arg: ", arg, " nnonsplittable")
     return false
 end    
 
@@ -1821,20 +1801,16 @@ in the call sites's extra.
 function separate_expr_patterns(
     call_sites :: CallSites
 )
-#println("*******separate phase")    
     for pattern in call_sites.patterns
         splittable = false
         for arg in pattern.substitute
-#        println("\targ: ", arg)
             if may_split_statement(arg)
                 splittable = true
-#println("\tseparate: ", pattern.name, " splittable")    
                 break
             end
         end
         if !splittable
             push!(call_sites.extra.non_splitting_patterns, pattern)
-#println("\tseparate: ", pattern.name, " non-splittable")    
         end
     end
 end

@@ -64,7 +64,7 @@ function dprint_property_proxies(
     pmap    :: Dict 
 )
     val_or_nothing = (x) -> x.final_val == nothing ? "-" : x.final_val
-    dprintln(1, 1, "Sym : CV CS SV SS SO Lower Upper Trans DM")
+    dprintln(1, 1, "Sym : CV CS SV SS SO DM Lower Upper Trans")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
         dprintln(1, 1, k, " : ", 

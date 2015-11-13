@@ -375,8 +375,6 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     old_ast = copy(func_ast)
     new_ast = nothing
     try
-        println("******************************* SparseAccelerator ******************************")
-
         dprintln(1, 0, "******************************* SparseAccelerator ******************************")
         dprintln(1, 0, "Signature:")
         for i = 1 : length(func_args)

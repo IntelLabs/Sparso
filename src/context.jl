@@ -1264,13 +1264,12 @@ function context_sensitive_transformation(
     call_sites = CallSites(Set{CallSite}(), region, lambda, symbol_info, liveness,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
-println(".... match replace cs")
-global trace_call_replacement = true
+    
+    #global trace_call_replacement = true
+    
     # All patterns are non-splittable.
     call_sites.extra.non_splitting_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
-
-println(".... gather nobs")
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
     # were generated in the first walk. Not all those generated are gathered,
@@ -1285,8 +1284,6 @@ println(".... gather nobs")
     # Now at the beginning of the loop, associate function knobs with their 
     # matrix knobs.
     add_matrix_knobs_to_function_knobs(call_sites)
-
-println(".... propagate matrx info")
 
     # Propagate matrix info from one matrix knob to another for assignment statements
     recursive  = false
@@ -1303,7 +1300,7 @@ println(".... propagate matrx info")
         reordering(actions, region, symbol_info, liveness, cfg, call_sites)
     end
     
-    trace_call_replacement = false
+    #global trace_call_replacement = false
 end
 
 @doc """ 
