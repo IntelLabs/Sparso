@@ -1444,7 +1444,7 @@ function lbfgs_loss_function1(yXw::Vector, w::Vector, lambda::Number)
           m, length(w), yXw, w, lambda)
   else
     s = sum(log1p(exp(-abs(yXw))) - min(yXw, 0))
-    s/m + (lambda/2)*norm(x)^2
+    s/m + (lambda/2)*norm(w)^2
   end 
 end
 

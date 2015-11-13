@@ -557,6 +557,75 @@ const lbfgs_test1 = Test(
     ]
 )
 
+const lbfgs_test2 = Test(
+    "lbfgs-test2",
+    "lbfgs-new.jl covtype.mtx",
+    [
+        TestPattern(r"Original L-BFGS:      32 iterations f = 0.00000000004134",
+                     "Test original"
+        ),
+        TestPattern(r"Opt L-BFGS:      32 iterations f = 0.00000000004134",
+                     "Test optimized version"
+        ),
+        TestPattern(r"Opt_with_reordering L-BFGS:      33 iterations f = 0.0000000000",
+                     "Test Opt_with_reordering"
+        ),
+        TestPattern(r"Accelerated L-BFGS:      3[345] iterations f = 0.00000000",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(Xt,true,true,false,false,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(X,true,true,false,false,false,false\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.set_derivative\)\(##mknobXt.*?,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,##mknobX.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,1,X,x,0.0,Xw,0.0,##fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(yXw,y,Xw\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,##fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(##fknob.*?,##reordering_status.*?,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)
+",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?unless \(SparseAccelerator.norm\)\(dfk\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(##reordering_status.*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(w,1,x,-alpha,dfk\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,1,X,w,0.0,Xw,0.0,##fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(yXw,y,Xw\)",
+                     "Test accelerated"
+        ),        
+        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.dot\)\(dfk,dfk\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfkp1,-1 / m,Xt,temp,lambda,x,0,##fknob.*?\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(##reordering_status.*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+                     "Test accelerated"
+        ),
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(__temp.*?,1,dfkp1,-1,dfk\)",
+                     "Test accelerated"
+        ),    
+        exception_pattern
+    ]
+)
+
 const liveness_test1 = Test(
     "liveness-test1",
     "liveness-test1.jl small-diag.mtx",
@@ -1082,6 +1151,7 @@ const all_tests = [
     pagerank_test1,
     cosp2_test1,
     lbfgs_test1,
+    lbfgs_test2,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,

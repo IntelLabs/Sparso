@@ -620,18 +620,6 @@ const divide_Desc = FunctionDescription(
     Set([ (0, 1, ROW_ROW) ])
 )
 
-const lbfgs_compute_direction!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "lbfgs_compute_direction!",
-    (Array{Float64,1}, Int64, Int64, Int64, Array{Float64,2}, Array{Float64,2}, Array{Float64,1}),
-    UPDATED_NONE,                     # No argument is updated
-    true,                             # The function is distributive
-    Set([ (1, 5, ROW_ROW),
-          (1, 6, ROW_ROW),
-          (1, 7, ROW_ROW)
-    ])
-)
-
 @doc """ A*x """
 const Ac_mul_B_Desc = FunctionDescription(
     "Main", 
@@ -728,6 +716,41 @@ const Printf_Desc = FunctionDescription(
     IA_NONE                           # No inter-dependent arrays
 )
 
+# The following 3 are specific to LBFGS
+const lbfgs_compute_direction!_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "lbfgs_compute_direction!",
+    (Array{Float64,1}, Int64, Int64, Int64, Array{Float64,2}, Array{Float64,2}, Array{Float64,1}),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (1, 5, ROW_ROW),
+          (1, 6, ROW_ROW),
+          (1, 7, ROW_ROW)
+    ])
+)
+
+const lbfgs_loss_function1_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "lbfgs_loss_function1",
+    (Vector, Vector, Number),         # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    IA_NONE                           # No inter-dependent arrays
+)
+
+
+const lbfgs_loss_function2!_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "lbfgs_loss_function2!",
+    (Vector, Vector, Vector),         # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
+    Set(1),
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 2, ROW_ROW),
+          (1, 2, ROW_ROW)
+    ])
+)
+
 function_descriptions  = [
     element_wise_multiply_Desc,
     element_wise_multiply1_Desc,
@@ -785,7 +808,9 @@ function_descriptions  = [
     min_Desc,
     asignment_Desc,
     asignment1_Desc,
-    lbfgs_compute_direction!_Desc
+    lbfgs_compute_direction!_Desc,
+    lbfgs_loss_function1_Desc,
+    lbfgs_loss_function2!_Desc
 ]
 
 function look_for_function_description(
