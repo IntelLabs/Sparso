@@ -66,6 +66,13 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     # TODO: remove it.
     Ap = Array(Cdouble, length(p))
     while k <= maxiter
+        set_matrix_property(Dict(
+            :r  => SA_HAS_DEDICATED_MEMORY,
+            :x  => SA_HAS_DEDICATED_MEMORY,
+            :p  => SA_HAS_DEDICATED_MEMORY,
+          )
+        )
+    
         old_rz = rz
 
         spmv_time -= time()

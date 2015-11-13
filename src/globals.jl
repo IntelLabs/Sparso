@@ -39,6 +39,12 @@ WAXPBY, etc. with calls to the corresponding SPMP library functions.
 """
 const SA_REPLACE_CALLS = 40
 
+@doc """
+Use splitting patterns during call replacement. Effective only when 
+SA_REPLACE_CALLS has been specified
+"""
+const SA_USE_SPLITTING_PATTERNS = 42
+
 @doc """ Enable context-sensitive optimization. """
 const SA_CONTEXT = 48
 
@@ -52,6 +58,7 @@ use_Julia                     = false
 use_MKL                       = false
 use_SPMP                      = true
 replace_calls_enabled         = false
+use_splitting_patterns        = false
 reorder_enabled               = false
 reorder_when_beneficial       = true # By default, reordering with benefit-cost analysis
 context_sensitive_opt_enabled = false
@@ -86,6 +93,8 @@ function set_options(args...)
             global use_Julia = false; global use_MKL = false; global use_SPMP = true
         elseif arg == SA_REPLACE_CALLS
             global replace_calls_enabled = true
+        elseif arg == SA_USE_SPLITTING_PATTERNS
+            global use_splitting_patterns = true
         elseif arg == SA_CONTEXT
             global context_sensitive_opt_enabled = true
         elseif arg == SA_REORDER

@@ -1287,6 +1287,12 @@ function get_temporary(
     # TODO: uncomment this statement. And remove the hack
     #   action   = InsertBeforeOrAfterStatement(Vector{Statement}(), true, bb, stmt_idx)
     #   push!(call_sites.actions, action)
+    
+    # ISSUE: what if the example is NOT live into the loop? How can we make a temporary
+    # based on it before the loop?
+    # A possible solution: create a dynamic global count so that it creates the
+    # temporary right before the statement, but only once: only when the dynamic count is
+    # less than the temporary's static index number.
     if example != nothing
         typ               = type_of_ast_node(example, symbol_info)
         symbol_info[temp] = typ 
@@ -1888,6 +1894,10 @@ function replace_calls(
 
     # Separate non-splittable from splittable patterns.
     separate_expr_patterns(call_sites)
+    if !use_splitting_patterns
+        call_sites.patterns = call_sites.extra.non_splitting_patterns
+    end
+
 
     # Separate basic blocks that do not belong to any loop region
     non_loop_bb_indices = Set{BasicBlockIndex}()
