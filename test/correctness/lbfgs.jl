@@ -582,10 +582,10 @@ lambda = 0
 sparsity = nnz(X)/(n*p)
 println("n=$n p=$p nnz=$(nnz(X)) stored as sparse=$sparsity")
 
-Xt=X'
+#Xt=X'
 
-w, it = GD(X,Xt,y,lambda, zeros(p), 1e-10)
-@printf("Grad-Decent: %d iterations f = %.14f\n", it, LogisticLoss(w,X,Xt,y,lambda)[1])
+#w, it = GD(X,Xt,y,lambda, zeros(p), 1e-10)
+#@printf("Grad-Decent: %d iterations f = %.14f\n", it, LogisticLoss(w,X,Xt,y,lambda)[1])
 # Expected output: Grad-Decent: 100 iterations f = 0.34398484995673
 
 w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
@@ -603,5 +603,9 @@ w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
 
 xinit, tol, k = zeros(p), 1e-10, 3
 @acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
-w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
+@printf("1stAccelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+# It seems that sparse accelerator generated code has updated xinit internally. That caused
+# strange behavior when lbfgs_ref is called again: it would return after only 1 iteration.
+xinit = zeros(p)
+@acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
 @printf("Accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
