@@ -719,6 +719,15 @@ const asignment1_Desc = FunctionDescription(
     Set([ (1, 2, ROW_ROW) ])
 )
 
+const Printf_Desc = FunctionDescription(
+    "Base", 
+    "Printf",
+    (Any, Any),                    # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    IA_NONE                           # No inter-dependent arrays
+)
+
 function_descriptions  = [
     element_wise_multiply_Desc,
     element_wise_multiply1_Desc,
