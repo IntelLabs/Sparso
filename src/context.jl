@@ -877,7 +877,9 @@ function create_new_matrix_knob(
                          properties.is_structure_only,
                          properties.is_single_def))
     else
-        assert(properties.constant_structured) 
+        # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
+        # must be constant valued or structured.    
+        assert(properties.constant_structured || properties.is_structure_symmetric) 
         new_stmt = Expr(:(=), mknob,
                     Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
                          properties.constant_valued, 
