@@ -704,31 +704,42 @@ for i=1:nsets
 end
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
+if length(ARGS) == 3
+  tests = ARGS[3]
+else
+  tests = "OMS"
+end
 
-println("\nOriginal: ")
-srand(0)
-println(@time(abiatic(Hdmat, d, nqbits, T)))
-println("\nEND Oringinal.")
+if contains(tests, "O")
+  println("\nOriginal: ")
+  srand(0)
+  println(@time(abiatic(Hdmat, d, nqbits, T)))
+  println("\nEND Oringinal.")
+end
 
 #SparseAccelerator.set_knob_log_level(1)
 
-println("\nManual_call_replacement:")
-srand(0)
-println(@time(abiatic_opt(Hdmat, d, nqbits, T, false)))
-println("\nEND Manual_call_replacement.")
+if contains(tests, "M")
+  println("\nManual_call_replacement:")
+  srand(0)
+  println(@time(abiatic_opt(Hdmat, d, nqbits, T, false)))
+  println("\nEND Manual_call_replacement.")
+
+  println("\nManual_call_replacement_and_context_opt:")
+  srand(0)
+  println(@time(abiatic_opt(Hdmat, d, nqbits, T, true)))
+  println("\nEND Manual_call_replacement_and_context_opt.")
+end
 
 
-println("\nManual_call_replacement_and_context_opt:")
-srand(0)
-println(@time(abiatic_opt(Hdmat, d, nqbits, T, true)))
-println("\nEND Manual_call_replacement_and_context_opt.")
-
+if contains(tests, "S")
 #println("\nSparso_call_replacement:")
 #srand(0)
 #println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T, false)))
 #println("\nEND Sparso_call_replacement.")
 
-println("\nSparso_call_replacement_and_context_opt:")
-srand(0)
-println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
-println("\nEND Sparso_call_replacement_and_context_opt.")
+  println("\nSparso_call_replacement_and_context_opt:")
+  srand(0)
+  println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
+  println("\nEND Sparso_call_replacement_and_context_opt.")
+end

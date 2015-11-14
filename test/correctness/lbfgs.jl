@@ -214,7 +214,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
   x, it
 end
 
-function lbfgs_opt(X, y, lambda, xinit, tol, k)
+function lbfgs_opt(X, y, lambda, xinit, tol, k, with_context_opt)
   #@printf("%5s%10s%10s%10s\n", "Iter", "alpha", "|dfk|", "fk")
 
   spmv_time = 0
@@ -227,6 +227,7 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
 
   spmv_count = 0
 
+if with_context_opt
   mknobX = (SparseAccelerator.new_matrix_knob)(X, true, true, false, false, false, false)
   mknobXT = (SparseAccelerator.new_matrix_knob)(Xt, true, true, false, false, false, false)
 
@@ -242,6 +243,13 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
   (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv4)
   fknob_spmv5 = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(mknobXT, fknob_spmv5)
+else
+  fknob_spmv1 = C_NULL
+  fknob_spmv2 = C_NULL
+  fknob_spmv3 = C_NULL
+  fknob_spmv4 = C_NULL
+  fknob_spmv5 = C_NULL
+end
 
   S = zeros(n, k)
   Y = zeros(n, k)
@@ -592,8 +600,12 @@ w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
 w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
 @printf("Original L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 
-w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3)
-w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3)
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, false)
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, false)
+@printf("Call-repl L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, true)
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, true)
 @printf("Opt L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 
 w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
