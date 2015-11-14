@@ -1113,11 +1113,17 @@ void BackwardTriangularSolve(
         &backwardSolveWithReorderedMatrix);
 }
 
-static bool reuse_inspection = true;
+static bool reuse_inspection                = true;
+static bool collective_structure_prediction = true;
 
 void SetReuseInspection(bool reuse)
 {
     reuse_inspection = reuse;
+}
+
+void SetCollectiveStructurePrediction(bool collective)
+{
+    collective_structure_prediction = collective;
 }
 
 void *CholFact(
@@ -1158,7 +1164,7 @@ void *CholFact(
     }
 
     void *ret= mknob_A->dss_handle;
-    if (!reuse_inspection) {
+    if (!reuse_inspection || !collective_structure_prediction) {
         mknob_A->dss_handle = NULL;
     }
     return ret;
@@ -1236,7 +1242,7 @@ void ADB(
         *C_nzval = mknob_C->A->values;
     }
 
-    if (!reuse_inspection) {
+    if (!reuse_inspection || !collective_structure_prediction) {
         mknob_C->A = NULL;
     }
 }

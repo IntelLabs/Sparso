@@ -60,9 +60,9 @@ function new_matrix_knob(
  )
     # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
     # must be constant valued or structured.
-    assert(constant_valued || constant_structured || is_structure_symmetric)
-    assert(!constant_valued || constant_structured)
-    assert(!is_symmetric || is_structure_symmetric)
+    assert(constant_valued || constant_structured || is_structure_symmetric || !collective_structure_prediction_enabled)
+    assert(!constant_valued || constant_structured || !collective_structure_prediction_enabled)
+    assert(!is_symmetric || is_structure_symmetric || !collective_structure_prediction_enabled)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
                    (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                     Bool, Bool, Bool, Bool, Bool, Bool),
@@ -1496,4 +1496,8 @@ end
 
 function set_reuse_inspection(reuse)
   ccall((:SetReuseInspection, LIB_PATH), Void, (Bool,), reuse)
+end
+
+function set_collective_structure_prediction(collective)
+  ccall((:SetCollectiveStructurePrediction, LIB_PATH), Void, (Bool,), collective)
 end

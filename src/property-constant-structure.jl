@@ -54,6 +54,10 @@ type ConstantStructureProperty <: MatrixPropertyPass
 
         dprint_property_map(2, property_map)
 
+        if (!collective_structure_prediction_enabled)
+            return
+        end
+
         # propagate non-constant property 
         # 
         working_set = []
