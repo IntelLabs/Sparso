@@ -77,7 +77,7 @@ const sanity_test3 = Test(
     "sanity-test3",
     "sanity-test3.jl",
     [
-        TestPattern(r"New AST:(.|\n)*?return A::[^\s\\]*SparseMatrixCSC.*x::Array",
+        TestPattern(r"New AST:(.|\n)*?return A * x",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
         ),
         exception_pattern
@@ -670,7 +670,7 @@ const call_replacement_test1 = Test(
     "call-replacement-test1",
     "call-replacement-test1.jl small-diag.mtx",
     [
-        TestPattern(r"AST:(.|\n)*?Main.dot(.|\n)*?New AST(.|\n)*?SparseAccelerator,:dot",
+        TestPattern(r"AST:(.|\n)*?Main.dot(.|\n)*?New AST(.|\n)*?SparseAccelerator.dot",
                      "Test call replacement of Main.dot with SparseAccelerator.dot."
         ),
         exception_pattern
@@ -681,7 +681,7 @@ const call_replacement_test2 = Test(
     "call-replacement-test2",
     "call-replacement-test2.jl small-diag.mtx",
     [
-        TestPattern(r"AST:(.|\n)*?A::[^\s\\]*SparseMatrixCSC.*\* x::Array(.|\n)*?New AST(.|\n)*?SparseAccelerator,:SpMV.*A::[^\s\\]*SparseMatrixCSC.*,x::Array",
+        TestPattern(r"AST:(.|\n)*?\(SparseAccelerator.SpMV\)\(A,x\)",
                      "Test call replacement of * with SparseAccelerator.SpMV."
         ),
         exception_pattern
@@ -692,7 +692,7 @@ const call_replacement_test3 = Test(
     "call-replacement-test3",
     "call-replacement-test3.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\(y::Array\{Float64,1\},A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(y,A,x\)",
                      "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
         ),
         exception_pattern
@@ -703,7 +703,7 @@ const call_replacement_test4 = Test(
     "call-replacement-test4",
     "call-replacement-test4.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\(y::Array\{Float64,1\},0.1,A::[^\s\\]*SparseMatrixCSC\{Float64,Int64\},x::Array\{Float64,1\},0.1,y::Array\{Float64,1\},0.0\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(y,0.1,A,x,0.1,y,0.0\)",
                      "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
         ),
         exception_pattern
@@ -714,7 +714,7 @@ const call_replacement_test5 = Test(
     "call-replacement-test5",
     "call-replacement-test5.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\(x,1,x::Array\{Float64,1\},alpha::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,alpha,p\)",
                      "Test call replacement of WAXPBY! for x += alpha * p."
         ),
         exception_pattern
@@ -725,7 +725,7 @@ const call_replacement_test6 = Test(
     "call-replacement-test6",
     "call-replacement-test6.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\(x,1,x::Array\{Float64,1\},-alpha::Float64::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,-alpha,p\)",
                      "Test call replacement of WAXPBY! for x -= alpha * p."
         ),
         exception_pattern
@@ -736,7 +736,7 @@ const call_replacement_test7 = Test(
     "call-replacement-test7",
     "call-replacement-test7.jl small-diag.mtx",
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\(p,1,r::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(p,1,r,beta,p\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
         ),
         exception_pattern
@@ -804,7 +804,7 @@ const call_replacement_test12 = Test(
     "call-replacement-test12",
     string("call-replacement-test12.jl  ", CG_MATRIX),
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:WAXPBY\!\)\(p,1,z::Array\{Float64,1\},beta::Float64,p::Array\{Float64,1\}\)",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(p,1,z,beta,p\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
         ),
         exception_pattern

@@ -659,7 +659,8 @@ function find_properties_of_matrices(
     dprint_property_proxies(property_proxies)
 
     # filter out matrix type
-    is_matrix_type = (x) ->  in(x, predefined_symbols) || any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+#    is_matrix_type = (x) ->  in(x, predefined_symbols) || any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+    is_matrix_type = (x) ->  any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
     mfilter = (x) -> filter(is_matrix_type, x)
     has_pos_val = (v) -> v.final_val != nothing && v.final_val != PROP_NEGATIVE_VAL
 
