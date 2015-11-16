@@ -51,17 +51,21 @@ const SA_CONTEXT = 48
 @doc """ Enable reordering of arrays. """
 const SA_REORDER = 56
 
+@doc """ Disable collective structure prediction. """
+const SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION = 64
+
 # The internal booleans corresponding to the above options, and their default values
-sparse_acc_enabled            = false
-show_level                    = 256
-use_Julia                     = false
-use_MKL                       = false
-use_SPMP                      = true
-replace_calls_enabled         = false
-use_splitting_patterns        = false
-reorder_enabled               = false
-reorder_when_beneficial       = true # By default, reordering with benefit-cost analysis
-context_sensitive_opt_enabled = false
+sparse_acc_enabled                      = false
+show_level                              = 256
+use_Julia                               = false
+use_MKL                                 = false
+use_SPMP                                = true
+replace_calls_enabled                   = false
+use_splitting_patterns                  = false
+reorder_enabled                         = false
+reorder_when_beneficial                 = true # By default, reordering with benefit-cost analysis
+context_sensitive_opt_enabled           = false
+collective_structure_prediction_enabled = true
 
 # A control used only for trace call replacement internally
 trace_call_replacement        = false
@@ -103,6 +107,9 @@ function set_options(args...)
             # do reordering.
             global context_sensitive_opt_enabled = true
             global reorder_enabled               = true
+        elseif arg == SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION
+            global collective_structure_prediction_enabled = false # control Julia
+            set_collective_structure_prediction(false) # control the library
         else
             # TODO: print usage info
         end

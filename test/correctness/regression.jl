@@ -312,7 +312,7 @@ const context_test5 = Test(
         TestPattern(r"Accelerated rel_err=4.398690\d*e-9",
                      "Test rel_err"
         ),
-        TestPattern(r"Constant structures discovered:\n.*\[:A,.*?,:L,:U,.*?\]",
+        TestPattern(r"Constant structures discovered:\n.*\[:A,:L,:U\]",
                      "Test constant structures"
         ),
         TestPattern(r"Structure symmetry discovered:\n.*\[:A\]",
