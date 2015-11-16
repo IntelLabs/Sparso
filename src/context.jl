@@ -877,9 +877,12 @@ function create_new_matrix_knob(
                          properties.is_structure_only,
                          properties.is_single_def))
     else
+        # It is true that usually a knob is created only for a constant structured
+        # matrix. But in principle, any matrix can have a knob, and the library
+        # can decide what to do based on the knob.
         # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
         # must be constant valued or structured.    
-        assert(properties.constant_structured || properties.is_structure_symmetric) 
+        assert(properties.constant_structured || properties.is_structure_symmetric || !collective_structure_prediction_enabled) 
         new_stmt = Expr(:(=), mknob,
                     Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
                          properties.constant_valued, 
