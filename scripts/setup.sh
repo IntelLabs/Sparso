@@ -2,6 +2,9 @@
 
 echo "* Setting up submoduls"
 git submodule update --init
+cd deps/CompilerTools
+git checkout 99656518b2396b8e6f92cb2cd6d23cffb5e3f8ad
+cd ../..
 
 echo "* Setting up git hooks"
 cp ./scripts/post-checkout .git/hooks 
@@ -14,7 +17,7 @@ fi
 
 echo "* Patching CompilerTools"
 cd deps/CompilerTools/
-#patch -p 1 < ../../scripts/CompilerTools.patch
+patch -p 1 < ../../scripts/CompilerTools.patch
 cd - 
 
 echo "* Building SpMP lib"
