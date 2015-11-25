@@ -23,3 +23,8 @@ cd ./lib
 make clean
 make -j 
 cd ..
+
+echo "* Extracting matrices"
+cd test
+tar xf matrices.tar.gz
+cd ..
