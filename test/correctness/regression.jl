@@ -86,7 +86,7 @@ const sanity_test3 = Test(
 
 const spmv_sanity_test1 = Test(
     "spmv-sanity-test1",
-    "spmv-sanity-test1.jl tiny-diag.mtx",
+    "spmv-sanity-test1.jl ../matrices/niny-diag.mtx",
     [
         TestPattern(r"Original sum of p=20.169999999999995",
                      "Test original code"
@@ -98,7 +98,7 @@ const spmv_sanity_test1 = Test(
     ]
 )
 
-const CG_MATRIX = "bcsstk14.mtx"
+const CG_MATRIX = "../matrices/bcsstk14.mtx"
 
 const context_test1 = Test(
     "context-test1",
@@ -181,7 +181,7 @@ const context_test2 = Test(
 
 const context_test2_ilu0 = Test(
     "context-test2-ilu0",
-    string("context-test2-ilu0.jl  lap3d_4x4x4.mtx"),
+    string("context-test2-ilu0.jl  ../matrices/lap3d_4x4x4.mtx"),
     [
         TestPattern(r"Original:(.|\n)*?k=5(.|\n)*?rel_err=4.398690\d*e-9",
                      "Test pcg_symgs"
@@ -298,7 +298,7 @@ const context_test4 = Test(
 
 const context_test5 = Test(
     "context-test5",
-    "context-test5.jl lap3d_4x4x4.mtx",
+    "context-test5.jl ../matrices/lap3d_4x4x4.mtx",
     [
         TestPattern(r"Original k=5",
                      "Test original pcg_symgs_ilu0 "
@@ -396,7 +396,7 @@ const context_test5 = Test(
 
 const pagerank_test1 = Test(
     "pagerank-test1",
-    "pagerank.jl  hmatrix.1024.mtx",
+    "pagerank.jl  ../matrices/hmatrix.1024.mtx",
     [
         TestPattern(r"Original:(.\n)*?\s*error = 1.53\d*e-8",
                      "Test original pagerank"
@@ -422,7 +422,7 @@ const pagerank_test1 = Test(
 
 const cosp2_test1 = Test(
     "cosp2-test1",
-    "cosp2.jl hmatrix.512.mtx",
+    "cosp2.jl ../matrices/hmatrix.512.mtx",
     [
         TestPattern(r"Original:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End original.",
                      "Test original"
@@ -458,9 +458,11 @@ const cosp2_test1 = Test(
     ]
 )
 
+const MTX_covtype = "../matrices/covtype.mtx" 
+
 const lbfgs_test1 = Test(
     "lbfgs-test1",
-    "lbfgs.jl covtype.mtx",
+    "lbfgs.jl $MTX_covtype",
     [
         TestPattern(r"Original L-BFGS:      32 iterations f = 0.00000000004134",
                      "Test original"
@@ -559,7 +561,7 @@ const lbfgs_test1 = Test(
 
 const lbfgs_test2 = Test(
     "lbfgs-test2",
-    "lbfgs-new.jl covtype.mtx",
+    "lbfgs-new.jl $MTX_covtype",
     [
         TestPattern(r"Original L-BFGS:      32 iterations f = 0.00000000004134",
                      "Test original"
@@ -626,9 +628,11 @@ const lbfgs_test2 = Test(
     ]
 )
 
+const MTX_small_diag = "../matrices/small-diag.mtx"
+
 const liveness_test1 = Test(
     "liveness-test1",
-    "liveness-test1.jl small-diag.mtx",
+    "liveness-test1.jl $MTX_small_diag",
     [
         TestPattern(r"Def",
                      "Test liveness for cg."
@@ -668,7 +672,7 @@ const liveness_test2 = Test(
 
 const call_replacement_test1 = Test(
     "call-replacement-test1",
-    "call-replacement-test1.jl small-diag.mtx",
+    "call-replacement-test1.jl $MTX_small_diag",
     [
         TestPattern(r"AST:(.|\n)*?Main.dot(.|\n)*?New AST(.|\n)*?SparseAccelerator.dot",
                      "Test call replacement of Main.dot with SparseAccelerator.dot."
@@ -679,7 +683,7 @@ const call_replacement_test1 = Test(
 
 const call_replacement_test2 = Test(
     "call-replacement-test2",
-    "call-replacement-test2.jl small-diag.mtx",
+    "call-replacement-test2.jl $MTX_small_diag",
     [
         TestPattern(r"AST:(.|\n)*?\(SparseAccelerator.SpMV\)\(A,x\)",
                      "Test call replacement of * with SparseAccelerator.SpMV."
@@ -690,7 +694,7 @@ const call_replacement_test2 = Test(
 
 const call_replacement_test3 = Test(
     "call-replacement-test3",
-    "call-replacement-test3.jl small-diag.mtx",
+    "call-replacement-test3.jl $MTX_small_diag",
     [
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(y,A,x\)",
                      "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
@@ -701,7 +705,7 @@ const call_replacement_test3 = Test(
 
 const call_replacement_test4 = Test(
     "call-replacement-test4",
-    "call-replacement-test4.jl small-diag.mtx",
+    "call-replacement-test4.jl $MTX_small_diag",
     [
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(y,0.1,A,x,0.1,y,0.0\)",
                      "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
@@ -712,7 +716,7 @@ const call_replacement_test4 = Test(
 
 const call_replacement_test5 = Test(
     "call-replacement-test5",
-    "call-replacement-test5.jl small-diag.mtx",
+    "call-replacement-test5.jl $MTX_small_diag",
     [
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,alpha,p\)",
                      "Test call replacement of WAXPBY! for x += alpha * p."
@@ -723,7 +727,7 @@ const call_replacement_test5 = Test(
 
 const call_replacement_test6 = Test(
     "call-replacement-test6",
-    "call-replacement-test6.jl small-diag.mtx",
+    "call-replacement-test6.jl $MTX_small_diag",
     [
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,-alpha,p\)",
                      "Test call replacement of WAXPBY! for x -= alpha * p."
@@ -734,7 +738,7 @@ const call_replacement_test6 = Test(
 
 const call_replacement_test7 = Test(
     "call-replacement-test7",
-    "call-replacement-test7.jl small-diag.mtx",
+    "call-replacement-test7.jl $MTX_small_diag",
     [
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(p,1,r,beta,p\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
@@ -745,7 +749,7 @@ const call_replacement_test7 = Test(
 
 const call_replacement_test8 = Test(
     "call-replacement-test8",
-    "call-replacement-test8.jl small-diag.mtx",
+    "call-replacement-test8.jl $MTX_small_diag",
     [
         TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\(p,1 - r::Float64::Float64,A::[^\s\\]*SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
                      "Test call replacement of SpMV! in simple page rank."
@@ -756,7 +760,7 @@ const call_replacement_test8 = Test(
 
 const call_replacement_test9 = Test(
     "call-replacement-test9",
-    "call-replacement-test9.jl small-diag.mtx",
+    "call-replacement-test9.jl $MTX_small_diag",
     [
         TestPattern(r"sum of x=-1.57731204341073\d*e-5",
                      "Test orig sum"
@@ -772,7 +776,7 @@ const call_replacement_test9 = Test(
 
 const call_replacement_test10 = Test(
     "call-replacement-test10",
-    "call-replacement-test10.jl small-diag.mtx",
+    "call-replacement-test10.jl $MTX_small_diag",
     [
         TestPattern(r"sum of x=-1.5773120434107\d*e-5",
                      "Test orig sum"
@@ -787,7 +791,7 @@ const call_replacement_test10 = Test(
 
 const call_replacement_test11 = Test(
     "call-replacement-test11",
-    "call-replacement-test11.jl small-diag.mtx",
+    "call-replacement-test11.jl $MTX_small_diag",
     [
         TestPattern(r"sum of x=-1.5773120434107\d*e-5",
                      "Test orig sum"
@@ -813,7 +817,7 @@ const call_replacement_test12 = Test(
 
 const name_resolution_test1 = Test(
     "name-resolution-test1",
-    "name-resolution-test1.jl small-diag.mtx",
+    "name-resolution-test1.jl $MTX_small_diag",
     [
         TestPattern(r"Module name: X\.Y\.Z\.U\.V\.W\nFunction name: f(.|\n)*?Module name: Main\nFunction name: \*",
                      "Test name resolution."
