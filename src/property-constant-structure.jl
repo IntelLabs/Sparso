@@ -108,7 +108,8 @@ type ConstantStructureProperty <: MatrixPropertyPass
                 end
                 constant = true
                 for d in region_info.depend_map[rd]
-                    if haskey(property_map, d) && property_map[d].final_val == nothing 
+                    if haskey(property_map, d) && 
+                        (property_map[d].final_val == nothing || property_map[d].final_val == PROP_NEGATIVE_VAL)
                         constant = false
                     end
                 end
