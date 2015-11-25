@@ -14,7 +14,7 @@ fi
 
 echo "* Patching CompilerTools"
 cd deps/CompilerTools/
-patch -p 1 < ../../scripts/CompilerTools.patch
+#patch -p 1 < ../../scripts/CompilerTools.patch
 cd - 
 
 echo "* Building SpMP lib"
