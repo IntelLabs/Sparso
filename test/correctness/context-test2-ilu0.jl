@@ -2,6 +2,55 @@ include("../../src/SparseAccelerator.jl")
 include("./utils.jl")
 using SparseAccelerator
 
+function ilu(
+    A     :: SparseMatrixCSC{Float64, Int32}
+ )
+    LU_nzval = copy(A.nzval)
+    diagptr = zeros(Int32, size(A, 2))
+
+    # Assume rowval are sorted within each column.
+    @inbounds for col = 1:A.n
+        for j = A.colptr[col]:(A.colptr[col + 1] - 1)
+            if A.rowval[j] == col
+                diagptr[col] = j
+                break
+            end
+        end
+    end
+
+    @inbounds for col = 1:A.n
+        for j = A.colptr[col]:(diagptr[col] - 1)
+            row = A.rowval[j]
+            diag = diagptr[row]
+
+            LU_nzval[j] /= LU_nzval[diag]
+            tmp = LU_nzval[j]
+            k1 = j + 1
+            k2 = diag + 1
+
+            while k1 < A.colptr[col + 1] && k2 < A.colptr[row + 1]
+                if A.rowval[k1] < A.rowval[k2]
+                    k1 += 1
+                elseif A.rowval[k1] > A.rowval[k2]
+                    k2 += 1
+                else
+                    LU_nzval[k1] -= tmp*LU_nzval[k2]
+                    k1 += 1
+                    k2 += 1
+                end
+            end
+        end
+    end
+
+    LU = SparseMatrixCSC{Cdouble, Cint}(size(A, 1), size(A, 2), copy(A.colptr), copy(A.rowval), LU_nzval)
+    LU = LU'
+
+    L = tril(LU, -1) + SparseAccelerator.speye_int32(size(LU, 1))
+    U = triu(LU)
+
+    L, U
+end
+
 # The original pcg_symgs
 #include("./pcg-symgs.jl")
 function pcg_symgs(x, A, b, tol, maxiter)
@@ -12,7 +61,8 @@ function pcg_symgs(x, A, b, tol, maxiter)
     dot_time = 0.
     blas1_time = 0.
 
-    L, U = SparseAccelerator.ilu(A)
+    L, U = ilu(A)
+    #L, U = SparseAccelerator.ilu(A)
 
     spmv_time -= time()
     #r = b - A * x
