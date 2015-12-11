@@ -1,20 +1,23 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
+set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
 
-function pagerank(A, p, r, maxiter) # p: initial rank, r: damping factor
+function pagerank(A, p, r, d_inv, maxiter) # p: initial rank, r: damping factor
   set_matrix_property(Dict(
-    :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED))
+    :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED | SA_STRUCTURE_ONLY))
 
-  bytes = maxiter*(nnz(A)*12 + size(A, 1)*3*8)
+  bytes = maxiter*(nnz(A)*4 + size(A, 1)*4*8)
+
+  p = p.*d_inv
+  d_inv = copy(d_inv)
+  Ap = zeros(size(A, 1))
 
   t = time()
 
-  Ap = zeros(size(A, 1))
-
   for i = 1:maxiter
     Ap = (1-r)*A*p + r
+    Ap = Ap.*d_inv
 
     if i == maxiter
       err = norm(Ap - p)/norm(p)
@@ -40,25 +43,18 @@ p = repmat([1/m], m)
 r = 0.15
 
 d = max(convert(Array{eltype(A),1}, vec(sum(A, 2))), 1) # num of neighbors
-A = scale(A,1./d)
+d_inv = 1./d
 
 maxiter = 100
+bytes = maxiter*(nnz(A)*4 + m*4*8)
 
-p2 = copy(p)
-x = pagerank(A, p2, r, maxiter)
-println("Original: ")
-p2 = copy(p)
-x = pagerank(A, p2, r, maxiter)
-
-p2 = copy(p)
-@acc x= pagerank(A, p2, r, maxiter)
+@acc x= pagerank(A, p, r, d_inv, maxiter)
 
 println("\nAccelerated without reordering: ")
 SparseAccelerator.reset_spmp_spmv_time()
 SparseAccelerator.reset_knob_spmv_time()
-@acc x= pagerank(A, p, r, maxiter)
+@acc x= pagerank(A, p, r, d_inv, maxiter)
 t = SparseAccelerator.get_spmp_spmv_time()
-bytes = maxiter*(nnz(A)*12 + m*3*8)
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
 t = SparseAccelerator.get_knob_spmv_time()
 println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")
