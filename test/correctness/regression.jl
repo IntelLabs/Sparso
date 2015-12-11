@@ -1217,8 +1217,8 @@ end
 
 if !isreadable(julia_command)
     error("Please install (softlink) julia command to \"" * julia_command  * "\".")
-elseif !ismatch(r"\.*0.4.0-rc3", get_julia_ver())
-    error("Wrong julia version! 0.4.0-rc3 is required!")
+elseif !ismatch(r"\.*0.4.1", get_julia_ver())
+#    error("Wrong julia version! 0.4.1 is required!")
 end
 
 if isreadable("regression.conf")

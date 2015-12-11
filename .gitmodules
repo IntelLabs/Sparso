@@ -3,5 +3,4 @@
 	url = https://github.com/jspark1105/SpMP
 [submodule "deps/CompilerTools"]
 	path = deps/CompilerTools
-	url = sc-login01.sc.intel.com:/nfs/sc/proj/ctg/ssr-clara17/pse-hpc/CompilerTools
-	branch = latest
+	url = https://github.com/IntelLabs/CompilerTools.jl
