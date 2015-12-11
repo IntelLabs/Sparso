@@ -37,13 +37,23 @@ type ContextExtra
     bb                       :: Any              # BasicBlock
     stmt_idx                 :: StatementIndex
     prev_stmt_idx            :: StatementIndex
-    
+    live_in_before_prev_expr :: Set{Sym}
+    live_in_before_expr      :: Set{Sym}
+
+    # Some patterns (those contain :t1!2, etc.) may hoist some subtrees of the
+    # current statement before it. That splits one statement into more than one.
+    # Such patterns should be matched at the last, because otherwise, other 
+    # patterns may not be able to match what they should: they cannot find the
+    # subtrees to match, which are no longer in the same statement.
+    non_splitting_patterns  :: Vector{Pattern}
+
     ContextExtra(_matrix_properties, _ast_may_change) = new(
             _matrix_properties, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
-            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0)
+            Set{Symbol}(), Set{Symbol}(), nothing, 0, 0, Set{Sym}(), Set{Sym}(),
+            Vector{Pattern}())
 end
 
 # Below are the patterns that we would like to replace a function with another,
@@ -141,10 +151,10 @@ function gather_context_sensitive_info(
     # Create matrix-specific knobs for the matrices inputs.
     args = ast.args
     for arg in matrices_to_track
-        if arg == :result
+        if arg == :r
             M = ast
         else
-            new_arg = replacement_arg(arg, args, nothing, symbol_info, prev_expr, cur_expr)
+            new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
             assert(typeof(new_arg) == Symbol || typeof(new_arg) == SymbolNode ||
                    typeof(new_arg) == GenSym)
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
@@ -173,7 +183,7 @@ function gather_context_sensitive_info(
                 call_sites.extra.reordering_decider_power = reordering_power
                 call_sites.extra.reordering_FAR           = []
                 for arg in reordering_FAR
-                    new_arg = replacement_arg(arg, args, ast, symbol_info, prev_expr, cur_expr)
+                    new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
                     assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
                     M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
                     push!(call_sites.extra.reordering_FAR, M)
@@ -239,7 +249,7 @@ function CS_ADAT_post_replacement(
     assert(typeof(A) == SymbolNode)
     properties = call_sites.extra.matrix_properties[A.name]
     AT = Symbol(string("__", string(A.name), "T__"))
-    stmt = Statement(-1, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
+    stmt = Statement(0, Expr(:(=), AT, Expr(:call, GlobalRef(Main, :ctranspose), A)))
     push!(action.new_stmts, stmt)
 
     ast.args[4] = SymbolNode(AT, A.typ)
@@ -389,12 +399,11 @@ const CS_ADAT_pattern = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
     (nothing, nothing, nothing, nothing, CS_transpose_pattern),
     CS_ADAT_check,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:ADB)),
-     :arg2, :arg3, :arg2),
+    (:call, GlobalRef(SparseAccelerator, :ADB), :a2, :a3, :a2),
     CS_ADAT_post_replacement,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:result, :arg2, :arg3, :arg4),
+    (:r, :a2, :a3, :a4),
     0,
     ()
 )
@@ -404,12 +413,11 @@ const CS_cholfact_int32_pattern = ExprPattern(
     (:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC{Float64, Int32}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_int32)),
-     :arg2),
+    (:call, GlobalRef(SparseAccelerator, :cholfact_int32), :a2),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     0,
     ()
 )
@@ -419,12 +427,11 @@ const CS_cholsolve_pattern = ExprPattern(
     (:call, GlobalRef(Main, :\), Factorization{Float64}, Any),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:cholfact_inverse_divide)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :cholfact_inverse_divide), :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     0,
     ()
 )
@@ -439,14 +446,13 @@ const CS_fwdTriSolve!_pattern = ExprPattern(
       SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     CS_fwdBwdTriSolve!_check,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:fwdTriSolve!)),
-      :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :fwdTriSolve!), :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     100,
-    (:arg2, :arg3)
+    (:a2, :a3)
 )
  
 @doc """
@@ -458,14 +464,13 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
       Any, Vector), #SparseMatrixCSC, Vector), # Somehow, type inference does not figure out U's type is SparseMatrixCSC
     (:NO_SUB_PATTERNS,),
     CS_fwdBwdTriSolve!_check,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:bwdTriSolve!)),
-      :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :bwdTriSolve!), :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     90,
-    (:arg2, :arg3)
+    (:a2, :a3)
 )
 
 @doc """
@@ -479,14 +484,13 @@ const CS_SpMV_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     1, :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV), 1, :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     40,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """ a * A * x + g => SpMV(a, A, x, 0, x, g) """
@@ -495,14 +499,13 @@ const CS_SpMV_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV), :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     40,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """ a * A * x => SpMV(a, A, x) """
@@ -511,14 +514,13 @@ const CS_SpMV_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :arg2, :arg3, :arg4),
+    (:call, GlobalRef(SparseAccelerator, :SpMV), :a2, :a3, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     40,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """
@@ -534,14 +536,14 @@ const CS_SpMV_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :result)
+    (:a3, :a4, :r)
 )
 
 @doc """
@@ -557,14 +559,14 @@ const CS_SpMV_pattern5 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Vector),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 1, :arg3, 0),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2_2, :a2_3, :a2_4, 1, :a3, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :arg6, :result)
+    (:a3, :a4, :a6, :r)
 )
 
 @doc """
@@ -580,15 +582,38 @@ const CS_SpMV_pattern6 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector, Vector),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, -1, :arg3, 0),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2_2, :a2_3, :a2_4, -1, :a3, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :arg6, :result)
+    (:a3, :a4, :a6, :r)
 )
+
+@doc """
+    (-1/a)*A*x + b*y => SpMV(-1/a, A, x, b, y)
+"""
+const CS_SpMV_pattern7 = ExprPattern(
+    "CS_SpMV_pattern7",
+    (:call, GlobalRef(Main, :+), 
+      Expr(:call, GlobalRef(Main, :/), 
+        Expr(:call, GlobalRef(Main, :-),      
+            Expr(:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector)),
+        Number),     
+      Expr(:call, GlobalRef(Main, :*), Number, Vector)), 
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+      TypedExprNode(Float64, :call, GlobalRef(Main, :/), -1, :a2_3), :a2_2_2_2, :a2_2_2_3, :a3_2, :a3_3),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:a3,),
+    70,
+    (:a3, :a4, :a6, :r)
+)            
 
 @doc """
 The following patterns are potentially related with SpMV!. In SpMP library, SpMV!
@@ -682,14 +707,14 @@ const CS_SpMV!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg2, :arg3, :arg4),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a2, :a3, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg3,),
+    (:a3,),
     50,
-    (:arg3, :arg4, :arg2) # Put seed (A) as the first
+    (:a3, :a4, :a2) # Put seed (A) as the first
 )
 
 @doc """ z = SpMV(a, A, x, b, y, g), z is x or y => SpMV!(z, a, A, x, b, y, g) """
@@ -702,31 +727,33 @@ const CS_SpMV!_pattern2 = ExprPattern(
     # TODO: uncomment this condition below after Linxiang's analysis works
     # LHS_in_RHS,
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, :aarg25, :aarg26, :aarg27),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg4,),
+    (:a4,),
     80,
-    (:arg4, :arg2, :arg5, :arg7) # Put seed (A) at the first
+    (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
-@doc """ x = a * A * x => SpMV!(x, a, A, x, 0, x, 0) """
+@doc """ w = a * A * x => SpMV!(w, a, A, x, 0, x, 0) """
 const CS_SpMV!_pattern3 = ExprPattern(
     "CS_SpMV!_pattern3",
-    (:(=), Vector, Vector),
-    (nothing, nothing, SpMV_3_parameters_pattern),
-    LHS_in_RHS,
-    (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, 0.0, :arg1, 0.0),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY),
+        Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+              Number, SparseMatrixCSC, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg4,),
+    (:a4,),
     60,
-    (:arg4, :arg2, :arg5) # Put seed (A) at the first
-)
+    (:a4, :a2, :a5) # Put seed (A) at the first
+)            
 
 @doc """ A_mul_B!(a, A, x, b, y) => SpMV!(y, a, A, x, b, y , 0) """
 const CS_SpMV!_pattern4 = ExprPattern(
@@ -734,17 +761,33 @@ const CS_SpMV!_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a6, :a2, :a3, :a4, :a5, :a6, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg4,),
+    (:a4,),
     70,
-    (:arg4, :arg2, :arg5, :arg7) # Put seed (A) at the first
+    (:a4, :a2, :a5, :a7) # Put seed (A) at the first
 )
 
-
+@doc """ z = SpMV(a, A, x, b, y), z has dedicated memory => SpMV!(z, a, A, x, b, y) """
+const CS_SpMV!_pattern5 = ExprPattern(
+    "CS_SpMV!_pattern5",
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY),
+        Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+             Number, SparseMatrixCSC, Vector, Number, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, 0),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:a4,),
+    80,
+    (:a4, :a2, :a5, :a7) # Put seed (A) at the first
+)
 
 @doc """ spmatmul_witheps(X, X', eps), X is symmetric => SpSquareWithEps(X, eps) """
 const SpSquareWithEps_pattern1 = ExprPattern(
@@ -752,12 +795,12 @@ const SpSquareWithEps_pattern1 = ExprPattern(
     (:call,   GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC,      Number),
     (nothing, nothing,                            nothing,         CS_transpose_pattern, nothing),
     SpSquareWithEps_check,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpSquareWithEps)),
-     :arg2, :arg4),
+    (:call, GlobalRef(SparseAccelerator, :SpSquareWithEps),
+     :a2, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
-    (:arg2,),
+    (:a2,),
     0,
     ()
 )
@@ -769,6 +812,7 @@ CS_transformation_patterns = [
     CS_cholsolve_pattern,
     CS_fwdTriSolve!_pattern,
     CS_bwdTriSolve!_pattern,
+    CS_SpMV_pattern7,
     CS_SpMV_pattern1,
     CS_SpMV_pattern2,
     CS_SpMV_pattern3,
@@ -777,8 +821,9 @@ CS_transformation_patterns = [
     CS_SpMV_pattern6,
     CS_SpMV!_pattern1,
     CS_SpMV!_pattern2,
-    # CS_SpMV!_pattern3, # Do not handle x = A * x case for now
+    CS_SpMV!_pattern3,
     # CS_SpMV!_pattern4] # Do not handle y = A * x + y case for now
+    CS_SpMV!_pattern5,
     SpSquareWithEps_pattern1
 ]
 
@@ -791,11 +836,11 @@ CS_transformation_patterns = [
 """
 const CS_SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "CS_SpMV!_two_statements_pattern1",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
       Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     (:(=), :f2, Expr(:call, GlobalRef(Main, :.*), :f2, Vector)),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :f2, :f3, :f4, :f5, :f6, :f7, :f8, :s2_3),
     (:(=), :f2, :f2),
     gather_context_sensitive_info,
@@ -832,7 +877,12 @@ function create_new_matrix_knob(
                          properties.is_structure_only,
                          properties.is_single_def))
     else
-        assert(properties.constant_structured) 
+        # It is true that usually a knob is created only for a constant structured
+        # matrix. But in principle, any matrix can have a knob, and the library
+        # can decide what to do based on the knob.
+        # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
+        # must be constant valued or structured.    
+        assert(properties.constant_structured || properties.is_structure_symmetric || !collective_structure_prediction_enabled) 
         new_stmt = Expr(:(=), mknob,
                     Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
                          properties.constant_valued, 
@@ -857,7 +907,7 @@ function create_propagate_matrix_info(
 )
     # Insert the propagation after the (assignment) statement.
     action = InsertBeforeOrAfterStatement(Vector{Statement}(), false, bb, stmt_idx)
-    stmt = Statement(-1, 
+    stmt = Statement(0, 
                      Expr(:call, GlobalRef(SparseAccelerator, :propagate_matrix_info), 
                            to_mknob, from_mknob))
     push!(action.new_stmts, stmt)
@@ -970,6 +1020,7 @@ function visit_expressions(
     L           = region.loop
     blocks      = cfg.basic_blocks
     symbol_info = call_sites.symbol_info
+    liveness    = call_sites.liveness
     for bb_idx in L.members
         bb                             = blocks[bb_idx]
         statements                     = bb.statements
@@ -984,6 +1035,8 @@ function visit_expressions(
                 continue
             end
 
+            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, liveness)
+
             if recursive
                 CompilerTools.AstWalker.AstWalk(expr, handler, call_sites)
             else
@@ -994,8 +1047,9 @@ function visit_expressions(
                 # Try to merge this and the previous expression
                 two_statements_handler(prev_expr, expr, call_sites, CS_two_statements_patterns)
             end
-            prev_expr                      = expr
-            call_sites.extra.prev_stmt_idx = stmt_idx
+            prev_expr                                 = expr
+            call_sites.extra.prev_stmt_idx            = stmt_idx
+           call_sites.extra.live_in_before_prev_expr = call_sites.extra.live_in_before_expr            
         end
     end
 end
@@ -1183,11 +1237,12 @@ function-specific context info (mknobs and fknobs).
 function context_sensitive_transformation(
     actions         :: Vector{Action},
     region          :: LoopRegion,
+    lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
     cfg             :: CFG
 )
-    matrix_properties = find_properties_of_matrices(region, symbol_info, liveness, cfg)
+    matrix_properties = find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
 
     # We need to walk the AST recursively twice: first, match/replace and gather
     # context info. We cannot add context info into the AST yet, because
@@ -1203,9 +1258,14 @@ function context_sensitive_transformation(
     dprintln(1, 0, "\nContext-sensitive transformation:")
     recursive      = true
     ast_may_change = true
-    call_sites = CallSites(Set{CallSite}(), region, symbol_info,
+    call_sites = CallSites(Set{CallSite}(), region, lambda, symbol_info, liveness,
                            CS_transformation_patterns,
                            actions, ContextExtra(matrix_properties, ast_may_change))
+    
+    #global trace_call_replacement = true
+    
+    # All patterns are non-splittable.
+    call_sites.extra.non_splitting_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
@@ -1236,6 +1296,8 @@ function context_sensitive_transformation(
     if reorder_enabled
         reordering(actions, region, symbol_info, liveness, cfg, call_sites)
     end
+    
+    #global trace_call_replacement = false
 end
 
 @doc """ 
@@ -1246,15 +1308,16 @@ function AST_context_sensitive_transformation(
     actions     :: Vector{Action},
     func_region :: FunctionRegion,
     regions     :: Vector{LoopRegion},
+    lambda      :: LambdaInfo,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG
 )
-    func_region.symbol_property = find_properties_of_matrices(func_region, symbol_info, liveness, cfg)
+    func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
 
     # Discover context info for each loop region
     for region in regions
-        context_sensitive_transformation(actions, region, symbol_info, liveness, cfg)
+        context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
     end
 
     dprintln(1, 0, "\nContext-sensitive actions to take:")

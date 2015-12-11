@@ -9,6 +9,32 @@ index a95a0b2..ec5c6dc 100644
  
  module CompilerTools
  
+diff --git a/src/function-descriptions.jl b/src/function-descriptions.jl
+index e902b83..cba1acf 100644
+--- a/src/function-descriptions.jl
++++ b/src/function-descriptions.jl
+@@ -55,6 +55,13 @@ const star2_Desc = FunctionDescription(
+     UPDATED_NONE,                     # No argument is updated
+ )
+ 
++const A_mul_B!_Desc = FunctionDescription(
++    "Main", 
++    "A_mul_B!",
++    (Vector{}, SparseMatrixCSC{}, Vector{}),
++    Set(1)
++)
++
+ const dot_Desc = FunctionDescription(
+     "Main", 
+     "dot",                            # Dot(x::Vector, y::Vector)
+@@ -186,6 +193,7 @@ function_descriptions  = [
+     star_Desc,
+     star1_Desc,
+     star2_Desc,
++    A_mul_B!_Desc,
+     dot_Desc,
+     copy_Desc,
+     add_vector_Desc,
 diff --git a/src/liveness.jl b/src/liveness.jl
 index f5c13f2..155f749 100644
 --- a/src/liveness.jl

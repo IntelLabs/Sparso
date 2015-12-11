@@ -1,24 +1,12 @@
 # --- begin: set_matrix_property inferface --->
 
-@doc """
-"""
-const SA_CONST_VALUED       = 1
-const SA_CONST_STRUCTURED   = 2
-const SA_SYMM_VALUED        = 4
-const SA_SYMM_STRUCTURED    = 8
-const SA_STRUCTURE_ONLY     = 16
-
 @doc """interface to explicitly specify matrix property in source code"""
 function set_matrix_property(
     pmap    :: Dict{Symbol, Int}
 ) 
 end
 
-const SA_LOWER_OF = 1
-const SA_UPPER_OF = 2
-const SA_TRANSPOSE_OF = 4
-
-@doc """specify that matrix A is the lower/upper part or transpose of B"""
+@doc """ specify that matrix A is the lower/upper part or transpose of B"""
 function set_matrix_property(
     A       :: Symbol,
     part_of :: Int,
@@ -55,6 +43,7 @@ type MatrixPropertyValues
     symmetric_valued        :: PropertyValue
     symmetric_structured    :: PropertyValue
     structure_only          :: PropertyValue
+    has_dedicated_memory    :: PropertyValue # this array (may be a matrix or vector) has a decidated memory space, so no worry of aliases or memory allocation.
     lower_of                :: PropertyValue
     upper_of                :: PropertyValue
     transpose_of            :: PropertyValue
@@ -64,7 +53,7 @@ type MatrixPropertyValues
                             PropertyValue(), PropertyValue(),
                             PropertyValue(), PropertyValue(),
                             PropertyValue(), PropertyValue(),
-                            nothing)
+                            PropertyValue(), nothing)
 end
 
 @doc "sorter for symbol indexed map"
@@ -75,7 +64,7 @@ function dprint_property_proxies(
     pmap    :: Dict 
 )
     val_or_nothing = (x) -> x.final_val == nothing ? "-" : x.final_val
-    dprintln(1, 1, "Sym : CV CS SV SS SO Lower Upper Trans")
+    dprintln(1, 1, "Sym : CV CS SV SS SO DM Lower Upper Trans")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
         dprintln(1, 1, k, " : ", 
@@ -84,6 +73,7 @@ function dprint_property_proxies(
                     val_or_nothing(v.symmetric_valued), "  ",
                     val_or_nothing(v.symmetric_structured), "  ",
                     val_or_nothing(v.structure_only), "  ",
+                    val_or_nothing(v.has_dedicated_memory), "  ",
                     val_or_nothing(v.lower_of), " ",
                     val_or_nothing(v.upper_of), " ",
                     val_or_nothing(v.transpose_of)
@@ -134,10 +124,19 @@ end
 Context used for analyzing one statement
 """
 type StmtContextArgs
-    changed             :: Set{Sym}              # symbols property has been changed?
-    property_map        :: Dict{Sym, PropertyValue}      # symbol -> property
-    local_map           :: Dict{Symexpr, PropertyValue}  # symbol|expr -> property
+    changed              :: Set{Sym}              # symbols property has been changed?
+    property_map         :: Dict{Sym, PropertyValue}      # symbol -> property
+    local_map            :: Dict{Symexpr, PropertyValue}  # symbol|expr -> property
     pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
+    live_in_before_expr  :: Set{Sym}
+
+    # Such patterns should be matched at the last, because otherwise, other 
+    # patterns may not be able to match what they should: they cannot find the
+    # subtrees to match, which are no longer in the same statement.    
+    # We call such patterns splitting patterns, and the other non-splitting.
+    # We can top-down match non-splitting patterns once, and bottom-up match
+    # all patterns (including splitting and non-splitting) once.
+    non_splitting_patterns :: Vector{ExprPattern}
 end
 
 @doc """
@@ -339,6 +338,7 @@ type RegionInfo
     depend_map          :: Dict 
     reverse_depend_map  :: Dict 
 
+    lambda              :: LambdaInfo
     symbol_info         :: Sym2TypeMap
     liveness            :: Liveness
     cfg                 :: CFG
@@ -349,13 +349,15 @@ type RegionInfo
     pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
 
     function RegionInfo(
-        region          :: Region, 
+        region          :: Region,
+        lambda          :: LambdaInfo,
         symbol_info     :: Sym2TypeMap,
         liveness        :: Liveness,
         cfg             :: CFG,
     )
         info = new()
         info.region = region
+        info.lambda = lambda
         info.symbol_info = symbol_info
         info.liveness = liveness
         info.cfg = cfg
@@ -381,9 +383,9 @@ type RegionInfo
         # dependence map: k -> symbols that k depends on
         info.depend_map = Dict{Sym, Set{Sym}}()
 
-        call_sites  = CallSites(Set{CallSite}(), region, symbol_info,
-                            [],
-                            Vector{Action}(), info.depend_map)
+        call_sites  = CallSites(Set{CallSite}(), region, lambda, symbol_info,
+                                liveness, [],
+                                Vector{Action}(), info.depend_map)
 
         info.constants = find_constant_values(region, liveness, cfg)
         info.single_defs = find_single_defs(region, liveness, cfg)
@@ -428,7 +430,8 @@ const prop_field_const_map = [
            (SA_CONST_STRUCTURED, :constant_structured),
            (SA_SYMM_VALUED, :symmetric_valued),
            (SA_SYMM_STRUCTURED, :symmetric_structured),
-           (SA_STRUCTURE_ONLY, :structure_only) ]
+           (SA_STRUCTURE_ONLY, :structure_only),
+           (SA_HAS_DEDICATED_MEMORY, :has_dedicated_memory)]
 
 @doc """
 Collect predefined maxtric property accoding from set_matrix_property statements
@@ -509,7 +512,7 @@ Data-flow based property propagate
 function propagate_property(
     property_map            :: Dict, 
     region_info             :: RegionInfo,
-    propagation_patterns    :: Array,
+    propagation_patterns    :: Vector, #{Pattern},
     ctx_arg_initializer     :: Any
 )
     assert(ctx_arg_initializer == nothing || isa(ctx_arg_initializer, Function))
@@ -519,12 +522,18 @@ function propagate_property(
     ctx_args = StmtContextArgs(Set{Sym}(), 
                 property_map, Dict{Expr, PropertyValue}(),
                 region_info.pattern_match_filter,
-                )
+                Set{Sym}(), Vector{Pattern}())
+    call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.lambda, 
+                            region_info.symbol_info,
+                            region_info.liveness, propagation_patterns,
+                            Vector{Action}(), ctx_args)
 
-    call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.symbol_info,
-                        propagation_patterns,
-                        Vector{Action}(), ctx_args)
 
+
+
+    # All patterns are non-splittable.
+    call_sites.extra.non_splitting_patterns = propagation_patterns
+    
     converged = false
     cnt = 0
     while !converged
@@ -540,6 +549,7 @@ function propagate_property(
             if ctx_arg_initializer != nothing
                 ctx_arg_initializer(ctx_args)
             end
+            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, region_info.liveness)
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
         end
         if !isempty(ctx_args.changed)
@@ -561,11 +571,12 @@ A region is currently defined as a loop region.
 """
 function find_properties_of_matrices(
     region          :: Region,
+    lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
     cfg             :: CFG,
 )
-    region_info = RegionInfo(region, symbol_info, liveness, cfg)
+    region_info = RegionInfo(region, lambda, symbol_info, liveness, cfg)
     region_name = region_info.name
 
     dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_info.name * " -----\n")
@@ -584,11 +595,12 @@ function find_properties_of_matrices(
 
     # symbol does not have a constant structure?
     property_proxies = find_predefined_properties(region_info)
+    predefined_symbols = keys(property_proxies)
 
     prop_fields = [:constant_valued, :constant_structured, 
                    :symmetric_valued, :symmetric_structured,
-                   :structure_only, 
-                   :lower_of, :upper_of, :transpose_of]
+                   :structure_only, :has_dedicated_memory,
+                   :lower_of, :upper_of, :transpose_of ]
 
     #inherite positive properties from parent
     if isa(region, LoopRegion)
@@ -647,7 +659,8 @@ function find_properties_of_matrices(
     dprint_property_proxies(property_proxies)
 
     # filter out matrix type
-    is_matrix_type = (x) -> any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+#    is_matrix_type = (x) ->  in(x, predefined_symbols) || any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+    is_matrix_type = (x) ->  any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
     mfilter = (x) -> filter(is_matrix_type, x)
     has_pos_val = (v) -> v.final_val != nothing && v.final_val != PROP_NEGATIVE_VAL
 
@@ -668,6 +681,9 @@ function find_properties_of_matrices(
 
     dprintln(1, 0, "\n" * region_name * " Structure only discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.structure_only), property_proxies))))
+
+    dprintln(1, 0, "\n" * region_name * " Has_dedicated_memory discovered:")
+    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.has_dedicated_memory), property_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Upper/Lower matrix discovered:")
     for k in sort_by_str_key(property_proxies)
@@ -712,6 +728,7 @@ function find_properties_of_matrices(
             matrix_properties[s].is_symmetric = get_pos_val_or_bool(p.symmetric_valued)
             matrix_properties[s].is_structure_symmetric = get_pos_val_or_bool(p.symmetric_structured)
             matrix_properties[s].is_structure_only = get_pos_val_or_bool(p.structure_only)
+            matrix_properties[s].has_dedicated_memory = get_pos_val_or_bool(p.has_dedicated_memory)
             matrix_properties[s].lower_of = p.lower_of.final_val
             matrix_properties[s].upper_of = p.upper_of.final_val
             matrix_properties[s].transpose_of = p.transpose_of.final_val

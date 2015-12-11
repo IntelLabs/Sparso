@@ -132,8 +132,16 @@ function ipm_ref(A, b, p) # A: constraint coefficients, b: constraint rhs, p: ob
 
   D = speye_int32(n)
   Rp = zeros(size(A, 1))
+  
+  # We need Rc to live into the loop so that we can create a temporary based on it.
+  # TODO: remove this statement after a solution is found.
+  Rc = zeros(x)
 
   for iter=1:200
+    set_matrix_property(Dict(
+        :Rc  => SA_HAS_DEDICATED_MEMORY,
+      )
+    )
 
     # compute residuals
     spmv_time -= time()

@@ -1,7 +1,7 @@
 include("../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER)#, SA_REPLACE_CALLS)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS, SA_USE_SPLITTING_PATTERNS)
 
 function mylogsumexp(b)
   # does logsumexp across column
@@ -100,11 +100,43 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
 
   t0 = time()
   it = 1
+
+  # Pre-allocation of space. Should get rid of once Linxiang's object removal works
+  # TODO: remove it.
+#  Xw    = Array(Cdouble, length(y))
+#  yXw   = Array(Cdouble, length(y))
+#  dfkp1 = Array(Cdouble, length(x)) 
+  temp  = Array(Cdouble, m)
+  Xw    = Array(Cdouble, m)
+  yXw   = Array(Cdouble, m)
+  dfk   = Array(Cdouble, n)
+  dfkp1 = Array(Cdouble, n) 
+  w     = Array(Cdouble, n)
+  dx    = Array(Cdouble, n)
+  
+#  temp = zeros(m)
+#  Xw = zeros(m)
+#  yXw = zeros(m)
+#  dfk = zeros(n)
+#  w = zeros(n)
+#  dx = zeros(n)
+
   for it=1:100
-    #set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
+    set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
+    set_matrix_property(Dict(
+        :temp  => SA_HAS_DEDICATED_MEMORY,
+        :Xw    => SA_HAS_DEDICATED_MEMORY,
+        :yXw   => SA_HAS_DEDICATED_MEMORY,
+        :dfk   => SA_HAS_DEDICATED_MEMORY,
+        :dfkp1 => SA_HAS_DEDICATED_MEMORY,
+        :w     => SA_HAS_DEDICATED_MEMORY,
+        :dx    => SA_HAS_DEDICATED_MEMORY,
+      )
+    )
 
     spmv_time -= time()
-    Xw = X*x
+    #Xw = X*x
+    A_mul_B!(Xw, X, x)
     spmv_time += time()
 
     yXw = y.*Xw
@@ -123,7 +155,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
 
     # Since Julia code for this is too slow we do this in C to show sufficient speedups by
     # faster SpMV. To be fair, the reference code also uses it.
-    dx = SparseAccelerator.lbfgs_compute_direction(k, it, n, S, Y, dfk)
+    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
 
     # backtracking line search using armijo criterion
     alphaMax = 1 # this is the maximum step length
@@ -182,7 +214,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
   x, it
 end
 
-function lbfgs_opt(X, y, lambda, xinit, tol, k)
+function lbfgs_opt(X, y, lambda, xinit, tol, k, with_context_opt)
   #@printf("%5s%10s%10s%10s\n", "Iter", "alpha", "|dfk|", "fk")
 
   spmv_time = 0
@@ -195,6 +227,7 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
 
   spmv_count = 0
 
+if with_context_opt
   mknobX = (SparseAccelerator.new_matrix_knob)(X, true, true, false, false, false, false)
   mknobXT = (SparseAccelerator.new_matrix_knob)(Xt, true, true, false, false, false, false)
 
@@ -210,11 +243,20 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
   (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv4)
   fknob_spmv5 = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(mknobXT, fknob_spmv5)
+else
+  fknob_spmv1 = C_NULL
+  fknob_spmv2 = C_NULL
+  fknob_spmv3 = C_NULL
+  fknob_spmv4 = C_NULL
+  fknob_spmv5 = C_NULL
+end
 
   S = zeros(n, k)
   Y = zeros(n, k)
 
   a = zeros(k, 1)
+
+  dx    = Array(Cdouble, n)
 
   t0 = time()
   it = 1
@@ -259,7 +301,7 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k)
     end
 
     direction_time -= time()
-    dx = SparseAccelerator.lbfgs_compute_direction(k, it, n, S, Y, dfk)
+    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -382,6 +424,8 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
 
   a = zeros(k, 1)
 
+  dx    = Array(Cdouble, n)
+
   t0 = time()
   it = 1
 
@@ -437,7 +481,7 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
     end
 
     direction_time -= time()
-    dx = SparseAccelerator.lbfgs_compute_direction(k, it, n, S, Y, dfk)
+    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -556,8 +600,12 @@ w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
 w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
 @printf("Original L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 
-w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3)
-w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3)
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, false)
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, false)
+@printf("Call-repl L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, true)
+w, it = lbfgs_opt(X, y, lambda, zeros(p), 1e-10, 3, true)
 @printf("Opt L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 
 w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
@@ -565,7 +613,16 @@ w, it = lbfgs_opt_with_reordering(X, y, lambda, zeros(p), 1e-10, 3)
 @printf("Opt_with_reordering L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
 # Expected output: L-BFGS: 33 iterations f = 0.33390367349181
 
+original_X = copy(X)
+original_y = copy(y)
 xinit, tol, k = zeros(p), 1e-10, 3
 @acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
-w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
+@printf("First accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
+# It seems that sparse accelerator generated code has updated xinit internally. That caused
+# strange behavior when lbfgs_ref is called again: it would return after only 1 iteration.
+
+X = original_X
+y = original_y
+xinit = zeros(p)
+@acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
 @printf("Accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])

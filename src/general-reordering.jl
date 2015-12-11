@@ -47,17 +47,22 @@ end
 The CallSites' extra field for reordering.
 """
 type ReorderingExtra
-    seed                   :: Sym
-    decider_ast            :: Expr
-    decider_bb             :: Any # BasicBlock
-    decider_stmt_idx       :: Int
-    bb                     :: Any # BasicBlock
-    stmt_idx               :: StatementIndex
-    prev_stmt_idx          :: StatementIndex
-    inter_dependence_graph :: InterDependenceGraph
+    seed                     :: Sym
+    decider_ast              :: Expr
+    decider_bb               :: Any # BasicBlock
+    decider_stmt_idx         :: Int
+    bb                       :: Any # BasicBlock
+    stmt_idx                 :: StatementIndex
+    prev_stmt_idx            :: StatementIndex
+    inter_dependence_graph   :: InterDependenceGraph
+
+    # Scratch variables.
+    live_in_before_prev_expr :: Set{Sym}
+    live_in_before_expr      :: Set{Sym}
 
     ReorderingExtra(_seed, _decider_ast) = new(_seed, _decider_ast,
-             nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed))
+             nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed),
+             Set{Sym}(), Set{Sym}())
 end
 
 @doc """
@@ -277,6 +282,59 @@ function build_inter_dependence_graph_for_getindex(
             build_vertices_and_edge(A, ast, relation, graph)
         end
     end
+end
+
+@doc """
+Build inter-dependence graph with the inter-dependence information drawn from
+the AST of a function call, if the call is setindex! or getindex.
+"""
+function build_inter_dependence_graph_for_set_get_index(
+    ast             :: Any,
+    module_name     :: AbstractString,
+    function_name   :: AbstractString,
+    arg_types       :: Tuple,
+    args            :: Vector,
+    graph           :: InterDependenceGraph,
+    handle_getindex :: Bool
+)
+    if module_name != "Main" || (function_name != "setindex!" && function_name != "getindex") 
+        return false
+    end
+
+    index2relations = handle_getindex ? getindex2relations : setindex!2relations 
+    for (skeleton, relations) in index2relations
+        # We cannot use match_skeletons(arg_types, skeleton), since arg_types
+        # contains a GlobalRef type, not a GlobalRef(Main, :(:)) (which is not a
+        # type, but an instantiation of the type).
+        matched = true
+        if length(args) == length(skeleton)
+            for i in 1 : length(skeleton)
+                if skeleton[i] == GlobalRef(Main, :(:))
+                    if args[i] != GlobalRef(Main, :(:))
+                        matched = false
+                        break
+                    end
+                else
+                    if !(arg_types[i] <: skeleton[i])
+                        matched = false
+                        break
+                    end
+                end
+            end
+        else
+            matched = false        
+        end
+
+        if matched
+            if handle_getindex 
+                build_inter_dependence_graph_for_getindex(ast, arg_types, args, relations, graph)
+            else
+                build_inter_dependence_graph_for_setindex!(ast, arg_types, args, relations, graph)
+            end
+            return true
+        end
+    end
+    return false
 end
 
 @doc """
