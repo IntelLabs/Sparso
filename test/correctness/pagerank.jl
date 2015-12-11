@@ -164,12 +164,12 @@ p = repmat([1/m], m)
 r = 0.15
 
 d = max(convert(Array{eltype(A0),1}, vec(sum(A0, 2))), 1) # num of neighbors
-A = scale(A0,1./d)
+d_inv = 1./d
+A = scale(A0,d_inv)
 
 maxiter = 100
 bytes = maxiter*(nnz(A)*4 + m*4*8)
 
-d_inv = 1./d
 x = pagerank(A0, p, r, d_inv, maxiter)
 println("\nOriginal: ")
 x = pagerank(A0, p, r, d_inv, maxiter)
