@@ -164,12 +164,12 @@ p = repmat([1/m], m)
 r = 0.15
 
 d = max(convert(Array{eltype(A0),1}, vec(sum(A0, 2))), 1) # num of neighbors
-d_inv = 1./d
-A = scale(A0,d_inv)
+A = scale(A0,1./d)
 
 maxiter = 100
 bytes = maxiter*(nnz(A)*4 + m*4*8)
 
+d_inv = 1./d
 x = pagerank(A0, p, r, d_inv, maxiter)
 println("\nOriginal: ")
 x = pagerank(A0, p, r, d_inv, maxiter)
@@ -224,6 +224,8 @@ println("\nAccelerated: ")
 SparseAccelerator.reset_spmp_spmv_time()
 SparseAccelerator.reset_knob_spmv_time()
 #SparseAccelerator.set_knob_log_level(1)
+# It seems that p has been changed by sparse accelerator
+p = repmat([1/m], m)
 @acc x = pagerank(A0, p, r, d_inv, maxiter)
 t = SparseAccelerator.get_spmp_spmv_time()
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")

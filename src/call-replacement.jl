@@ -1,5 +1,35 @@
 TypedExprNode(x...) = LivenessAnalysis.TypedExpr(x...)
 
+@doc """
+The CallSites' extra field for call replacement.
+"""
+type CallReplacementExtra
+    # Environment before the AST walking
+    matrix_properties        :: Symexpr2PropertiesMap
+
+    # Temporary variables created to represent the result of an expression.
+    expression_temporaries   :: Set{Sym}
+    
+    # Scratch variables.
+    live_in_before_prev_expr :: Set{Sym}
+    live_in_before_expr      :: Set{Sym}
+    bb                       :: Any              # BasicBlock
+    stmt_idx                 :: StatementIndex
+
+    # Some patterns (those contain :t1!2, etc.) may hoist some subtrees of the
+    # current statement before it. That splits one statement into more than one.
+    # Such patterns should be matched at the last, because otherwise, other 
+    # patterns may not be able to match what they should: they cannot find the
+    # subtrees to match, which are no longer in the same statement.
+    # We call such patterns splitting patterns, and the other non-splitting.
+    # We can top-down match non-splitting patterns once, and bottom-up match
+    # all patterns (including splitting and non-splitting) once.
+    non_splitting_patterns  :: Vector{Pattern}
+        
+    CallReplacementExtra(_matrix_properties) = new(_matrix_properties, 
+            Set{Sym}(), Set{Sym}(), Set{Sym}(), nothing, 0, Vector{Pattern}())
+end
+
 @doc """ Check if two variables are the same. """
 function same_variable(x :: Any, y :: Any)
     x1 = x
@@ -60,8 +90,8 @@ arg at that position, and any other pattern name means a sub pattern to match.
 
 Substitute is a tuple showing how to replace the Expr according to the pattern.
 Symbolic arguments are used here: :NO_CHANGE means that no replacement is needed
-(the pattern is for matching only); :arg1 means the Expr's args[1], :aarg12 means
-the Expr's args[1].args[2], :naarg12 means the negative :aarg12, etc.
+(the pattern is for matching only); :a1 means the Expr's args[1], :a1_2 means
+the Expr's args[1].args[2], :n1_2 means the negative :a1_2, etc.
 
 Pre_ and post_processing are optional call backs before and after replace. Usually
 they do nothing.
@@ -131,14 +161,57 @@ immutable TwoStatementsPattern <: Pattern
     reordering_FAR      :: Tuple
 end
 
+@doc """
+Argument Description. Used for describing an argument in a pattern.
+type_or_symbol: a type of, or a symbol for, an argument.
+properties:     a combination of properties. 
+relations:      relation with other argument/variable.
+ 
+For example,
+    AD(SparseMatrixCSC, SA_HAS_FREE_MEMORY | SA_CONST_VALUED, [(SA_TRANSPOSE_OF, :a1])
+means: the current argument has SparseMatrixCSC type, it has free memory
+available at the program point the argument is executed, it is 
+is constant valued (in the current region), and it is a transposition of
+args[1] in the same expression.
+
+For another example,
+    AD(:f2_3, SA_SYMM_STRUCTURED) 
+means that in a TwoStatementPattern, an argument that is the same as the 
+first_expr.args[2].args[3], and it is symmetric in structure.
+
+A symbol can be simple or more complicated like :a1_2, :f1_2, :s1_2, :n1, etc.
+For example:
+    :a1 means the current Expr's args[1], 
+    :a1_2 means the current Expr's args[1].args[2], 
+    :n1_2 means the negative :a1_2
+    :f1_2 means (in a TwoStatementPattern) first_expr.args[1].arg[2]
+    :s1_2 means (in a TwoStatementPattern) second_expr.args[1].arg[2]
+
+When you use AD, you need to describe at least properties or relations. 
+Otherwise, you can directly describe it in a type or a symbol, without using
+AD.
+"""
+type AD
+    type_or_symbol :: Any
+    properties     :: Int
+    relations      :: Vector{Tuple{Int, Symbol}}
+    
+    AD(_type_or_symbol, _properties :: Int) = 
+        new(_type_or_symbol, _properties, Vector{Tuple{Int, Symbol}}())
+    AD(_type_or_symbol, _relations :: Vector{Tuple{Int, Symbol}}) = 
+        new(_type_or_symbol, 0, _relations)
+    AD(_type_or_symbol, _properties :: Int, _relations :: Vector{Tuple{Int, Symbol}}) = 
+        new(_type_or_symbol, _properties, _relations)
+end
+
 # Below are the expr_patterns we care about.
 
 # Patterns that are used only for matching (sub-expressions).
 @doc """ SpMV(a, A, x) """
 const SpMV_3_parameters_pattern = ExprPattern(
     "SpMV_3_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     Number, SparseMatrixCSC, Vector),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+      Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -152,7 +225,7 @@ const SpMV_3_parameters_pattern = ExprPattern(
 
 const SpMV_4_parameters_pattern = ExprPattern(
     "SpMV_4_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
      Number, SparseMatrixCSC, Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -167,8 +240,8 @@ const SpMV_4_parameters_pattern = ExprPattern(
 
 const SpMV_6_parameters_pattern = ExprPattern(
     "SpMV_6_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     Number, SparseMatrixCSC, Vector, Number, Vector, Number),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+      Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -222,6 +295,7 @@ const number_times_vector_pattern = ExprPattern(
     ()
 )
 
+@doc """ x - a """
 const vector_minus_number_pattern = ExprPattern(
     "vector_minus_number_pattern",
     (:call, GlobalRef(Main, :-), Vector, Number),
@@ -236,6 +310,7 @@ const vector_minus_number_pattern = ExprPattern(
     ()
 )
 
+@doc """ x + a """
 const vector_add_number_pattern = ExprPattern(
     "vector_add_number_pattern",
     (:call, GlobalRef(Main, :+), Vector, Number),
@@ -250,10 +325,11 @@ const vector_add_number_pattern = ExprPattern(
     ()
 )
 
+@doc """ SparseAccelerator.WAXPBY(a, x, b, y) """
 const WAXPBY_4_parameters_pattern = ExprPattern(
     "WAXPBY_4_parameters_pattern",
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
-     Number, Vector, Number, Vector),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+      Number, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:NO_CHANGE, ),
@@ -272,8 +348,39 @@ const dot_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :dot), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:dot)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :dot), :a2, :a3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ norm(x)^2 ==> SparseAccelerator.dot(x, x)"""
+const dot_pattern2 = ExprPattern(
+    "dot_pattern2",
+    (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(Main, :norm), Vector), 2),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :dot),
+     :a2_2, :a2_2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ SparseAccelerator.norm(x)^2 ==> SparseAccelerator.dot(x, x)"""
+const dot_pattern3 = ExprPattern(
+    "dot_pattern3",
+    (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(SparseAccelerator, :norm), Vector), 2),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :dot),
+     :a2_2, :a2_2),
     do_nothing,
     "",
     "",
@@ -288,8 +395,7 @@ const norm_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :norm), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:norm)),
-     :arg2),
+    (:call, GlobalRef(SparseAccelerator, :norm), :a2),
     do_nothing,
     "",
     "",
@@ -304,8 +410,8 @@ const sum_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :sum), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum)),
-     :arg2),
+    (:call, GlobalRef(SparseAccelerator, :sum),
+     :a2),
     do_nothing,
     "",
     "",
@@ -321,8 +427,8 @@ const mean_pattern1 = ExprPattern(
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, GlobalRef(Main, :(/)),
-      TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:sum), :arg2),
-      TypedExprNode(Function, :call, TopNode(:getfield), :Base, QuoteNode(:arraylen), :arg2)
+      (:call, GlobalRef(SparseAccelerator, :sum), :a2),
+      (:call, GlobalRef(Base, :arraylen), :a2)
     ),
     do_nothing,
     "",
@@ -338,8 +444,8 @@ const minimum_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :minimum), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:minimum)),
-     :arg2),
+    (:call, GlobalRef(SparseAccelerator, :minimum),
+     :a2),
     do_nothing,
     "",
     "",
@@ -354,8 +460,27 @@ const abs!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :abs!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:abs!)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :abs!),
+     :a2, :a3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """
+    abs(x) ==> SparseAccelerator.abs!(temp, x), where temp is a temporary to be
+    generated by the compiler.
+"""
+const abs!_pattern2 = ExprPattern(
+    "abs!_pattern2",
+    (:call, GlobalRef(Main, :abs), Vector{Float64}),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :abs!),
+     :t2, :a2),
     do_nothing,
     "",
     "",
@@ -370,8 +495,8 @@ const exp!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :exp!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:exp!)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :exp!),
+     :a2, :a3),
     do_nothing,
     "",
     "",
@@ -380,14 +505,36 @@ const exp!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ log1p!(w, x) ==> SparseAccelerator.log1p!(w, x)"""
+@doc """
+    exp(x) ==> SparseAccelerator.exp!(temp, x), where temp is a temporary to be
+    generated by the compiler.
+"""
+const exp!_pattern2 = ExprPattern(
+    "exp!_pattern2",
+    (:call, GlobalRef(Main, :exp), Vector{Float64}),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :exp!),
+     :t2, :a2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """
+    log(1 + x) ==> SparseAccelerator.log1p!(temp, x), where temp is a temporary to be
+    generated by the compiler.
+"""
 const log1p!_pattern1 = ExprPattern(
     "log1p!_pattern1",
-    (:call, GlobalRef(Main, :log1p!), Vector, Vector),
+    (:call, GlobalRef(Main, :log), Expr(:call, GlobalRef(Main, :+), 1, Vector{Float64})),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:log1p!)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :log1p!),
+     :t2_3, :a2_3), # If use :t2 instead of :t2_3, since arg2 is an Expr and thus will be hoisted ahead of the statement and replaced with a symbol, the next :a2_3 will be meaningless.
     do_nothing,
     "",
     "",
@@ -396,14 +543,40 @@ const log1p!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ min!(w, x) ==> SparseAccelerator.min!(w, x)"""
+@doc """
+    log(SparseAccelerator.WAXPB!(temp, 1, x, 1) ==> SparseAccelerator.log1p!(temp, x), 
+    where temp is a temporary already generated by the compiler. We can use
+    temp as the result of log because a temp is only used in the tree and only once,
+    so that we are sure it will not be used outside the tree, nor used by any other 
+    nodes in the tree.
+"""
+const log1p!_pattern2 = ExprPattern(
+    "log1p!_pattern2",
+    (:call, GlobalRef(Main, :log), 
+      Expr(:call, GlobalRef(SparseAccelerator, :WAXPB!), Vector{Float64}, 1, Vector{Float64}, 1)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :log1p!),
+     :t2_2, :a2_4), # If use :t2 instead of :t2_2, since arg2 is an Expr and thus will be hoisted ahead of the statement and replaced with a symbol, the next :a2_4 will be meaningless.
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """
+    min(x, a) ==> SparseAccelerator.min!(temp, x, a), where temp is a temporary to be
+    generated by the compiler.
+"""
 const min!_pattern1 = ExprPattern(
     "min!_pattern1",
-    (:call, GlobalRef(Main, :min!), Vector, Vector),
+    (:call, GlobalRef(Main, :min), Vector{Float64}, Number),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:min!)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :min!),
+     :t2, :a2, :a3),
     do_nothing,
     "",
     "",
@@ -412,14 +585,31 @@ const min!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x)"""
+@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x) """
 const copy!_pattern1 = ExprPattern(
     "copy!_pattern1",
     (:call, GlobalRef(Main, :copy!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:copy!)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :copy!), :a2, :a3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """
+    copy(x) ==> SparseAccelerator.copy!(temp, x), where temp is a temporary to be
+    generated by the compiler.
+"""
+const copy!_pattern2 = ExprPattern(
+    "copy!_pattern2",
+    (:call, GlobalRef(Main, :copy), Vector{Float64}),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :copy!), :t0!2, :a2),
     do_nothing,
     "",
     "",
@@ -434,8 +624,8 @@ const SpMV_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2, :a3),
     do_nothing,
     "",
     "",
@@ -450,8 +640,8 @@ const SpMV_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     do_nothing,
     "",
     "",
@@ -466,8 +656,8 @@ const SpMV_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :arg2, :arg3, :arg4),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2, :a3, :a4),
     do_nothing,
     "",
     "",
@@ -482,8 +672,8 @@ const SpMV_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
-     :aarg22, :aarg23, :aarg24, 0, :aarg24, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     do_nothing,
     "",
     "",
@@ -492,14 +682,39 @@ const SpMV_pattern4 = ExprPattern(
     ()
 )
 
+@doc """
+    -(A*x)/a + b*y => SpMV(-1/a, A, x, b, y)
+TODO: check why AST walker matches subtrees first, and make it match a parent
+tree first. That would make his pattern work.
+"""
+const SpMV_pattern5 = ExprPattern(
+    "SpMV_pattern5",
+    (:call, GlobalRef(Main, :+), 
+      Expr(:call, GlobalRef(Main, :/), 
+        Expr(:call, GlobalRef(Main, :-),      
+              Expr(:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector)),
+        Number),     
+      Expr(:call, GlobalRef(Main, :*), Number, Vector)), 
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV),
+     Expr(:call, GlobalRef(Main, :/), -1, :a2_3), :a2_2_2_2, :a2_2_2_3, :a3_2, :a3_3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)            
+            
 @doc """ A_mul_B!(y, A, x) = SpMV!(y, A, x) """
 const SpMV!_pattern1 = ExprPattern(
     "SpMV!_pattern1",
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg2, :arg3, :arg4),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a2, :a3, :a4),
     do_nothing,
     "",
     "",
@@ -508,14 +723,14 @@ const SpMV!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ z = SpMV(a, A, x, b, y, g), z is x or y => SpMV!(z, a, A, x, b, y, g) """
+@doc """ z = SpMV(a, A, x, b, y, g) => SpMV!(z, a, A, x, b, y, g) """
 const SpMV!_pattern2 = ExprPattern(
     "SpMV!_pattern2",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_6_parameters_pattern),
-    LHS_in_RHS,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, :aarg25, :aarg26, :aarg27),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     do_nothing,
     "",
     "",
@@ -524,14 +739,14 @@ const SpMV!_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ x = a * A * x => SpMV!(x, a, A, x, 0, x, 0) """
+@doc """ y = a * A * x => SpMV!(y, a, A, x, 0, x, 0) """
 const SpMV!_pattern3 = ExprPattern(
     "SpMV!_pattern3",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_3_parameters_pattern),
-    LHS_in_RHS,
-    (TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg1, :aarg22, :aarg23, :aarg24, 0.0, :arg1, 0.0),
+    do_nothing,
+    (GlobalRef(SparseAccelerator, :SpMV!),
+     :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     do_nothing,
     "",
     "",
@@ -546,8 +761,8 @@ const SpMV!_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
-     :arg6, :arg2, :arg3, :arg4, :arg5, :arg6, 0.0),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+     :a6, :a2, :a3, :a4, :a5, :a6, 0.0),
     do_nothing,
     "",
     "",
@@ -561,8 +776,8 @@ const WAXPBY_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Vector),
     (nothing, nothing, nothing, number_times_vector_pattern),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
-     1, :arg2, :aarg32, :aarg33),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+     1, :a2, :a3_2, :a3_3),
     do_nothing,
     "",
     "",
@@ -576,8 +791,8 @@ const WAXPBY_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector, Vector),
     (nothing, nothing, nothing, number_times_vector_pattern),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
-     1, :arg2, :naarg32, :aarg33),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+     1, :a2, :n3_2, :a3_3),
     do_nothing,
     "",
     "",
@@ -586,13 +801,15 @@ const WAXPBY_pattern2 = ExprPattern(
     ()
 )
 
+@doc """ z = SparseAccelerator.WAXPBY(a, x, b, y) => SparseAccelerator.WAXPBY!(z, a, x, b, y) """
 const WAXPBY!_pattern1 = ExprPattern(
     "WAXPBY!_pattern1",
-    (:(=), Vector, Vector),
-    (nothing, nothing, WAXPBY_4_parameters_pattern),
-    LHS_in_RHS,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
-     :arg1, :aarg22, :aarg23, :aarg24, :aarg25),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), 
+           Expr(:call, GlobalRef(SparseAccelerator, :WAXPBY), Number, Vector, Number, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+     :a1, :a2_2, :a2_3, :a2_4, :a2_5),
     do_nothing,
     "",
     "",
@@ -601,13 +818,52 @@ const WAXPBY!_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ 
+x - y => SparseAccelerator.WAXPBY!(temp, 1, x, -1, y) , where temp is a temporary
+to be generated by the compiler.
+"""
+const WAXPBY!_pattern2 = ExprPattern(
+    "WAXPBY!_pattern2",
+    (:call, GlobalRef(Main, :-), Vector{Float64}, Vector{Float64}),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+     :t2!3, 1, :a2, -1, :a3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ 
+ -x => SparseAccelerator.WAXPBY!(temp, -1, x, 0, x) , where temp is a temporary
+to be generated by the compiler.
+"""
+const WAXPBY!_pattern3 = ExprPattern(
+    "WAXPBY!_pattern3",
+    (:call, GlobalRef(Main, :-), Vector{Float64}),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+     :t2, -1, :a2, 0, :a2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ w = x - a => SparseAccelerator.WAXPB!(w, 1, x, -a)"""
 const WAXPB!_pattern1 = ExprPattern(
     "WAXPB!_pattern1",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_minus_number_pattern),
-    LHS_in_RHS,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
-     :arg1, 1, :arg1, :naarg23),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
+     :a1, 1, :a2_2, :n2_3),
     do_nothing,
     "",
     "",
@@ -616,13 +872,14 @@ const WAXPB!_pattern1 = ExprPattern(
     ()
 )
 
+@doc """ w = x + a => SparseAccelerator.WAXPB!(w, 1, x, a)"""
 const WAXPB!_pattern2 = ExprPattern(
     "WAXPB!_pattern2",
-    (:(=), Vector, Vector),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_add_number_pattern),
-    LHS_in_RHS,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPB!)),
-     :arg1, 1, :arg1, :aarg23),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
+     :a1, 1, :a2_2, :a2_3),
     do_nothing,
     "",
     "",
@@ -631,14 +888,33 @@ const WAXPB!_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ w = x.*y => w = element_wise_multiply(x, y) """
+@doc """ 
+a + x => SparseAccelerator.WAXPB!(temp, 1, x, a), where temp is a temporary
+to be genreated by the compiler.
+"""
+const WAXPB!_pattern3 = ExprPattern(
+    "WAXPB!_pattern3",
+    (:call, GlobalRef(Main, :+), Number, Vector),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
+     :t3, 1, :a3, :a2),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ x.*y => w = element_wise_multiply(x, y) """
 const element_wise_multiply_pattern1 = ExprPattern(
     "element_wise_multiply_pattern1",
     (:call, GlobalRef(Main, :.*), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_multiply)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :element_wise_multiply),
+     :a2, :a3),
     do_nothing,
     "",
     "",
@@ -647,14 +923,48 @@ const element_wise_multiply_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ w = x ./ y => w = element_wise_divide(x, y) """
+@doc """ w = x .* y => SparseAccelerator.element_wise_multiply!(w, x, y)"""
+const element_wise_multiply!_pattern1 = ExprPattern(
+    "element_wise_multiply!_pattern1",
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), 
+        Expr(:call, GlobalRef(SparseAccelerator, :element_wise_multiply), Vector, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :element_wise_multiply!),
+     :a1, :a2_2, :a2_3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ x ./ y => element_wise_divide(x, y) """
 const element_wise_divide_pattern1 = ExprPattern(
     "element_wise_divide_pattern1",
     (:call, GlobalRef(Main, :./), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:element_wise_divide)),
-     :arg2, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :element_wise_divide),
+     :a2, :a3),
+    do_nothing,
+    "",
+    "",
+    (),
+    0,
+    ()
+)
+
+@doc """ w = x ./ y => SparseAccelerator.element_wise_divide!(w, x, y)"""
+const element_wise_divide!_pattern1 = ExprPattern(
+    "element_wise_divide!_pattern1",
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), 
+        Expr(:call, GlobalRef(SparseAccelerator, :element_wise_divide), Vector, Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :element_wise_divide!),
+     :a1, :a2_2, :a2_3),
     do_nothing,
     "",
     "",
@@ -669,8 +979,8 @@ const trace_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :trace), SparseMatrixCSC),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:trace)),
-     :arg2),
+    (:call, GlobalRef(SparseAccelerator, :trace),
+     :a2),
     do_nothing,
     "",
     "",
@@ -690,8 +1000,8 @@ const SpAdd_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :-), SparseMatrixCSC{Float64, Int32}, SparseMatrixCSC{Float64, Int32}),
     (nothing, nothing,           number_times_matrix_pattern, nothing),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpAdd)),
-     :aarg22, :aarg23, -1, :arg3),
+    (:call, GlobalRef(SparseAccelerator, :SpAdd),
+     :a2_2, :a2_3, -1, :a3),
     do_nothing,
     "",
     "",
@@ -702,16 +1012,23 @@ const SpAdd_pattern1 = ExprPattern(
 
 expr_patterns = [
     dot_pattern1,
+    dot_pattern2,
+    dot_pattern3,
     norm_pattern1,
     sum_pattern1,
     #mean_pattern1, #ISSUE: this pattern requires replacement of arguments in a sub-tree. #TODO: enalble matching and replacing a tree with multiple levels.
     minimum_pattern1, 
-    abs!_pattern1, 
-    exp!_pattern1, 
+    abs!_pattern1,
+    abs!_pattern2, 
+    exp!_pattern1,
+    exp!_pattern2,
     log1p!_pattern1, 
+    log1p!_pattern2, 
     min!_pattern1,
     copy!_pattern1,
+    copy!_pattern2,
     #WAXPBY_pattern,
+    SpMV_pattern5,
     SpMV_pattern1,
     SpMV_pattern2,
     SpMV_pattern3,
@@ -723,10 +1040,15 @@ expr_patterns = [
     WAXPBY_pattern1,
     WAXPBY_pattern2,
     WAXPBY!_pattern1,
+    WAXPBY!_pattern2,
+    WAXPBY!_pattern3,
     WAXPB!_pattern1,
     WAXPB!_pattern2,
+    WAXPB!_pattern3,
     element_wise_multiply_pattern1,
+    element_wise_multiply!_pattern1,
     element_wise_divide_pattern1,
+    element_wise_divide!_pattern1,
     trace_pattern1,
     SpAdd_pattern1
     #WAXPBY!_pattern,
@@ -742,11 +1064,11 @@ expr_patterns = [
 const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "SpMV!_two_statements_pattern1",
     (:(=), Any, 
-           Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV)),
+           Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
                  Number, SparseMatrixCSC, Vector, Number, Vector, Number)),
-    (:(=), Vector, :f1),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:SpMV!)),
+    (:call, GlobalRef(SparseAccelerator, :SpMV!),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5, :f2_6, :f2_7),
     (:(=), :f1, :s1),
     do_nothing,
@@ -767,11 +1089,11 @@ const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
 const WAXPBY!_two_statements_pattern1 = TwoStatementsPattern(
     "WAXPBY!_two_statements_pattern1",
     (:(=), Any,
-           Expr(:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY)),
+           Expr(:call, GlobalRef(SparseAccelerator, :WAXPBY),
                  Number, Vector, Number, Vector)),
-    (:(=), Vector, :f1),
+    (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
-    (:call, TypedExprNode(Function, :call, TopNode(:getfield), :SparseAccelerator, QuoteNode(:WAXPBY!)),
+    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5),
     (:(=), :f1, :s1),
     do_nothing,
@@ -806,64 +1128,209 @@ function expr_skeleton(
 end
 
 @doc """ 
-Use the real argument in args to replace the symbolic arg (like :e1).
+Use the real argument in args to replace arg, the symbolic argument. Return
+the real argument.
 First/second_expr are used only when replacing a two-statements pattern.
 """
 function replacement_arg(
-    arg         :: Any,    # Symbolic arg to replace
-    args        :: Vector, # Real arguments
-    result      :: Any,
-    symbol_info :: Sym2TypeMap,
-    first_expr  :: Any = nothing,
-    second_expr :: Any = nothing
+    arg                 :: Any,    # Symbolic arg to replace
+    real_args           :: Vector, # Real arguments
+    result              :: Any,
+    call_sites          :: CallSites,
+    first_expr          :: Any = nothing,
+    second_expr         :: Any = nothing,
+    trace_pattern_match :: Bool = false              
+    
 )
+    if trace_pattern_match
+        println("\tReplacing arg: ", arg, " real_args: ", real_args)
+        flush(STDOUT)
+    end
+    
+    symbol_info = call_sites.symbol_info
     if typeof(arg) == Symbol
         arg_string = string(arg)
-        if length(arg_string) == 6 && arg_string[1 : 6] == "result" 
+        if arg == :r 
             # This refers to the result arg of expr.
             assert(result != nothing)
             arg = result
-        elseif length(arg_string) > 3 && arg_string[1 : 3] == "arg" 
-            # This refers to an arg in the form of argx. For
-            # example, arg3 means args[3]
-            x   = Int(arg_string[4]) - Int('0')
-            arg = args[x]
-        elseif length(arg_string) > 4 && arg_string[1 : 4] == "aarg"
-            # This refers to a sub expression's arg in the form of aargxy. For
-            # example, aarg31 means args[3].args[1]
-            x = Int(arg_string[5]) - Int('0')
-            y = Int(arg_string[6]) - Int('0')
-            arg = args[x].args[y]
-        elseif length(arg_string) > 5 && arg_string[1 : 5] == "naarg"
-            # This refers to a sub expression's arg in the form of aargxy. For
-            # example, aarg31 means args[3].args[1]
-            x   = Int(arg_string[6]) - Int('0')
-            y   = Int(arg_string[7]) - Int('0')
-            arg = args[x].args[y]
-            arg = TypedExprNode(type_of_ast_node(arg, symbol_info), :call, :(-), arg)
-        elseif length(arg_string) > 1 && (arg_string[1] == 'f' || arg_string[1] == 's')
-            # f/s means first/second_expr.
+        elseif length(arg_string) > 1 && (arg_string[1] == 't')
+            arg = get_temporary(arg_string, real_args, result, call_sites)
+        elseif length(arg_string) > 1 && (arg_string[1] == 'f' || arg_string[1] == 's' ||
+            arg_string[1] == 'n' || arg_string[1] == 'a')
+            # a means "argument"; n means "negative of the argument".
+            # f/s means a first/second_expr's argument.
             #   f3 means   first_expr.args[3].
             #   f3_1 means first_expr.args[3].args[1]
             #   s3 means   second_expr.args[3].
             #   s3_1 means second_expr.args[3].args[1]
-            # TODO: Get rid of "arg" and "aarg", and replace them all with f or s.
-            assert(first_expr  != nothing)
-            assert(second_expr != nothing)
+            assert((arg_string[1] != 'f' && arg_string[1] != 's')|| first_expr  != nothing)
+            assert((arg_string[1] != 'f' && arg_string[1] != 's')|| second_expr != nothing)
             indexes = split(arg_string[2 : end], "_")
             x = parse(Int, indexes[1])
             if arg_string[1] == 'f'
                 arg = first_expr.args[x]
-            else
+            elseif arg_string[1] == 's'
                 arg = second_expr.args[x]
+            else
+                arg = real_args[x]
             end 
+            
             for i in 2 : length(indexes)
                 x = parse(Int, indexes[i])
                 arg = arg.args[x]
             end         
+
+            if arg_string[1] == 'n'
+                arg = TypedExprNode(type_of_ast_node(arg, symbol_info), :call, :(-), arg)
+            end
         end
+    elseif typeof(arg) == Expr
+        new_expr = copy(arg)
+        empty!(new_expr.args)
+        for a in arg.args
+            new_a = replacement_arg(a, real_args, result, call_sites, first_expr, second_expr, trace_pattern_match) 
+            push!(new_expr.args, new_a)
+        end
+        arg = new_expr
     end
     arg
+end
+
+@doc """
+Get a temporary as specified by a symbolic argument in a pattern.
+Arg_string is the string of the symbolic argument, starting with 't'.
+"t1_2!3!4" means the argument can be replaced by any of real_args[1].args[2], 
+real_args[3], and real_args[4], as long as it is a temporary in an expression.
+If none of them is a temporary, a temporary has to be created and allocated
+memory, and the corresponding action is recorded.
+"t0!1_2!3!4" is special: when a number right after 't' is 0, it means that a
+temporary has to be created and allocated, and any of the arguments showing
+there can be used to extract the size (and type) info.
+"""
+function get_temporary(
+    arg_string :: AbstractString,
+    real_args  :: Vector,
+    result              :: Any,    
+    call_sites :: CallSites
+)
+    assert(length(arg_string) > 1 && (arg_string[1] == 't'))
+    # So far, :t.. is used only in patterns in the call replacement phase.
+    assert(typeof(call_sites.extra) == CallReplacementExtra)
+
+    symbol_info     = call_sites.symbol_info
+    possibilities   = split(arg_string[2 : end], "!")
+    reuse_temp      = true
+    example         = nothing # A symbol based on which to create a new temporary, if necessary
+
+    # An argument, which is a sub expression, might have to be hoisted before
+    # the current statement, in order to create a temporary. This hoist canidate
+    # is recorded in terms of args[x]. 
+    hoist_candidate_args = nothing
+    hoist_candidate_x    = 0
+
+    for i in 1 : length(possibilities)
+        indexes = split(possibilities[i], "_")
+        x       = parse(Int, indexes[1])
+        if x == 0
+            # "t0" means a temporary has to be created and allocated
+            reuse_temp = false
+            assert(length(indexes) == 1)
+            continue
+        end
+        args = real_args
+        arg  = args[x]
+        for j in 2 : length(indexes)
+            x = parse(Int, indexes[j])
+            args = arg.args
+            arg  = args[x]
+        end         
+        
+        # Now the specified argument is found. See if it can reused.
+        # So far, "t1_2!3!4" etc. is used only for expressing a vector, and only
+        # for Float64 element type
+        assert(type_of_ast_node(arg, symbol_info) <: Vector{Float64})
+        if in(arg, call_sites.extra.expression_temporaries)
+            if reuse_temp
+                return arg
+            else
+                example = get_symexpr(arg)
+                break
+            end
+        else
+            s = get_symexpr(arg)
+            if typeof(s) <: Sym
+                example = s
+                break
+            else
+                assert(typeof(s) == Expr)
+                if hoist_candidate_args == nothing
+                    hoist_candidate_args = args
+                    hoist_candidate_x    = x
+                end
+            end
+        end
+    end
+
+    # Create a temporary
+    #temp = gensym("temp")
+    len  = length(call_sites.extra.expression_temporaries)
+    temp = Symbol(string("__", "temp", string(len), "__"))
+    push!(call_sites.extra.expression_temporaries, temp)
+#println("****gen:", temp)
+        
+    # Make the new temporary memory allocated.
+    lambda   = call_sites.lambda
+    bb       = call_sites.extra.bb
+    stmt_idx = call_sites.extra.stmt_idx
+    
+    # TODO: uncomment this statement. And remove the hack
+    #   action   = InsertBeforeOrAfterStatement(Vector{Statement}(), true, bb, stmt_idx)
+    #   push!(call_sites.actions, action)
+    
+    # ISSUE: what if the example is NOT live into the loop? How can we make a temporary
+    # based on it before the loop?
+    # A possible solution: create a dynamic global count so that it creates the
+    # temporary right before the statement, but only once: only when the dynamic count is
+    # less than the temporary's static index number.
+    if example != nothing
+        typ               = type_of_ast_node(example, symbol_info)
+        symbol_info[temp] = typ 
+        addLocalVariable(temp, typ, 2 | 16, lambda) # 2: assigned 16: statically assigned only once
+        stmt = Statement(0, Expr(:(=), temp, 
+                                  TypedExprNode(typ,:call, :Array, :Cdouble, 
+                                        Expr(:call, TopNode(:arraylen), 
+                                              SymbolNode(example, typ)))))
+                                              
+        if typeof(call_sites.region) == FunctionRegion
+            action = InsertBeforeOrAfterStatement(Vector{Statement}(), true, bb, stmt_idx)
+        else
+            # HACK!!! We cannot really insert the generating of a temporary before a loop, 
+            # without knowing alias information. This is only for now.
+            # TODO: remove the hack.
+            assert(typeof(call_sites.region) == LoopRegion)
+            action = InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
+        end
+    else
+        # Hoist the candidate, which must be an expression, to be before the
+        # statement in order to create a temporary
+        # Note: In future, with alias info, we might be able to hoist the candiate
+        # as far as possible, even to be before the loop: that becomes loop
+        # invariant hoisting.
+        assert(hoist_candidate_args != nothing)
+        candidate         = hoist_candidate_args[hoist_candidate_x]
+        typ               = type_of_ast_node(candidate, symbol_info)
+        symbol_info[temp] = typ
+        addLocalVariable(temp, typ, 2 | 16, lambda) # 2: assigned 16: statically assigned only once
+        
+        stmt                                    = Statement(0, TypedExprNode(typ, :(=), temp, candidate))
+        hoist_candidate_args[hoist_candidate_x] = SymbolNode(temp, typ)
+
+        action = InsertBeforeOrAfterStatement(Vector{Statement}(), true, bb, stmt_idx)
+    end
+    push!(call_sites.actions, action)
+    push!(action.new_stmts, stmt)
+    return temp
 end
 
 @doc """
@@ -875,10 +1342,12 @@ first or second_expr.
 function replace(
     substitute                 :: Tuple,
     expr                       :: Expr,
-    symbol_info                :: Sym2TypeMap,
+    call_sites                 :: CallSites,
     first_expr                 :: Any,
     second_expr                :: Any,
-    expr_is_copy_of_first_expr :: Bool
+    expr_is_copy_of_first_expr :: Bool,
+    trace_pattern_match        :: Bool = false              
+
 )
     if length(substitute) == 1 && substitute[1] == :NO_CHANGE
         return false
@@ -887,36 +1356,80 @@ function replace(
     expr.head = substitute[1]
     empty!(expr.args)
     for i = 2 : length(substitute)
-        arg = replacement_arg(substitute[i], 
+        arg = replacement_arg(substitute[i],
                 expr_is_copy_of_first_expr ? first_expr.args : second_expr.args,
-                nothing, symbol_info, first_expr, second_expr)
+                expr, call_sites, first_expr, second_expr, trace_pattern_match)
         push!(expr.args, arg)
     end
     return true
 end
 
 function replace(
-    substitute  :: Tuple,
-    expr        :: Expr,
-    symbol_info :: Sym2TypeMap,
+    substitute          :: Tuple,
+    expr                :: Expr,
+    call_sites          :: CallSites,
+    trace_pattern_match :: Bool = false              
 ) 
     expr_backup  = copy(expr)
-    replace(substitute, expr, symbol_info, expr_backup, nothing, true)
+    replace(substitute, expr, call_sites, expr_backup, nothing, true, trace_pattern_match)
+end
+
+@doc """
+Check if the argument has the properties. This currently happens when in a 
+pattern, a skeleton specifies some properties to check. 
+Live_in_before_expr is the live in set before the first statement in the pattern.
+"""
+function check_properties(
+    arg                 :: Any,
+    properties          :: Int,
+    call_sites          :: CallSites,
+    live_in_before_expr :: Set{Sym},
+)
+    # So far, we only have SA_HAS_FREE_MEMORY property, if any.
+    assert(properties == 0 || properties == SA_HAS_FREE_MEMORY)
+    if properties & SA_HAS_FREE_MEMORY != 0
+        if typeof(arg) <: Sym || typeof(arg) == SymbolNode
+            arg = get_symexpr(arg)
+            if haskey(call_sites.extra.matrix_properties, arg)
+                if call_sites.extra.matrix_properties[arg].has_dedicated_memory
+                    return true
+                end
+            end
+        end
+        
+        # ISSUE: this is a hack: even if the arg is live into the pattern,
+        # it is still possible that the arg is pointed to by another variable,
+        # and thus is not free. Also, even if it does have a free memory, we
+        # need to ensure that GC has not collected it (Thus compiler needs to 
+        # pin it in some way)
+        if in(get_symexpr(arg), live_in_before_expr)
+            return true
+        end
+    end
+    return false
 end
 
 @doc """ 
 Match the expr's skeleton with the pattern's skeleton. Return true if matched.
+Live_in_before_expr is the live in set before the first statement of the pattern.
 First/second_expr are used only when matching a two-statements pattern, where
 expr is part or whole of first/second_expr. 
 """
 function match_skeletons(
-    expr             :: Expr,
-    pattern_skeleton :: Tuple,
-    symbol_info      :: Sym2TypeMap,    
-    first_expr       :: Any = nothing,
-    second_expr      :: Any = nothing,          
+    expr                :: Expr,
+    pattern_skeleton    :: Tuple,
+    call_sites          :: CallSites,
+    live_in_before_expr :: Set{Sym},
+    first_expr          :: Any = nothing,
+    second_expr         :: Any = nothing,
+    trace_pattern_match :: Bool = false          
 )
-    skeleton = expr_skeleton(expr, symbol_info)
+    symbol_info = call_sites.symbol_info
+    skeleton    = expr_skeleton(expr, symbol_info)
+    if trace_pattern_match
+        println("\t skeleton: ", skeleton)
+    end
+
     if length(skeleton) == length(pattern_skeleton)
         if (skeleton[1] == pattern_skeleton[1])
             # So far, we handle only call or assignment
@@ -926,7 +1439,12 @@ function match_skeletons(
                 # Thus expr.args[i - 1] corresponds to pattern_skeleton[i]
                 real_arg = expr.args[i - 1]      
 
-                typ = typeof(pattern_skeleton[i]) 
+                typ = typeof(pattern_skeleton[i])
+                
+                if trace_pattern_match
+                    println("\t pattern_skeleton[", i, "]=", pattern_skeleton[i], "::", typ)
+                end
+                
                 if typ == Expr
                     if pattern_skeleton[i].typ == Function
                         # Literally match the module and function name
@@ -945,14 +1463,36 @@ function match_skeletons(
                             (j == 1) ? pattern_skeleton[i].head
                                      : pattern_skeleton[i].args[j - 1]),
                             length(pattern_skeleton[i].args) + 1)
-                        if !match_skeletons(real_arg, sub_pattern_skeleton, symbol_info, first_expr, second_expr)
+                        if !match_skeletons(real_arg, sub_pattern_skeleton, call_sites, live_in_before_expr, first_expr, second_expr, trace_pattern_match)
                             return false
                         end
                     end
                 elseif typ == Symbol
                     # pattern_skeleton[i] is a symbolic argument like :f1 or :s1.
-                    arg = replacement_arg(pattern_skeleton[i], expr.args, nothing, symbol_info, first_expr, second_expr)
+                    arg = replacement_arg(pattern_skeleton[i], expr.args, nothing, call_sites, first_expr, second_expr, trace_pattern_match)
                     if get_symexpr(arg) != get_symexpr(real_arg)
+                        return false
+                    end
+                elseif typ == AD
+                    type_or_symbol = pattern_skeleton[i].type_or_symbol
+                    properties     = pattern_skeleton[i].properties
+                    #TODO: handle pattern_skeleton[i].relations as well
+                    if typeof(type_or_symbol) == Symbol
+                        arg = replacement_arg(type_or_symbol, expr.args, expr, call_sites, first_expr, second_expr, trace_pattern_match)
+                        if get_symexpr(arg) != get_symexpr(real_arg)
+                            return false
+                        end
+                    else # A type
+                        if !(skeleton[i] <: type_or_symbol)
+                            return false
+                        end
+                        arg = real_arg
+                    end
+                    if !check_properties(arg, properties, call_sites, live_in_before_expr)
+                        return false
+                    end
+                elseif typ <: Number
+                    if real_arg != pattern_skeleton[i]
                         return false
                     end
                 elseif typ == GlobalRef
@@ -988,10 +1528,19 @@ function match_replace(
     #    return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
     #end
 
-    symbol_info = call_sites.symbol_info
-
+   # For debugging purpose only
+    trace_pattern_match = false
+    if false #pattern == log1p!_pattern1 #&& ast.head == :(=) && length(ast.args) ==2 && 
+#        typeof(ast.args[2]) == Expr &&
+#        ast.args[2].head == :call && ast.args[2].args[1] == GlobalRef(SparseAccelerator, :WAXPBY)
+        trace_pattern_match = true
+        println("... Matching ", pattern.name, " with ", ast)
+    end
+    
+    live_in          = call_sites.extra.live_in_before_expr
+    symbol_info      = call_sites.symbol_info
     match_filter_val = 0 # unknown
-    match_filter = nothing
+    match_filter     = nothing
     if isdefined(call_sites.extra, :pattern_match_filter)
         match_filter = call_sites.extra.pattern_match_filter
         key = tuple(ast, pattern)
@@ -1002,7 +1551,7 @@ function match_replace(
     end
 
     if match_filter_val == 0
-        matched = match_skeletons(ast, pattern.skeleton, symbol_info)
+        matched = match_skeletons(ast, pattern.skeleton, call_sites, live_in, nothing, nothing, trace_pattern_match)
         if match_filter != nothing
             match_filter[key] = matched ? 1 : -1;
         end
@@ -1040,7 +1589,7 @@ function match_replace(
 
         dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
     
-        ast_changed = replace(pattern.substitute, ast, symbol_info)
+        ast_changed = replace(pattern.substitute, ast, call_sites, trace_pattern_match)
 
         if ast_changed
             dprintln(1, 2, "Replaced with ", ast)
@@ -1063,27 +1612,90 @@ function match_replace(
 end
 
 @doc """
+Match and replace AST with the given patterns in top-down fashion, i.e. a parent
+tree node in the AST is processed before any child node of it.
+"""
+function top_down_match_replace_an_expr_pattern(
+    ast        :: Expr,
+    call_sites :: CallSites,
+    patterns   :: Vector #{ExprPattern}
+)
+    # Match against the Expr. Replacement may happen on the expression.
+    for pattern in patterns
+        success = match_replace(pattern, ast, call_sites)
+        if success
+            break
+        end
+    end
+               
+    # Now match against each arg. Replacement may happen on the args.
+    for arg in ast.args
+        if typeof(arg) <: Expr
+            top_down_match_replace_an_expr_pattern(arg, call_sites, patterns)
+        end
+    end            
+end
+
+@doc """
+Match and replace AST with the given patterns in bottom_up fashion, i.e. a parent
+tree node in the AST is processed after all children nodes of it.
+"""
+function bottom_up_match_replace_an_expr_pattern(
+    ast        :: Expr,
+    call_sites :: CallSites,
+    patterns   :: Vector #{ExprPattern}
+)
+    # Match against each arg first. Replacement may happen on the args.
+    for arg in ast.args
+        if typeof(arg) <: Expr
+            bottom_up_match_replace_an_expr_pattern(arg, call_sites, patterns)
+        end
+    end
+    
+    # Match against the Expr. Replacement may happen on the expression.
+    for pattern in patterns
+        success = match_replace(pattern, ast, call_sites)
+        if success
+            break
+        end
+    end
+end
+
+@doc """
 Match an expression pattern and do replacement.
 """
 function match_replace_an_expr_pattern(
     ast        :: Any,
     call_sites :: CallSites
-)
-    symbol_info = call_sites.symbol_info
-    patterns    = call_sites.patterns
+)    
     if typeof(ast) <: Expr
-        # Match against each arg first. Replacement may happen on the args.
-        for arg in ast.args
-            match_replace_an_expr_pattern(arg, call_sites)
+        # First, do non-splitting patterns. Either top-down or bottom-up
+        # matching should be OK. The only difference is that the patterns for
+        # each may differ a little. Here we do top-down, for which patterns
+        # can be designed based on the shapes of the user source code. In
+        # contrast, bottom-up patterns would be based on both the user source
+        # code shape and the other patterns that might have been applied.
+        if trace_call_replacement
+            println("\tTop down matching ast:", ast)
+            dsprint(200, 1, call_sites.symbol_info, ast)
+        end
+        top_down_match_replace_an_expr_pattern(ast, call_sites, 
+                                               call_sites.extra.non_splitting_patterns)
+
+        if trace_call_replacement
+            println("\tBottom up matching ast:", ast)
+            dsprint(200, 1, call_sites.symbol_info, ast)
         end
 
-        # Now match against the Expr. Replacement may happen on the expression.
-        for pattern in patterns
-            success = match_replace(pattern, ast, call_sites)
-            if success
-                return nothing
-            end
-        end
+        # Now do splitting patterns. They should be applied bottom up, because
+        # every internal tree node is ensured to be processed. In constrast, 
+        # if top-down, a subtree might be hoisted up, and its internal nodes
+        # won't be able to be processed subsequently.
+        # In addition, we can do non-splitting patterns as well, because some
+        # of them are not based source code shapes, but based on other patterns'
+        # results. So in effect, we do all patterns once bottom up.
+        bottom_up_match_replace_an_expr_pattern(ast, call_sites, 
+                                                call_sites.patterns)
     end
     return nothing
 end
@@ -1123,10 +1735,10 @@ function match_replace_an_two_statements_pattern(
     #if !is_an_arg(expr.args[1], prev_expr.args[2])
     #    return false
     #end
-    symbol_info = call_sites.symbol_info    
+    symbol_info = call_sites.symbol_info
     for pattern in patterns
-        if match_skeletons(first_expr,  pattern.first_skeleton,  symbol_info, first_expr, second_expr) &&
-           match_skeletons(second_expr, pattern.second_skeleton, symbol_info, first_expr, second_expr)
+        if match_skeletons(first_expr,  pattern.first_skeleton,  call_sites, call_sites.extra.live_in_before_prev_expr, first_expr, second_expr) &&
+           match_skeletons(second_expr, pattern.second_skeleton, call_sites, call_sites.extra.live_in_before_prev_expr, first_expr, second_expr)
             dprintln(1, 1, "Matched ", pattern.name, " with: ")
             dprintln(1, 2, first_expr)
             dprintln(1, 2, second_expr)
@@ -1140,8 +1752,8 @@ function match_replace_an_two_statements_pattern(
 
             first_expr_backup  = copy(first_expr)
             second_expr_backup = copy(second_expr)
-            ast_changed        = replace(pattern.new_first_skeleton, first_expr, symbol_info, first_expr_backup, second_expr_backup, true)
-            ast_changed       |= replace(pattern.new_second_skeleton, second_expr, symbol_info, first_expr_backup, second_expr_backup, false)
+            ast_changed        = replace(pattern.new_first_skeleton, first_expr, call_sites, first_expr_backup, second_expr_backup, true)
+            ast_changed       |= replace(pattern.new_second_skeleton, second_expr, call_sites, first_expr_backup, second_expr_backup, false)
 
             if pattern.post_processing != do_nothing
                 if !pattern.post_processing(first_expr, call_sites, pattern.fknob_creator,
@@ -1166,27 +1778,90 @@ function match_replace_an_two_statements_pattern(
     return false
 end
 
+@doc """
+Check if replacing the (symbolic) argument may split the current statement.
+So far, only replacing such an argument like :t1!2 can split a statement.
+"""
+function may_split_statement(
+    arg :: Any
+)
+    if typeof(arg) == Symbol
+        arg_string = string(arg)
+        if length(arg_string) > 1 && (arg_string[1] == 't')
+            return true
+        end
+    elseif typeof(arg) == Expr
+        for a in arg.args
+            if may_split_statement(a)
+                return true
+            end
+
+            if ast_changed
+                dprintln(1, 2, "Replaced with:")
+                dprintln(1, 2, first_expr)
+                dprintln(1, 2, second_expr)
+            end
+
+            return true
+        end
+    end
+    return false
+end    
+
+@doc """
+Separate non-splittable from splittable ExprPatterns. Record the results
+in the call sites's extra.
+"""
+function separate_expr_patterns(
+    call_sites :: CallSites
+)
+    for pattern in call_sites.patterns
+        splittable = false
+        for arg in pattern.substitute
+            if may_split_statement(arg)
+                splittable = true
+                break
+            end
+        end
+        if !splittable
+            push!(call_sites.extra.non_splitting_patterns, pattern)
+        end
+    end
+end
+
 @doc """ 
-Pattern match and replace the code that is functionally equivalent to SpMV, SpMV!,
-dot, WAXPBY, WAXPBY!, etc. with calls to the corresponding SPMP library functions.
+Pattern match and replace the code in the specified basic blocks that is 
+functionally equivalent to SpMV, SpMV!, dot, WAXPBY, WAXPBY!, etc. with calls
+to the corresponding SPMP library functions.
 """
 function replace_calls(
-    func_ast    :: Expr,
-    symbol_info :: Sym2TypeMap, 
+    bb_indices  :: Set{BasicBlockIndex},
+    call_sites  :: CallSites,
+    liveness    :: Liveness, 
     cfg         :: CFG
 )
-    dprintln(1, 0, "\nReplacing sparse matrix function calls:")
-
-    call_sites  = CallSites(Set{CallSite}(), FunctionRegion(func_ast), symbol_info, 
-                            expr_patterns, Vector{Action}(), nothing)
-    for (bb_idx, bb) in cfg.basic_blocks
-        prev_expr = nothing
-        for stmt in bb.statements
-            expr = stmt.expr
+    blocks = cfg.basic_blocks
+    for bb_idx in bb_indices
+        bb                  = blocks[bb_idx]
+        call_sites.extra.bb = bb
+        prev_expr           = nothing
+        statements          = bb.statements
+        for stmt_idx in 1 : length(statements)
+            call_sites.extra.stmt_idx = stmt_idx
+            stmt                      = statements[stmt_idx]
+            expr                      = stmt.expr
             if typeof(expr) != Expr
                 continue
             end
-            
+
+            if stmt.index < 1
+                # This is a new statement generated by, e.g. context-sensitive
+                # optimization. It does not have liveness info.  
+                call_sites.extra.live_in_before_expr = Set{Sym}()
+            else
+                call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, liveness)
+            end
+                        
             # Try to pattern match and replace this expression with ExprPatterns.
             CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
             
@@ -1196,6 +1871,70 @@ function replace_calls(
             end
             
             prev_expr = expr
+            call_sites.extra.live_in_before_prev_expr = call_sites.extra.live_in_before_expr
         end
     end
+end
+
+@doc """ 
+Pattern match and replace the code that is functionally equivalent to SpMV, SpMV!,
+dot, WAXPBY, WAXPBY!, etc. with calls to the corresponding SPMP library functions.
+"""
+function replace_calls(
+    func_region :: FunctionRegion,
+    regions     :: Vector{LoopRegion},
+    lambda      :: LambdaInfo,
+    symbol_info :: Sym2TypeMap,
+    liveness    :: Liveness, 
+    cfg         :: CFG
+)
+    dprintln(1, 0, "\nReplacing sparse matrix function calls:")
+
+    if isempty(func_region.symbol_property)
+        func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
+    end
+    matrix_properties           = func_region.symbol_property
+    call_sites                  = CallSites(Set{CallSite}(), func_region, 
+                                            lambda, symbol_info, 
+                                            liveness, expr_patterns, 
+                                            Vector{Action}(), 
+                                            CallReplacementExtra(matrix_properties))
+
+    # Separate non-splittable from splittable patterns.
+    separate_expr_patterns(call_sites)
+    if !use_splitting_patterns
+        call_sites.patterns = call_sites.extra.non_splitting_patterns
+    end
+
+
+    # Separate basic blocks that do not belong to any loop region
+    non_loop_bb_indices = Set{BasicBlockIndex}()
+    for (bb_idx, bb) in cfg.basic_blocks
+        inside_loop = false
+        for region in regions
+            L = region.loop
+            if in(bb_idx, L.members)
+                inside_loop = true
+                break
+            end
+        end
+        if !inside_loop
+            push!(non_loop_bb_indices, bb_idx)
+        end
+    end
+    
+    # Replace calls in non loop basic blocks.
+    replace_calls(non_loop_bb_indices, call_sites, liveness, cfg)
+    
+    # Replace calls in each loop region
+    for region in regions
+        call_sites.region                  = region
+        if isempty(region.symbol_property)
+            find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
+        end    
+        call_sites.extra.matrix_properties = region.symbol_property 
+        replace_calls(region.loop.members, call_sites, liveness, cfg)
+    end
+    
+    return call_sites.actions
 end

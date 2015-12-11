@@ -58,9 +58,11 @@ function new_matrix_knob(
     is_structure_only      = false,
     is_single_def          = false
  )
-    assert(constant_valued || constant_structured)
-    assert(!constant_valued || constant_structured)
-    assert(!is_symmetric || is_structure_symmetric)
+    # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
+    # must be constant valued or structured.
+    assert(constant_valued || constant_structured || is_structure_symmetric || !collective_structure_prediction_enabled)
+    assert(!constant_valued || constant_structured || !collective_structure_prediction_enabled)
+    assert(!is_symmetric || is_structure_symmetric || !collective_structure_prediction_enabled)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
                    (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                     Bool, Bool, Bool, Bool, Bool, Bool),
@@ -232,6 +234,7 @@ function fwdTriSolve!(
            ),
             L.m, L.n, pointer(L.colptr), pointer(L.rowval), pointer(L.nzval),
             pointer(b), pointer(b), fknob)
+    b
 end
 
 @doc """ 
@@ -247,6 +250,7 @@ function bwdTriSolve!(
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
                U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval),
                pointer(b), pointer(b), fknob)
+    b
 end
 
 function speye_int32(m::Integer)
@@ -311,6 +315,7 @@ function reorder_matrix!(
                Ptr{Cint}, Ptr{Cint}),
                A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
                pointer(P), pointer(inverse_P))
+    A
 end
 
 @doc """ Inversely reorder vector V with permutation vector P """
@@ -321,6 +326,7 @@ function inverse_reorder_vector!(
     ccall((:reorderVectorWithInversePermInplace, LIB_PATH), Void,
          (Ptr{Cdouble}, Ptr{Cint}, Cint),
          pointer(V), pointer(P), length(V))
+    V
 end
 
 function set_reordering_decision_maker(
@@ -407,6 +413,7 @@ function SpMV!(
                 length(z) == 0 ? C_NULL : z,
                 fknob)
         end
+        w
     else
         # use Julia implementation
         w[:] = alpha * A * x + beta * y + gamma
@@ -415,12 +422,12 @@ end
 
 @doc """ w = alpha*A*x + beta*y + gamma """
 SpMV!(
-    w     :: Vector{Float64}, 
+    w     :: Vector, 
     alpha :: Number, 
     A     :: SparseMatrixCSC, 
-    x     :: Vector{Float64}, 
+    x     :: Vector, 
     beta  :: Number, 
-    y     :: Vector{Float64}, 
+    y     :: Vector, 
     gamma :: Number,
     fknob :: Ptr{Void} = C_NULL) =
     SpMV!(w, alpha, A, x, beta, y, gamma, Array{Float64,1}[], fknob)
@@ -527,12 +534,28 @@ function dot(
 )
   assert(length(x) == length(y))
 
-  if use_SPMP
+  if use_SPMP #&& length(x) > 4096
     ccall((:dot, LIB_PATH), Cdouble,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(x), pointer(y))
   else
-    dot(x, y)
+    Base.dot(x, y)
+  end
+end
+
+@doc """ Dot product of vector x and y """
+function dot(
+    x :: Vector{Complex128}, 
+    y :: Vector{Complex128}
+)
+  assert(length(x) == length(y))
+
+  if use_SPMP #&& length(x) >= 3072
+    ccall((:dot, LIB_PATH), Complex128,
+          (Cint, Ptr{Complex128}, Ptr{Complex128}),
+          length(x), pointer(x), pointer(y))
+  else
+    Base.dot(x, y)
   end
 end
 
@@ -564,12 +587,12 @@ function norm(
     x :: Vector{Complex128}
 )
 
-  if use_SPMP
+  if use_SPMP #&& length(x) >= 8192
     ccall((:norm_complex, LIB_PATH), Cdouble,
           (Cint, Ptr{Complex128}),
           length(x), pointer(x))
   else
-    norm(x)
+    Base.norm(x)
   end
 end
 
@@ -582,7 +605,7 @@ function sum(
           (Cint, Ptr{Cdouble}),
           length(x), x)
   else
-    sum(x)
+    Base.sum(x)
   end
 end
 
@@ -594,7 +617,7 @@ function minimum(
           (Cint, Ptr{Cdouble}),
           length(x), x)
   else
-    minimum(x)
+    Base.minimum(x)
   end
 end
 
@@ -606,8 +629,22 @@ function abs!(
     ccall((:CSR_abs, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
+    w
   else
-    w[:] = abs(x)
+    w[:] = Base.abs(x)
+  end
+end
+
+function abs!(
+    w :: Vector{Float64},
+    x :: Vector{Complex128}
+)
+  if use_SPMP
+    ccall((:CSR_abs_complex, LIB_PATH), Void,
+          (Cint, Ptr{Cdouble}, Ptr{Complex128}),
+          length(x), w, x)
+  else
+    w[:] = Base.abs(x)
   end
 end
 
@@ -632,8 +669,9 @@ function exp!(
     ccall((:CSR_exp, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
+    w
   else
-    w[:] = exp(x)
+    w[:] = Base.exp(x)
   end
 end
 
@@ -645,8 +683,9 @@ function log1p!(
     ccall((:CSR_log1p, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), w, x)
+    w
   else
-    w[:] = log1p(x)
+    w[:] = Base.log1p(x)
   end
 end
 
@@ -661,8 +700,9 @@ function min!(
     ccall((:min, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Cdouble),
           length(x), w, x, alpha)
+    w
   else
-    w[:] = min(x, alpha)
+    w[:] = Base.min(x, alpha)
   end
 end
 
@@ -686,6 +726,7 @@ function element_wise_divide!(
     ccall((:pointwiseDivide, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
           length(x), pointer(w), pointer(x), pointer(y))
+    w
   else
     w[:] = x./y
   end
@@ -712,6 +753,24 @@ function element_wise_multiply!(
   if use_SPMP
     ccall((:pointwiseMultiply, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+          length(x), pointer(w), pointer(x), pointer(y))
+    w
+  else
+    w[:] = x.*y
+  end
+end
+
+@doc """" w = x.*y """
+function element_wise_multiply!(
+    w :: Vector{Complex128}, 
+    x :: Vector{Float64}, 
+    y :: Vector{Complex128}
+)
+  assert(length(x) == length(y))
+
+  if use_SPMP
+    ccall((:pointwiseMultiplyRealWithComplex, LIB_PATH), Void,
+          (Cint, Ptr{Complex128}, Ptr{Float64}, Ptr{Complex128}),
           length(x), pointer(w), pointer(x), pointer(y))
   else
     w[:] = x.*y
@@ -771,6 +830,27 @@ function WAXPBY!(
     ccall((:waxpby, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}),
           length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
+    w
+  else
+    w[:] = alpha*x + beta*y
+  end
+end
+
+@doc """ w = alpha*x + beta*y """
+function WAXPBY!(
+    w     :: Vector{Complex128}, 
+    alpha :: Number, 
+    x     :: Vector{Complex128}, 
+    beta  :: Number, 
+    y     :: Vector{Complex128}
+)
+  assert(length(x) == length(y))
+  assert(length(x) == length(w))
+
+  if use_SPMP
+    ccall((:waxpby_complex, LIB_PATH), Void,
+          (Cint, Ptr{Complex128}, Complex128, Ptr{Complex128}, Complex128, Ptr{Complex128}),
+          length(x), pointer(w), alpha, pointer(x), beta, pointer(y))
   else
     w[:] = alpha*x + beta*y
   end
@@ -803,7 +883,19 @@ function WAXPBY(
     beta  :: Number, 
     y     :: Vector{Float64}
 )
-  w = Array(Cdouble, length(x))
+  w = Array{Cdouble}(length(x))
+  WAXPBY!(w, alpha, x, beta, y)
+  w
+end
+
+@doc """ Allocate space for and return alpha*x + beta*y """
+function WAXPBY(
+    alpha :: Number,
+    x     :: Vector{Complex128}, 
+    beta  :: Number, 
+    y     :: Vector{Complex128}
+)
+  w = Array(Complex128, length(x))
   WAXPBY!(w, alpha, x, beta, y)
   w
 end
@@ -832,6 +924,25 @@ function WAXPB!(
   if use_SPMP
     ccall((:waxpb, LIB_PATH), Void,
           (Cint, Ptr{Cdouble}, Cdouble, Ptr{Cdouble}, Cdouble),
+          length(x), pointer(w), alpha, pointer(x), beta)
+    w
+  else
+    w[:] = alpha*x + beta
+  end
+end
+
+@doc """ w = alpha*x + beta """
+function WAXPB!(
+    w     :: Vector{Complex128}, 
+    alpha :: Number, 
+    x     :: Vector{Complex128}, 
+    beta  :: Number
+)
+  assert(length(w) == length(x))
+
+  if use_SPMP
+    ccall((:waxpb_complex, LIB_PATH), Void,
+          (Cint, Ptr{Complex128}, Complex128, Ptr{Complex128}, Complex128),
           length(x), pointer(w), alpha, pointer(x), beta)
   else
     w[:] = alpha*x + beta
@@ -1127,11 +1238,13 @@ function cholfact_inverse_divide!(
         # This case should never happen
         assert(false)
         y[:] = R \ b
+        return y
     end
 
     ccall((:CholFactInverseDivide, LIB_PATH), Void,
           (Ptr{Void}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
           R, y, b, fknob)
+    y
 end
 
 @doc """ 
@@ -1427,7 +1540,7 @@ function lbfgs_loss_function1(yXw::Vector, w::Vector, lambda::Number)
           m, length(w), yXw, w, lambda)
   else
     s = sum(log1p(exp(-abs(yXw))) - min(yXw, 0))
-    s/m + (lambda/2)*norm(x)^2
+    s/m + (lambda/2)*norm(w)^2
   end 
 end
 
@@ -1479,4 +1592,8 @@ end
 
 function set_reuse_inspection(reuse)
   ccall((:SetReuseInspection, LIB_PATH), Void, (Bool,), reuse)
+end
+
+function set_collective_structure_prediction(collective)
+  ccall((:SetCollectiveStructurePrediction, LIB_PATH), Void, (Bool,), collective)
 end

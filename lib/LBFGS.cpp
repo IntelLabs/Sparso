@@ -1,5 +1,6 @@
 #include <cstring>
 #include <algorithm>
+#include <cmath> // fabs, exp, loglp
 
 #include "CSR_Interface.h"
 
