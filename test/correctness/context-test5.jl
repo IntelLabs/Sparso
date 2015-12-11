@@ -52,13 +52,9 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
 
     # For statistics only. We get these values so that L, U and A won't be live out of
     # the loop -- to save reverse-reordering of them.
-    nnzL = nnz(L)
-    nnzU = nnz(U)
-    sizeL1 = size(L, 1) 
-    sizeL2 = size(L, 2)
-    nnzA = nnz(A)
-    sizeA1 = size(A, 1) 
-    sizeA2 = size(A, 2)
+
+    bytesTrsvPerIter = 12.*(nnz(L)+nnz(U)) + 2.*4*size(L,1) + 2.*8*(size(L,1) + size(L,2))
+    bytesSpMVPerIter = 12.*nnz(A) + 4*size(A,1) + 8*(size(A,1) + size(A,2))
 
     k = 1
 
@@ -66,8 +62,9 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
         old_rz = rz
 
         spmv_time -= time()
-        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        #Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         #SparseAccelerator.SpMV!(Ap, A, p)
+        A_mul_B!(Ap, A, p)
         spmv_time += time()
 
         blas1_time -= time()
@@ -102,8 +99,11 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     end
 
     total_time = time() - total_time
-    println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnzL   + nnzU  ) + 2.*8*(sizeL1     + sizeL2    ))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnzA   + 8.*(sizeA1     + sizeA2    ))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
-#   println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
+
+    bytesTrsv = bytesTrsvPerIter*k
+    bytesSpMV = bytesSpMVPerIter*(k + 1)
+
+    println("total = $(total_time)s ($((bytesTrsv + bytesSpMV)/total_time/1e9) gbps) trsv_time = $(trsv_time)s ($(bytesTrsv/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($(bytesSpMV/spmv_time/1e9) gbps) blas1_time = $blas1_time")
  
     return x, k, rel_err
 end
@@ -146,6 +146,9 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
     rz = SparseAccelerator.dot(r,z)
     blas1_time += time()
 
+    bytesTrsvPerIter = 12.*(nnz(L)+nnz(U)) + 2.*4*size(L,1) + 2.*8*(size(L,1) + size(L,2))
+    bytesSpMVPerIter = 12.*nnz(A) + 4*size(A,1) + 8*(size(A,1) + size(A,2))
+
     k = 1
 
     __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
@@ -167,7 +170,7 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
 
         spmv_time -= time()
         #Ap = A*p
-        SparseAccelerator.SpMV!(Ap, A,p,fknob_spmv)
+        SparseAccelerator.SpMV!(Ap,A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
@@ -214,7 +217,11 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
     
     if do_print
       total_time = time() - total_time
-      println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time")
+
+      bytesTrsv = bytesTrsvPerIter*k
+      bytesSpMV = bytesSpMVPerIter*(k + 1)
+
+      println("total = $(total_time)s ($((bytesTrsv + bytesSpMV)/total_time/1e9) gbps) trsv_time = $(trsv_time)s ($(bytesTrsv/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($(bytesSpMV/spmv_time/1e9) gbps) blas1_time = $blas1_time")
     end
 
     return x, k, rel_err
@@ -260,6 +267,9 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
     rz = SparseAccelerator.dot(r,z)
     blas1_time += time()
 
+    bytesTrsvPerIter = 12.*(nnz(L)+nnz(U)) + 2.*4*size(L,1) + 2.*8*(size(L,1) + size(L,2))
+    bytesSpMVPerIter = 12.*nnz(A) + 4*size(A,1) + 8*(size(A,1) + size(A,2))
+
     k = 1
 
     __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
@@ -291,7 +301,7 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
 
         spmv_time -= time()
         #Ap = A*p
-        SparseAccelerator.SpMV!(Ap,A,p,fknob_spmv)
+        SparseAccelerator.SpMV!(Ap, A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
@@ -358,7 +368,11 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
 
     if do_print
       total_time = time() - total_time
-      println("total = $(total_time)s trsv_time = $(trsv_time)s ($((12.*(nnz(L) + nnz(U)) + 2.*8*(size(L, 1) + size(L, 2)))*k/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($((12.*nnz(A) + 8.*(size(A, 1) + size(A, 2)))*(k + 1)/spmv_time/1e9) gbps) blas1_time = $blas1_time reorder_time = $reorder_time")
+
+      bytesTrsv = bytesTrsvPerIter*k
+      bytesSpMV = bytesSpMVPerIter*(k + 1)
+
+      println("total = $(total_time)s ($((bytesTrsv + bytesSpMV)/total_time/1e9) gbps) trsv_time = $(trsv_time)s ($(bytesTrsv/trsv_time/1e9) gbps) spmv_time = $(spmv_time)s ($(bytesSpMV/spmv_time/1e9) gbps) blas1_time = $blas1_time")
     end
 
     return x, k, rel_err
