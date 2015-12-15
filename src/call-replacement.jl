@@ -191,17 +191,23 @@ When you use AD, you need to describe at least properties or relations.
 Otherwise, you can directly describe it in a type or a symbol, without using
 AD.
 """
+typealias Property Int                        # e.g. SA_CONST_STRUCTURED | SA_SYMM_STRUCTURED
+typealias Relation Tuple{Property, Property}  # e.g. (SA_UPPER_OF, SA_CONST_STRUCTURED | SA_SYMM_STRUCTURED), 
+                                              # which means the structure of the first matrix is
+                                              # upper of that of the second matrix, and the second
+                                              # matrix is constant and symmetric in structure 
 type AD
     type_or_symbol :: Any
-    properties     :: Int
-    relations      :: Vector{Tuple{Int, Symbol}}
+    properties     :: Vector{Union{Property, Relation}}
     
-    AD(_type_or_symbol, _properties :: Int) = 
-        new(_type_or_symbol, _properties, Vector{Tuple{Int, Symbol}}())
-    AD(_type_or_symbol, _relations :: Vector{Tuple{Int, Symbol}}) = 
-        new(_type_or_symbol, 0, _relations)
-    AD(_type_or_symbol, _properties :: Int, _relations :: Vector{Tuple{Int, Symbol}}) = 
-        new(_type_or_symbol, _properties, _relations)
+    AD(_type_or_symbol) = new(_type_or_symbol, Vector{Union{Property, Relation}}())
+    function AD(_type_or_symbol, _properties...) 
+        ad = new(_type_or_symbol, Vector{Union{Property, Relation}}())
+        for property in _properties
+            push!(ad.properties, property)
+        end
+        ad
+    end
 end
 
 # Below are the expr_patterns we care about.
@@ -1375,38 +1381,119 @@ function replace(
 end
 
 @doc """
+Check if the argument has the property. This currently happens when in a 
+pattern, a skeleton specifies some property to check. 
+Live_in_before_expr is the live in set before the first statement in the pattern.
+"""
+function check_property(
+    arg                 :: Any,
+    property            :: Property,
+    call_sites          :: CallSites,
+    live_in_before_expr :: Set{Sym},
+)
+    # So far, property may include the following cases, if any.
+    assert((property & SA_CONST_VALUED != 0) || (property & SA_CONST_STRUCTURED != 0) ||
+           (property & SA_SYMM_VALUED != 0) || (property & SA_SYMM_STRUCTURED != 0) ||
+           (property & SA_STRUCTURE_ONLY != 0) || (property & SA_HAS_FREE_MEMORY != 0))
+
+    matrix_properties = call_sites.extra.matrix_properties
+    if typeof(arg) <: Sym || typeof(arg) == SymbolNode
+        arg = get_symexpr(arg)
+        if haskey(matrix_properties, arg)
+            properties = matrix_properties[arg]
+            if property & SA_HAS_FREE_MEMORY != 0
+                # ISSUE: this is a hack: even if the arg is live into the pattern,
+                # it is still possible that the arg is pointed to by another variable,
+                # and thus is not free. Also, even if it does have a free memory, we
+                # need to ensure that GC has not collected it (Thus compiler needs to 
+                # pin it in some way)
+                if !properties.has_dedicated_memory && !in(get_symexpr(arg), live_in_before_expr)
+                    return false
+                end
+            end
+            
+            if (property & SA_CONST_VALUED != 0) && !properties.constant_valued
+                return false
+            end
+
+            if (property & SA_CONST_STRUCTURED != 0) && !properties.constant_structured
+                return false
+            end
+                
+            if (property & SA_SYMM_VALUED != 0) && !properties.is_symmetric
+                return false
+            end
+
+            if (property & SA_SYMM_STRUCTURED != 0) && !properties.is_structure_symmetric
+                return false
+            end
+
+            if (property & SA_STRUCTURE_ONLY != 0) && !properties.is_structure_only
+                return false
+            end
+            return true
+        end
+    end
+    return false
+end
+
+@doc """
+Check if the argument has the relation. This currently happens when in a 
+pattern, a skeleton specifies some relation to check. 
+Live_in_before_expr is the live in set before the first statement in the pattern.
+"""
+function check_relation(
+    arg                 :: Any,
+    relation            :: Relation,
+    call_sites          :: CallSites,
+    live_in_before_expr :: Set{Sym},
+)
+    property1         = relation[1]
+    assert((property1 == SA_LOWER_OF) || (property1 == SA_UPPER_OF)) # So far, we handle these two cases
+    property2         = relation[2]
+    matrix_properties = call_sites.extra.matrix_properties
+    if typeof(arg) <: Sym || typeof(arg) == SymbolNode
+        arg = get_symexpr(arg)
+        if haskey(matrix_properties, arg)
+            properties = matrix_properties[arg]
+            if (property1 & SA_LOWER_OF != 0)  && (properties.lower_of != nothing) && 
+                check_property(properties.lower_of, property2, call_sites, live_in_before_expr)
+                return true
+            end
+            if (property1 & SA_UPPER_OF != 0)  && (properties.upper_of != nothing) && 
+                check_property(properties.upper_of, property2, call_sites, live_in_before_expr)
+                return true
+            end
+            return false
+        end
+    end
+    return false
+end
+
+@doc """
 Check if the argument has the properties. This currently happens when in a 
 pattern, a skeleton specifies some properties to check. 
 Live_in_before_expr is the live in set before the first statement in the pattern.
 """
 function check_properties(
     arg                 :: Any,
-    properties          :: Int,
+    properties          :: Vector{Union{Property, Relation}},
     call_sites          :: CallSites,
     live_in_before_expr :: Set{Sym},
 )
-    # So far, we only have SA_HAS_FREE_MEMORY property, if any.
-    assert(properties == 0 || properties == SA_HAS_FREE_MEMORY)
-    if properties & SA_HAS_FREE_MEMORY != 0
-        if typeof(arg) <: Sym || typeof(arg) == SymbolNode
-            arg = get_symexpr(arg)
-            if haskey(call_sites.extra.matrix_properties, arg)
-                if call_sites.extra.matrix_properties[arg].has_dedicated_memory
-                    return true
-                end
+    for property in properties
+        if typeof(property) == Property
+            if !check_property(arg, property, call_sites, live_in_before_expr)
+                return false
+            end
+        else 
+            assert(typeof(property) == Relation)
+            if !check_relation(arg, property, call_sites, live_in_before_expr)
+                return false
             end
         end
-        
-        # ISSUE: this is a hack: even if the arg is live into the pattern,
-        # it is still possible that the arg is pointed to by another variable,
-        # and thus is not free. Also, even if it does have a free memory, we
-        # need to ensure that GC has not collected it (Thus compiler needs to 
-        # pin it in some way)
-        if in(get_symexpr(arg), live_in_before_expr)
-            return true
-        end
     end
-    return false
+    return true
 end
 
 @doc """ 
@@ -1528,15 +1615,15 @@ function match_replace(
     #    return pattern.pre_processing(ast, call_sites, pattern.fknob_creator, pattern.fknob_deletor)
     #end
 
-   # For debugging purpose only
+    # For debugging purpose only
     trace_pattern_match = false
-    if false #pattern == log1p!_pattern1 #&& ast.head == :(=) && length(ast.args) ==2 && 
-#        typeof(ast.args[2]) == Expr &&
-#        ast.args[2].head == :call && ast.args[2].args[1] == GlobalRef(SparseAccelerator, :WAXPBY)
+    if false #pattern == CS_fwdTriSolve_backslash_pattern && ast.head == :(=) && length(ast.args) ==2 && 
+        #typeof(ast.args[2]) == Expr &&
+        #ast.args[2].head == :call && ast.args[2].args[1] == GlobalRef(SparseAccelerator, :\)
         trace_pattern_match = true
         println("... Matching ", pattern.name, " with ", ast)
     end
-    
+        
     live_in          = call_sites.extra.live_in_before_expr
     symbol_info      = call_sites.symbol_info
     match_filter_val = 0 # unknown
@@ -1795,14 +1882,6 @@ function may_split_statement(
             if may_split_statement(a)
                 return true
             end
-
-            if ast_changed
-                dprintln(1, 2, "Replaced with:")
-                dprintln(1, 2, first_expr)
-                dprintln(1, 2, second_expr)
-            end
-
-            return true
         end
     end
     return false

@@ -146,7 +146,7 @@ function gather_context_sensitive_info(
     stmt_idx      = call_sites.extra.stmt_idx
     prev_stmt_idx = call_sites.extra.prev_stmt_idx
     cur_expr      = bb.statements[stmt_idx].expr
-    prev_expr     = bb.statements[prev_stmt_idx].expr
+    prev_expr     = prev_stmt_idx == 0 ? nothing : bb.statements[prev_stmt_idx].expr
 
     # Create matrix-specific knobs for the matrices inputs.
     args = ast.args
@@ -454,6 +454,27 @@ const CS_fwdTriSolve!_pattern = ExprPattern(
     100,
     (:a2, :a3)
 )
+
+@doc """ 
+Pattern for forward triangular solver (A lower triangular matrix \ a vector). The
+matrix's structure is the lower part of a constant symmetric matrix's structure.
+"""
+const CS_fwdTriSolve!_backslash_pattern = ExprPattern(
+    "CS_fwdTriSolve!_backslash_pattern",
+    (:(=), Vector, 
+      Expr(:call, GlobalRef(Main, :\), 
+            AD(SparseMatrixCSC, (SA_LOWER_OF, SA_CONST_STRUCTURED | SA_SYMM_STRUCTURED)),
+            Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :fwdTriSolve!), :a1, :a2_2, :a2_3),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:a3,),
+    100,
+    (:a3, :a4)
+)
  
 @doc """
 Pattern for backward triangular solver.
@@ -471,6 +492,27 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
     (:a2,),
     90,
     (:a2, :a3)
+)
+
+@doc """ 
+Pattern for backward triangular solver (A upper triangular matrix \ a vector). The
+matrix's structure is the upper part of a constant symmetric matrix's structure.
+"""
+const CS_bwdTriSolve!_backslash_pattern = ExprPattern(
+    "CS_bwdTriSolve!_backslash_pattern",
+    (:(=), Vector, 
+      Expr(:call, GlobalRef(Main, :\), 
+            AD(SparseMatrixCSC, (SA_UPPER_OF, SA_CONST_STRUCTURED | SA_SYMM_STRUCTURED)),
+            Vector)),
+    (:NO_SUB_PATTERNS,),
+    do_nothing,
+    (:call, GlobalRef(SparseAccelerator, :bwdTriSolve!), :a1, :a2_2, :a2_3),
+    gather_context_sensitive_info,
+    "NewFunctionKnob",
+    "DeleteFunctionKnob",
+    (:a3,),
+    100,
+    (:a3, :a4)
 )
 
 @doc """
@@ -811,7 +853,9 @@ CS_transformation_patterns = [
     CS_cholfact_int32_pattern,
     CS_cholsolve_pattern,
     CS_fwdTriSolve!_pattern,
+    CS_fwdTriSolve!_backslash_pattern,
     CS_bwdTriSolve!_pattern,
+    CS_bwdTriSolve!_backslash_pattern,
     CS_SpMV_pattern7,
     CS_SpMV_pattern1,
     CS_SpMV_pattern2,
@@ -881,7 +925,7 @@ function create_new_matrix_knob(
         # matrix. But in principle, any matrix can have a knob, and the library
         # can decide what to do based on the knob.
         # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
-        # must be constant valued or structured.    
+        # must be constant valued or structured.
         assert(properties.constant_structured || properties.is_structure_symmetric || !collective_structure_prediction_enabled) 
         new_stmt = Expr(:(=), mknob,
                     Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
@@ -1125,8 +1169,28 @@ function generate_and_delete_knobs(
         if prop.lower_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.lower_of)
             assert(prop.upper_of == nothing)
             push!(derivatives, (M, DERIVATIVE_TYPE_LOWER_TRIANGULAR, prop.lower_of))
+
+            # ISSUE: is the following condition right for setting symmetric derivative? Do we
+            # need both prop1.is_symmetric && prop1.is_structure_symmetric? Is this derivative
+            # symmetric in structure or value?
+            # ISSUE: without setting the symmetric derivative, pcg-illustration causes spmp
+            # segmentation fault
+            prop1 = call_sites.extra.matrix_properties[prop.lower_of]
+            if prop1.is_symmetric && prop1.is_structure_symmetric 
+                push!(derivatives, (M, DERIVATIVE_TYPE_SYMMETRIC, prop.lower_of))
+            end
         elseif prop.upper_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.upper_of)
             push!(derivatives, (M, DERIVATIVE_TYPE_UPPER_TRIANGULAR, prop.upper_of))
+            
+            # ISSUE: is the following condition right for setting symmetric derivative? Do we
+            # need both prop1.is_symmetric && prop1.is_structure_symmetric? Is this derivative
+            # symmetric in structure or value?
+            # ISSUE: without setting the symmetric derivative, pcg-illustration causes spmp
+            # segmentation fault
+            prop1 = call_sites.extra.matrix_properties[prop.upper_of]
+            if prop1.is_symmetric && prop1.is_structure_symmetric 
+                push!(derivatives, (M, DERIVATIVE_TYPE_SYMMETRIC, prop.upper_of))
+            end
         end
         if prop.transpose_of != nothing && haskey(call_sites.extra.matrix2mknob, prop.transpose_of)
             push!(derivatives, (M, DERIVATIVE_TYPE_TRANSPOSE, prop.transpose_of))

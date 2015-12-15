@@ -580,6 +580,17 @@ const fwdTriSolve!1_Desc = FunctionDescription(
     ])
 )
 
+const fwdTriSolve!2_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "fwdTriSolve!",                              
+    (Vector, AbstractSparseMatrix, Vector),
+    Set(1),                           # Argument 1 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (2, 1, COLUMN_ROW_INVERSE),
+          (1, 3, ROW_ROW)
+    ])
+)
+
 const bwdTriSolve!_Desc = FunctionDescription(
     "Base.SparseMatrix", 
     "bwdTriSolve!",                              
@@ -599,6 +610,17 @@ const bwdTriSolve!1_Desc = FunctionDescription(
     true,                             # The function is distributive
     Set([ (1, 2, COLUMN_ROW_INVERSE),
           (1, 2, ROW_ROW)
+    ])
+)
+
+const bwdTriSolve!2_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "bwdTriSolve!",                              
+    (Vector, AbstractSparseMatrix, Vector),
+    Set(1),                           # Argument 1 (the vector) is updated
+    true,                             # The function is distributive
+    Set([ (2, 1, COLUMN_ROW_INVERSE),
+          (1, 3, ROW_ROW)
     ])
 )
 
@@ -800,8 +822,10 @@ function_descriptions  = [
     inverse_divide_Desc,
     fwdTriSolve!_Desc,
     fwdTriSolve!1_Desc,
+    fwdTriSolve!2_Desc,
     bwdTriSolve!_Desc,
     bwdTriSolve!1_Desc,
+    bwdTriSolve!2_Desc,
     negative_Desc,
     divide_Desc,
     Ac_mul_B_Desc,
