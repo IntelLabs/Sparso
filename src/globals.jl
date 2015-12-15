@@ -327,9 +327,9 @@ has_dedicated_memory  : The matrix (actually for vector as well) has a decidated
 type MatrixProperties
     constant_valued        :: Bool
     constant_structured    :: Bool
-    is_symmetric           :: Union{Bool, Symbol}
-    is_structure_symmetric :: Union{Bool, Symbol}
-    is_structure_only      :: Union{Bool, Symbol}
+    is_symmetric           :: Bool
+    is_structure_symmetric :: Bool
+    is_structure_only      :: Bool
     is_single_def          :: Bool
     has_dedicated_memory   :: Bool
     lower_of               :: Any

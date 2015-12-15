@@ -237,6 +237,22 @@ function fwdTriSolve!(
     b
 end
 
+@doc """
+Context-sensitive forward triangular solver, equivalent to x = Base.SparseMatrix.
+fwdTriSolve!(L, b).
+"""
+function fwdTriSolve!(
+    x     :: Vector,
+    L     :: SparseMatrixCSC{Float64, Int32}, 
+    b     :: Vector,
+    fknob :: Ptr{Void}
+ )
+    # ISSUE: if x is not allocated space yet in the caller,can we really copy b to x in this way?
+    x[:] = copy(b)
+    fwdTriSolve!(L, x, fknob)
+    x
+end
+
 @doc """ 
 Context-sensitive backward triangular solver. 
 """
@@ -251,6 +267,22 @@ function bwdTriSolve!(
                U.m, U.n, pointer(U.colptr), pointer(U.rowval), pointer(U.nzval),
                pointer(b), pointer(b), fknob)
     b
+end
+
+@doc """
+Context-sensitive backward triangular solver, equivalent to x = Base.SparseMatrix.
+bwdTriSolve!(L, b).
+"""
+function bwdTriSolve!(
+    x     :: Vector,
+    U     :: SparseMatrixCSC{Float64, Int32}, 
+    b     :: Vector,
+    fknob :: Ptr{Void}
+ )
+    # ISSUE: if x is not allocated space yet in the caller,can we really copy b to x in this way?
+    x[:] = copy(b)
+    bwdTriSolve!(U, x, fknob)
+    x
 end
 
 function speye_int32(m::Integer)

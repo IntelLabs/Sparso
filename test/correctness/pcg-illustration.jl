@@ -5,9 +5,16 @@ include("../../src/SparseAccelerator.jl")
 include("./utils.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)  #SA_REORDER,
 
 function pcg_symgs(x, A, b, tolerance, maxiter)
+    set_matrix_property(:L, SA_LOWER_OF, :A)
+    set_matrix_property(:U, SA_UPPER_OF, :A)
+    set_matrix_property(Dict(
+        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
+        )
+    )
+
     total_time = time()
 
     # TODO: replace this ILU0 with ICHOL
@@ -32,8 +39,7 @@ function pcg_symgs(x, A, b, tolerance, maxiter)
         if rel_err < tolerance 
             break
         end
-        
-        z = L \ r    
+        z = L \ r
         z = U \ z
         rz = dot(r, z)
         p = z + (rz/old_rz) * p
