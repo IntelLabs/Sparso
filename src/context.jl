@@ -129,7 +129,7 @@ function gather_context_sensitive_info(
     assert(call_sites.extra.ast_may_change)
 
     # Create a function-specific knob. 
-    fknob                                   = gensym("fknob")
+    fknob                                   = new_symbol("fknob")
     call_sites.extra.expr2fknob[ast]        = fknob
     call_sites.extra.fknob2expr[fknob]      = ast
     call_sites.extra.fknob2ctor_dtor[fknob] = (fknob_creator, fknob_deletor)
@@ -160,7 +160,7 @@ function gather_context_sensitive_info(
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
         end
         if !haskey(call_sites.extra.matrix2mknob, M)
-            mknob = gensym(string("mknob", typeof(M) == Expr ? "Expr" : string(M)))
+            mknob = new_symbol(string("mknob", typeof(M) == Expr ? "Expr" : string(M)))
             call_sites.extra.matrix2mknob[M]     = mknob
             call_sites.extra.mknob2matrix[mknob] = M
         end
@@ -473,7 +473,7 @@ const CS_fwdTriSolve!_backslash_pattern = ExprPattern(
     "DeleteFunctionKnob",
     (:a3,),
     100,
-    (:a3, :a4)
+    (:a3, :a2)
 )
  
 @doc """
@@ -512,7 +512,7 @@ const CS_bwdTriSolve!_backslash_pattern = ExprPattern(
     "DeleteFunctionKnob",
     (:a3,),
     100,
-    (:a3, :a4)
+    (:a3, :a2)
 )
 
 @doc """

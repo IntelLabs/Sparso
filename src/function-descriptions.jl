@@ -315,6 +315,24 @@ const copy_Desc = FunctionDescription(
     Set([ (0, 1, ROW_ROW) ])
 )
 
+const abs_Desc = FunctionDescription(
+    "Main", 
+    "abs",
+    (Vector, ),                       # The arguments must be a vector
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW) ])
+)
+
+const log_Desc = FunctionDescription(
+    "Main", 
+    "log",
+    (Vector, ),                       # The arguments must be a vector
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW) ])
+)
+
 const WAXPBY_Desc = FunctionDescription(
     "SparseAccelerator", 
     "WAXPBY",                         # SparseAccelerator.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
@@ -587,7 +605,7 @@ const fwdTriSolve!2_Desc = FunctionDescription(
     Set(1),                           # Argument 1 (the vector) is updated
     true,                             # The function is distributive
     Set([ (2, 1, COLUMN_ROW_INVERSE),
-          (1, 3, ROW_ROW)
+          (2, 3, ROW_ROW)
     ])
 )
 
@@ -620,7 +638,7 @@ const bwdTriSolve!2_Desc = FunctionDescription(
     Set(1),                           # Argument 1 (the vector) is updated
     true,                             # The function is distributive
     Set([ (2, 1, COLUMN_ROW_INVERSE),
-          (1, 3, ROW_ROW)
+          (2, 3, ROW_ROW)
     ])
 )
 
@@ -662,6 +680,16 @@ const min_Desc = FunctionDescription(
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
     Set([ (0, 2, ROW_ROW) ])
+)
+
+@doc """ min(A, value) """
+const min1_Desc = FunctionDescription(
+    "Main", 
+    "min",
+    (Vector, Number),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW) ])
 )
 
 #The following are made for context-test3 with reordering on. There were
@@ -796,6 +824,8 @@ function_descriptions  = [
     Dot_Desc,
     dot_Desc,
     copy_Desc,
+    abs_Desc,
+    log_Desc,
     WAXPBY_Desc,
     WAXPBY!_Desc,
     add_vector_Desc,
@@ -830,6 +860,7 @@ function_descriptions  = [
     divide_Desc,
     Ac_mul_B_Desc,
     min_Desc,
+    min1_Desc,
     asignment_Desc,
     asignment1_Desc,
     lbfgs_compute_direction!_Desc,

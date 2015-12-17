@@ -623,6 +623,6 @@ xinit, tol, k = zeros(p), 1e-10, 3
 
 X = original_X
 y = original_y
-xinit = zeros(p)
+xinit, tol, k = zeros(p), 1e-10, 3
 @acc w, it = lbfgs_ref(X, y, lambda, xinit, tol, k)
 @printf("Accelerated L-BFGS:      %d iterations f = %.14f\n", it, LogisticLoss(w,X,X',y,lambda)[1])
