@@ -384,6 +384,16 @@ type InsertOnEdge <: Action
     to_bb        :: BasicBlock
 end
 
+@doc """ The total number of new symbols generated """
+new_symbol_counter = 0
+
+@doc """ Generate a new symbol with the given string name + new_symbol_counter """
+function new_symbol(s::ASCIIString)
+    x = symbol(string("__", s, string(new_symbol_counter), "__"))
+    global new_symbol_counter += 1
+    x
+end
+
 @doc """ 
 Entry of SparseAccelerator. 
 """

@@ -5,7 +5,7 @@ include("../../src/SparseAccelerator.jl")
 include("./utils.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)  #SA_REORDER,
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS, SA_REORDER)
 
 function pcg_symgs(x, A, b, tolerance, maxiter)
     set_matrix_property(:L, SA_LOWER_OF, :A)
@@ -59,12 +59,13 @@ else
     A = matrix_market_read(ARGS[1], true, true)
 end
 m         = size(A, 1)
-x         = zeros(Float64, m)
 b         = ones(Float64, m)
+originalA = copy(A)
 tolerance = 1e-7
 maxiter   = 20000
 
 # Run each code version twice. Measure the time for the second time.
+x = zeros(Float64, m)
 x, k, rel_err = pcg_symgs(x, A, b, tolerance, maxiter)
 x = zeros(Float64, m)
 x, k, rel_err = pcg_symgs(x, A, b, tolerance, maxiter)
@@ -72,8 +73,11 @@ println("\tOriginal sum of x=", sum(x))
 println("\tOriginal k=", k)
 println("\tOriginal rel_err=", rel_err)
 
+x = zeros(Float64, m)
 @acc x, k, rel_err = pcg_symgs(x, A, b, tolerance, maxiter)
 x = zeros(Float64, m)
+b = ones(Float64, m)
+A = originalA
 @acc x, k, rel_err = pcg_symgs(x, A, b, tolerance, maxiter)
 println("\tOptimized version: sum of x=", sum(x))
 println("\tOptimized version:  k=", k)

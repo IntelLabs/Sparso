@@ -498,8 +498,11 @@ function build_inter_dependence_graph(
         elseif head == :(=)
             rhs_type = type_of_ast_node(args[2], symbol_info)
             if !(rhs_type <: Vector) && !(rhs_type <: AbstractMatrix)
-                # This statement has nothing to do with matrices
-                return nothing
+                # Look into rhs to see if its sub-expressions have anything to 
+                # do with inter-dependence. For example, if rhs is dot(x, y),
+                # although rhs type is not an array, x and y has ROW_ROW
+                # inter-dependence 
+                return build_inter_dependence_graph(args[2], call_sites)
             end
             lhs_type = type_of_ast_node(args[1], symbol_info)
             module_name   = ""
@@ -724,7 +727,7 @@ function create_reorder_actions(
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :set_reordering_decision_maker), fknob)
     push!(before_loop_action.new_stmts,  Statement(0, stmt))
 
-    reordering_status = gensym("reordering_status")
+    reordering_status = new_symbol("reordering_status")
     stmt              = Expr(:(=), reordering_status,
                               Expr(:call, TopNode(:vect), false, 
                                     GlobalRef(Main, :C_NULL), 

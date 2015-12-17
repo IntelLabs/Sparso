@@ -1279,7 +1279,7 @@ function get_temporary(
     end
 
     # Create a temporary
-    #temp = gensym("temp")
+    #temp = new_symbol("temp")
     len  = length(call_sites.extra.expression_temporaries)
     temp = Symbol(string("__", "temp", string(len), "__"))
     push!(call_sites.extra.expression_temporaries, temp)
