@@ -122,7 +122,7 @@ const context_test1 = Test(
         TestPattern(r"U is upper of A",
                      "Test U and A"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(:A,true,true,true,true,false,false\)",
                      "Test if mknobA is generated and is constant valued and constant structured"
         ),
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
@@ -134,7 +134,7 @@ const context_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test reordering"
         ),
-        TestPattern(r"SparseAccelerator.reordering\)\(__fknob\d*?__,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+        TestPattern(r"SparseAccelerator.reordering\)\(__fknob\d*?__,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobU\d*?__,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobA\d*?__){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
                      "Test reordering"
         ),      
         TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
@@ -324,13 +324,13 @@ const context_test5 = Test(
         TestPattern(r"U is upper of A",
                      "Test U and A"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(A,true,true,true,true,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(:A,true,true,true,true,false,false\)",
                      "Test if mknobA is generated and is constant valued, constant structured, symmetric valued and structured"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(SparseAccelerator.new_matrix_knob\)\(L,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(SparseAccelerator.new_matrix_knob\)\(:L,true,true,false,false,false,false\)",
                      "Test if mknobL is generated and is constant valued and constant structured"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(SparseAccelerator.new_matrix_knob\)\(U,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(SparseAccelerator.new_matrix_knob\)\(:U,true,true,false,false,false,false\)",
                      "Test if mknobL is generated and is constant valued and constant structured"
         ),
         TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobL.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
@@ -350,7 +350,7 @@ const context_test5 = Test(
                      "Test reordering"
         ),
 #        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(__fknob\d*?__,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
-        TestPattern( r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?|Ap,SparseAccelerator.ROW_PERM,?){4,4}\)",
+        TestPattern( r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobU\d*?__,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobA\d*?__,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?|Ap,SparseAccelerator.ROW_PERM,?){4,4}\)",
                       "Test reordering"
         ),
         TestPattern(r"New AST:(.|\n)*?reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
@@ -433,7 +433,7 @@ const cosp2_test1 = Test(
         TestPattern(r"CoSP2_call_replacement_and_context_opt:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt.",
                      "Test CoSP2_call_replacement_and_context_opt"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(false,.*?,true,true,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,false,.*?,true,true,false,false\)",
                      "Test accelerated"
         ),
         TestPattern(r"New AST:(.|\n)*?SparseAccelerator.add_mknob_to_fknob\)\(.*?mknobX.*?,.*?fknob.*?\)",
@@ -476,10 +476,10 @@ const lbfgs_test1 = Test(
         TestPattern(r"Accelerated L-BFGS:      3[345] iterations f = 0.0000000",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(Xt,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(:Xt,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(X,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.set_derivative\)\(__mknobXt\d*?__,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,__mknobX\d*?__\)",
@@ -518,8 +518,7 @@ const lbfgs_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)
-",
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,__mknobX\d*?__,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)",
                      "Test accelerated"
         ),
         TestPattern(r"New AST:(.|\n)*?unless \(SparseAccelerator.norm\)\(dfk\)",
@@ -575,10 +574,10 @@ const lbfgs_test2 = Test(
         TestPattern(r"Accelerated L-BFGS:      3[345] iterations f = 0.00000000",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(Xt,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(:Xt,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(X,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.set_derivative\)\(__mknobXt\d*?__,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,__mknobX\d*?__\)",
@@ -593,7 +592,7 @@ const lbfgs_test2 = Test(
         TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)
+        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,__mknobX\d*?__,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)
 ",
                      "Test accelerated"
         ),

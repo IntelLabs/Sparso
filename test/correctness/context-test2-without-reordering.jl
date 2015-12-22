@@ -124,9 +124,9 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
 
     k = 1
 
-    __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
-    __mknobL = (SparseAccelerator.new_matrix_knob)(L, true, true, false, false, false, false) # matrix knob for L
-    __mknobU = (SparseAccelerator.new_matrix_knob)(U, true, true, false, false, false, false) # matrix knob for L
+    __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, false, false)
+    __mknobL = (SparseAccelerator.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
+    __mknobU = (SparseAccelerator.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
 
     (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
     (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
@@ -135,13 +135,19 @@ function pcg_symgs_with_context_opt(x, A, b, tol, maxiter)
     (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
     __fknob_8221 = (SparseAccelerator.new_function_knob)()
     (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
+    fknob_spmv = (SparseAccelerator.new_function_knob)()
+    (SparseAccelerator.add_mknob_to_fknob)(__mknobA,fknob_spmv)
 
     while k <= maxiter
         old_rz = rz
 
         spmv_time -= time()
         #Ap = A*p
-        Ap = SparseAccelerator.SpMV(A,p)
+        # ISSUE: This causes knob.cpp to break, because without A's info filled into
+        # A's knob first, L has problem with building the task graph. This is a bug.
+        #   Ap = SparseAccelerator.SpMV(A,p)
+        # So add fknob_spmv to spMV to temporarily work around.
+        Ap = SparseAccelerator.SpMV(A,p, fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()

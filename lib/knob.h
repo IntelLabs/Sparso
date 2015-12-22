@@ -13,9 +13,10 @@ struct FunctionKnob;
 /**
  * colptr/rowval/nzval: CSC representation of sparse matrix
  */
-MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval,
+MatrixKnob* NewMatrixKnob(
     bool constant_valued, bool constant_structured, bool is_symmetric, 
     bool is_structure_symmetric, bool is_structure_only, bool is_single_def);
+void FillMatrixInfoOnce(MatrixKnob* mknob, int numrows, int numcols, int *colptr, int *rowval, double *nzval);
 void  DeleteMatrixKnob(MatrixKnob* mknob);
 void SetConstantValued(MatrixKnob* mknob);
 bool IsConstantValued(MatrixKnob* mknob);

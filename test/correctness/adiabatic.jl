@@ -396,7 +396,7 @@ function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
   total_time = -time()
 
   if with_context_opt
-    __mknobHdmat = (SparseAccelerator.new_matrix_knob)(Hdmat, true, true, true, true, true, false)
+    __mknobHdmat = (SparseAccelerator.new_matrix_knob)(:Hdmat, true, true, true, true, true, false)
 
     fknob_spmv1 = (SparseAccelerator.new_function_knob)()
     fknob_spmv2 = (SparseAccelerator.new_function_knob)()

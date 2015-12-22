@@ -138,8 +138,8 @@ struct MatrixKnob {
     MatrixKnob  *derivatives[DERIVATIVE_TYPE_COUNT];
     bool         is_structure_derivatives[DERIVATIVE_TYPE_COUNT];
 
-    MatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval) :
-        schedule(NULL), dss_handle(NULL), A(NULL), numrows(numrows), numcols(numcols), colptr(colptr), rowval(rowval), nzval(nzval)
+    MatrixKnob() :
+        schedule(NULL), dss_handle(NULL), A(NULL), numrows(0), numcols(0), colptr(NULL), rowval(NULL), nzval(NULL)
     {
         for (int i = 0; i < DERIVATIVE_TYPE_COUNT; i++) {
             derivatives[i] = NULL;
@@ -200,7 +200,7 @@ struct FunctionKnob {
 
 /**************************** Usage of knobs *****************************/
 // TODO: pass parameters (constant_structured, etc.) to NewMatrixKnob 
-MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, double *nzval,
+MatrixKnob* NewMatrixKnob(
     bool constant_valued = false, bool constant_structured = false, bool is_symmetric = false, 
     bool is_structure_symmetric = false, bool is_structure_only = false,
     bool is_single_def = false)
@@ -212,7 +212,7 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
     assert(!constant_valued || constant_structured);
     assert(!is_symmetric || is_structure_symmetric);
     
-    MatrixKnob* m = new MatrixKnob(numrows, numcols, colptr, rowval, nzval);
+    MatrixKnob* m = new MatrixKnob();
 
     m->constant_valued = constant_valued;
     m->constant_structured = constant_structured;
@@ -221,9 +221,20 @@ MatrixKnob* NewMatrixKnob(int numrows, int numcols, int *colptr, int *rowval, do
     m->is_structure_only = is_structure_only;
     m->is_single_def = is_single_def;
 
-    if (rowval) mknob_map[rowval] = m;
-
     return m;
+}
+
+void FillMatrixInfoOnce(MatrixKnob* mknob, int numrows, int numcols, int *colptr, int *rowval, double *nzval)
+{
+    if (mknob->numrows == 0) {
+        // The matrix knob does not have the matrix info yet
+        mknob->numrows = numrows;
+        mknob->numcols = numcols;
+        mknob->colptr = colptr;
+        mknob->rowval = rowval;
+        mknob->nzval = nzval;
+        if (rowval) mknob_map[rowval] = mknob;
+    }
 }
 
 void DeleteMatrixKnob(MatrixKnob* mknob)
@@ -358,8 +369,11 @@ static void CreateOptimizedRepresentation(
     // If transpose is already available, just us it.
     MatrixKnob *knobTranspose = m->derivatives[DERIVATIVE_TYPE_TRANSPOSE];
     if (knobTranspose && (m->is_structure_only || !m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE])) {
-        m->A = new CSR(numrows, numcols, knobTranspose->colptr, knobTranspose->rowval, knobTranspose->nzval);
-        return;
+        if (knobTranspose->numrows != 0) {
+            // knobTranspose has been filled with the info of the transposed matrix 
+            m->A = new CSR(numrows, numcols, knobTranspose->colptr, knobTranspose->rowval, knobTranspose->nzval);
+            return;
+        }
     }
 
     // Simply copying CSC to CSR will create a transposed version of original matrix
@@ -395,13 +409,13 @@ static void CreateOptimizedRepresentation(
         delete tempA;
 #endif
 
-        MatrixKnob *knobTranspose = NewMatrixKnob(AT->m, AT->n, AT->rowptr, AT->colidx, AT->values,
-                                                  m->constant_valued,
+        MatrixKnob *knobTranspose = NewMatrixKnob(m->constant_valued,
                                                   m->constant_structured,
                                                   m->is_symmetric,
                                                   m->is_structure_symmetric,
                                                   m->is_structure_only,
                                                   m->is_single_def);
+        FillMatrixInfoOnce(knobTranspose, AT->m, AT->n, AT->rowptr, AT->colidx, AT->values);
         m->derivatives[DERIVATIVE_TYPE_TRANSPOSE] = knobTranspose;
         m->is_structure_derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m->is_structure_only;
         knobTranspose->derivatives[DERIVATIVE_TYPE_TRANSPOSE] = m;
@@ -876,6 +890,9 @@ static void TriangularSolve_(
 
                 int *symRowPtr = NULL, *symColIdx = NULL, *symDiagPtr = NULL, *symExtPtr = NULL;
                 double t = omp_get_wtime();
+                // ISSUE: if L is lower part of A, and A is symmetric, then it
+                // seems to be assumed that A's matrix info has already been
+                // filled into A's knob. This assumption does not always hold. 
                 bool wasSymmetric = getSymmetricNnzPattern(
                     m->A, &symRowPtr, &symDiagPtr, &symExtPtr, &symColIdx);
                 if (LOG_REORDERING) {
@@ -898,14 +915,14 @@ static void TriangularSolve_(
                        PrefixSumCostFunction(symRowPtr)); 
 
                     if (!symKnob) {
-                        symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL,
-                                                m->constant_valued,
+                        symKnob = NewMatrixKnob(m->constant_valued,
                                                 m->constant_structured,
                                                 m->is_symmetric,
                                                 m->is_structure_symmetric,
                                                 true /* is_structure_only */,
                                                 m->is_single_def
                         );
+                        FillMatrixInfoOnce(symKnob, m->A->m, m->A->n, NULL, NULL, NULL);
                         m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = symKnob;
                         m->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
                     }
@@ -984,14 +1001,14 @@ static void TriangularSolve_(
             if (m && m->constant_structured) {
                 MatrixKnob *symKnob = m->derivatives[DERIVATIVE_TYPE_SYMMETRIC];
                 if (!symKnob) {
-                    symKnob = NewMatrixKnob(m->A->m, m->A->n, NULL, NULL, NULL,
-                                            m->constant_valued,
+                    symKnob = NewMatrixKnob(m->constant_valued,
                                             m->constant_structured,
                                             m->is_symmetric,
                                             m->is_structure_symmetric,
                                             true /* is_structure_only */,
                                             m->is_single_def
                                             );
+                    FillMatrixInfoOnce(symKnob, m->A->m, m->A->n, NULL, NULL, NULL);
                     m->derivatives[DERIVATIVE_TYPE_SYMMETRIC] = symKnob;
                     m->is_structure_derivatives[DERIVATIVE_TYPE_SYMMETRIC] = true;
                 }

@@ -159,9 +159,9 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
 
     k = 1
 
-    __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
-    __mknobL = (SparseAccelerator.new_matrix_knob)(L, true, true, false, false, false, false) # matrix knob for L
-    __mknobU = (SparseAccelerator.new_matrix_knob)(U, true, true, false, false, false, false) # matrix knob for L
+    __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, false, false)
+    __mknobL = (SparseAccelerator.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
+    __mknobU = (SparseAccelerator.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
 
     (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
     (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
@@ -273,9 +273,9 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
 
     k = 1
 
-    __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
-    __mknobL = (SparseAccelerator.new_matrix_knob)(L, true, true, false, false, false, false) # matrix knob for L
-    __mknobU = (SparseAccelerator.new_matrix_knob)(U, true, true, false, false, false, false) # matrix knob for L
+    __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, false, false)
+    __mknobL = (SparseAccelerator.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
+    __mknobU = (SparseAccelerator.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
 
     (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
     (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
@@ -333,8 +333,8 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
         SparseAccelerator.reordering(
             __fknob_8201, 
             reordering_status, 
-            A, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM,
-            U, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, 
+            A, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, __mknobA,
+            U, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, __mknobU,
             :__delimitor__,
             r, SparseAccelerator.ROW_PERM,
             x, SparseAccelerator.COL_PERM,

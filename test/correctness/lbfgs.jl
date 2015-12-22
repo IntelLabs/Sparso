@@ -228,8 +228,8 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k, with_context_opt)
   spmv_count = 0
 
 if with_context_opt
-  mknobX = (SparseAccelerator.new_matrix_knob)(X, true, true, false, false, false, false)
-  mknobXT = (SparseAccelerator.new_matrix_knob)(Xt, true, true, false, false, false, false)
+  mknobX = (SparseAccelerator.new_matrix_knob)(:X, true, true, false, false, false, false)
+  mknobXT = (SparseAccelerator.new_matrix_knob)(:Xt, true, true, false, false, false, false)
 
   (SparseAccelerator.set_derivative)(mknobX, SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE, mknobXT)
 
@@ -401,8 +401,8 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
   x = xinit
   Xt = X'
 
-  mknobX = (SparseAccelerator.new_matrix_knob)(X, true, true, false, false, false, false)
-  mknobXT = (SparseAccelerator.new_matrix_knob)(Xt, true, true, false, false, false, false)
+  mknobX = (SparseAccelerator.new_matrix_knob)(:X, true, true, false, false, false, false)
+  mknobXT = (SparseAccelerator.new_matrix_knob)(:Xt, true, true, false, false, false, false)
 
   (SparseAccelerator.set_derivative)(mknobX, SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE, mknobXT)
 
@@ -442,7 +442,7 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k)
     SparseAccelerator.reordering(
       fknob_spmv1,
       reordering_status,
-      Xt, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM,
+      Xt, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, mknobXT,
       :__delimitor__,
       y, SparseAccelerator.ROW_PERM
     )
