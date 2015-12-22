@@ -51,15 +51,15 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   __AT__ = (Main.ctranspose)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})
 
   # Create mknobs for constant-valued matrices. They are of course constant-structured.
-  __mknob__AT___8599 = SparseAccelerator.new_matrix_knob(__AT__,true,true,false,false,false,false)
-  __mknobA_8601      = SparseAccelerator.new_matrix_knob(A,     true,true,false,false,false,false)
+  __mknob__AT___8599 = SparseAccelerator.new_matrix_knob(:__AT__,true,true,false,false,false,false)
+  __mknobA_8601      = SparseAccelerator.new_matrix_knob(:A,     true,true,false,false,false,false)
 
   # Create mknobs for constant-structured matrices in the source code
   # Note R and B are also single-defs: key to enable context info propagation.
   # D is also single-def, but that is not important for this application.
-  __mknobR_8596 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
-  __mknobB_8598 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
-  __mknobD_8600 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+  __mknobR_8596 = SparseAccelerator.new_matrix_knob(:R, false,true,false,false,false,true)
+  __mknobB_8598 = SparseAccelerator.new_matrix_knob(:B, false,true,false,false,false,true)
+  __mknobD_8600 = SparseAccelerator.new_matrix_knob(:D, false,true,false,false,false,true)
 
   # Create mknobs for a function call at each call site, representing the
   # call's output, if the output is constant in structure or value. We do not
@@ -69,8 +69,8 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   # is not, we simply use nothing. Any way, a function call's result must remain
   # the same, no matter it has a fknob with it or not.
   # Any function call's result is a single-def (Defined only the function call).
-  __mknob_ADB            = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
-  __mknob_cholfact_int32 = SparseAccelerator.new_matrix_knob(false,true,false,false,false,true)
+  __mknob_ADB            = SparseAccelerator.new_matrix_knob(:ADB, false,true,false,false,false,true)
+  __mknob_cholfact_int32 = SparseAccelerator.new_matrix_knob(:cholfact_int32, false,true,false,false,false,true)
 
   # Create fknobs for a function call at each call site, and add related mknobs
   # For ADB

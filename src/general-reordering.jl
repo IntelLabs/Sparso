@@ -49,6 +49,7 @@ The CallSites' extra field for reordering.
 type ReorderingExtra
     seed                     :: Sym
     decider_ast              :: Expr
+    matrix2mknob             :: Dict{Symexpr, Symbol}
     decider_bb               :: Any # BasicBlock
     decider_stmt_idx         :: Int
     bb                       :: Any # BasicBlock
@@ -60,8 +61,8 @@ type ReorderingExtra
     live_in_before_prev_expr :: Set{Sym}
     live_in_before_expr      :: Set{Sym}
 
-    ReorderingExtra(_seed, _decider_ast) = new(_seed, _decider_ast,
-             nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed),
+    ReorderingExtra(_seed, _decider_ast, _matrix2mknob) = new(_seed, _decider_ast,
+             _matrix2mknob, nothing, 0, nothing, 0, 0, InterDependenceGraph(_seed),
              Set{Sym}(), Set{Sym}())
 end
 
@@ -619,6 +620,17 @@ function add_permutation_vector(
 end
 
 @doc """
+Add to the new expression a matrix knob
+"""
+function add_matrix_knob(
+    new_expr :: Expr,
+    mknob    :: Symbol
+)
+    push!(new_expr.args, mknob)
+end
+
+
+@doc """
 Add to the new expression an array for reordering or reverse reordering.
 """
 function add_array(
@@ -626,7 +638,8 @@ function add_array(
     A             :: Sym,
     symbol_info   :: Sym2TypeMap, 
     graph         :: InterDependenceGraph,
-    matrices_done :: Bool
+    matrices_done :: Bool,
+    matrix2mknob  :: Dict{Symexpr, Symbol}
 )
     if haskey(graph.rows, A) # If no key, the array does not appear in the loop at all
         if !matrices_done && type_of_ast_node(A, symbol_info) <: AbstractSparseMatrix
@@ -636,6 +649,7 @@ function add_array(
                 push!(new_expr.args, A)
                 add_permutation_vector(new_expr, Pr)
                 add_permutation_vector(new_expr, Pc)
+                add_matrix_knob(new_expr, matrix2mknob[A])
             end
         elseif  matrices_done && type_of_ast_node(A, symbol_info) <: Vector
             Pr = graph.rows[A].color
@@ -661,7 +675,8 @@ function add_arrays_to_reorder(
     liveness      :: Liveness, 
     graph         :: InterDependenceGraph,
     FAR           :: Vector, # Vector{Symbol},
-    matrices_done :: Bool
+    matrices_done :: Bool,
+    matrix2mknob  :: Dict{Symexpr, Symbol}
 )
     live_out = LivenessAnalysis.live_out(decider_stmt, liveness)
     def      = LivenessAnalysis.def(decider_stmt, liveness)
@@ -676,7 +691,7 @@ function add_arrays_to_reorder(
     # ISSUE: how to make sure f() is the only call happens in the statement it 
     # is called? What if for a statement like  x= f(...) * g(...)? 
     for A in setdiff(live_out, union(FAR, def))
-        add_array(new_expr, A, symbol_info, graph, matrices_done)
+        add_array(new_expr, A, symbol_info, graph, matrices_done, matrix2mknob)
     end
 end
 
@@ -694,12 +709,13 @@ function add_arrays_to_reversely_reorder(
     symbol_info   :: Sym2TypeMap, 
     liveness      :: Liveness, 
     graph         :: InterDependenceGraph,
-    matrices_done :: Bool
+    matrices_done :: Bool,
+    matrix2mknob  :: Dict{Symexpr, Symbol}
 )
     live_out = LivenessAnalysis.live_out(from_bb, liveness)
     live_in  = LivenessAnalysis.live_in(to_bb, liveness)
     for A in intersect(live_out, live_in)
-        add_array(new_expr, A, symbol_info, graph, matrices_done)
+        add_array(new_expr, A, symbol_info, graph, matrices_done, matrix2mknob)
     end
 end
 
@@ -716,7 +732,8 @@ function create_reorder_actions(
     FAR              :: Vector, # Vector{Symbol},
     fknob            :: Symbol,
     decider_bb       :: Any,   # BasicBlock,
-    decider_stmt_idx :: StatementIndex
+    decider_stmt_idx :: StatementIndex,
+    matrix2mknob     :: Dict{Symexpr, Symbol}
 )
     # Create an action that would insert new statements before the region
     # loop's head block. There are two new statements: one is to set
@@ -748,9 +765,9 @@ function create_reorder_actions(
     push!(inside_loop_action.new_stmts,  Statement(0, stmt))
 
     decider_stmt = decider_bb.statements[decider_stmt_idx]
-    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, false)
+    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, false, matrix2mknob)
     push!(stmt.args, QuoteNode(:__delimitor__))
-    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, true)
+    add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, true, matrix2mknob)
     
     # At each loop exit, insert reverse reordering of array.
     # Create statements that will delete the function knob at region exits
@@ -762,9 +779,9 @@ function create_reorder_actions(
                      reordering_status)
         push!(action.new_stmts,  Statement(0, stmt))
     
-        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, false)
+        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, false, matrix2mknob)
         push!(stmt.args, QuoteNode(:__delimitor__))
-        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, true)
+        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, true, matrix2mknob)
     end
 end
 
@@ -790,8 +807,9 @@ function reordering(
         decider          = call_sites.extra.fknob2expr[fknob]
         FAR              = call_sites.extra.reordering_FAR
         seed             = FAR[1]
-        call_sites.extra = ReorderingExtra(seed, decider)
-        
+        matrix2mknob     = call_sites.extra.matrix2mknob
+        call_sites.extra = ReorderingExtra(seed, decider, matrix2mknob)
+
         # An empty inter-dependence graph has been built. Build a row and a 
         # column vertex for the seed.
         graph = call_sites.extra.inter_dependence_graph
@@ -810,7 +828,8 @@ function reordering(
         create_reorder_actions(new_actions, region, symbol_info, liveness, graph, 
                                cfg, FAR, fknob, 
                                call_sites.extra.decider_bb,
-                               call_sites.extra.decider_stmt_idx)
+                               call_sites.extra.decider_stmt_idx,
+                               call_sites.extra.matrix2mknob)
 
         dprintln(1, 0, "\nReordering actions to take:", new_actions)
 

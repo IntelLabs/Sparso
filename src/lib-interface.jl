@@ -3,39 +3,6 @@
 const LIB_PATH = libcsr
 
 @doc """
-Create a knob for a matrix with the given properties of it.
-
-Properties: 
-constant_valued:        The matrix is a constant in value. It implies 
-                        constant_structured below.
-constant_structured:    The matrix has always the same structure, even if its
-                        value may be changed.
-is_symmetric:           The matrix is symmetric in value.
-                        It implies is_structure_symmetric below.
-is_structure_symmetric: The matrix is symmetric in structure.
-is_structure_only :     Only the structure of matrix should be used.
-is_single_def:          The matrix is statically defined only once.
-"""
-function new_matrix_knob(
-    A                      :: SparseMatrixCSC,
-    constant_valued        = false,
-    constant_structured    = false,
-    is_symmetric           = false,
-    is_structure_symmetric = false,
-    is_structure_only      = false,
-    is_single_def          = false
- )
-    assert(!constant_valued || constant_structured)
-    assert(!is_symmetric || is_structure_symmetric)
-    mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
-                   (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-                    Bool, Bool, Bool, Bool, Bool, Bool),
-                   A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval),
-                   constant_valued, constant_structured, is_symmetric,
-                   is_structure_symmetric, is_structure_only, is_single_def)
-end
-
-@doc """
 Create a knob for a matrix with the given properties of it, while this matrix
 might not have been created yet.
 
@@ -51,6 +18,7 @@ is_structure_only :     Only the structure of matrix should be used.
 is_single_def:          The matrix is statically defined only once.
 """
 function new_matrix_knob(
+    A                      :: Symbol, # Useless. Only for better readability of the generated code
     constant_valued        = false,
     constant_structured    = false,
     is_symmetric           = false,
@@ -64,11 +32,19 @@ function new_matrix_knob(
     assert(!constant_valued || constant_structured || !collective_structure_prediction_enabled)
     assert(!is_symmetric || is_structure_symmetric || !collective_structure_prediction_enabled)
     mknob = ccall((:NewMatrixKnob, LIB_PATH), Ptr{Void},
-                   (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
-                    Bool, Bool, Bool, Bool, Bool, Bool),
-                   0, 0, C_NULL, C_NULL, C_NULL,
+                   (Bool, Bool, Bool, Bool, Bool, Bool),
                    constant_valued, constant_structured, is_symmetric,
                    is_structure_symmetric, is_structure_only, is_single_def)
+end
+
+@doc """ Fill matrix info into the knob """
+function fill_matrix_info_once(
+    mknob :: Ptr{Void},
+    A     :: SparseMatrixCSC
+ )
+    ccall((:FillMatrixInfoOnce, LIB_PATH), Void,
+            (Ptr{Void}, Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}),
+             mknob, A.m, A.n, pointer(A.colptr), pointer(A.rowval), pointer(A.nzval))
 end
 
 @doc """ Set the matrix as constant_structured. """
@@ -227,6 +203,10 @@ function fwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
+    mknob_L = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+    assert(mknob_L != C_NULL)
+    fill_matrix_info_once(mknob_L, L)
+
     ccall((:ForwardTriangularSolve, LIB_PATH), Void,
            (
             Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
@@ -261,6 +241,10 @@ function bwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
+    mknob_U = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+    assert(mknob_U != C_NULL)
+    fill_matrix_info_once(mknob_U, U)
+    
     ccall((:BackwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
@@ -427,6 +411,10 @@ function SpMV!(
                 pointer(w), alpha, A1, pointer(x), beta, length(y) == 0 ? C_NULL : pointer(y), gamma, length(z) == 0 ? C_NULL : pointer(z))
           destroy_CSR(A1)
         else
+          mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+          assert(mknob_A != C_NULL)
+          fill_matrix_info_once(mknob_A, A)
+
           ccall((:SpMV, LIB_PATH), Void,
                 (Cint, Cint,
                  Ptr{Cdouble},
@@ -488,6 +476,10 @@ function SpMV!(
                 pointer(w), alpha, A1, pointer(x), beta, length(y) == 0 ? C_NULL : pointer(y), 0, C_NULL)
           destroy_CSR(A1)
         else
+          mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+          assert(mknob_A != C_NULL)
+          fill_matrix_info_once(mknob_A, A)
+
           ccall((:SpMVComplex, LIB_PATH), Void,
                 (Cint, Cint,
                  Ptr{Complex128},
@@ -513,7 +505,7 @@ function SpMV!(
 end
 
 @doc """ w = alpha*A*x + beta*y + gamma """
-# TODO: need a real 8 args SpMV!
+# TODO: need a real 8 args SpMV! gamma is not handled yet.
 SpMV!(
     w     :: Vector{Complex128}, 
     alpha :: Number, 
@@ -1102,6 +1094,10 @@ function ADB(
     #TODO: assert(mknob_D->diagonal)
     assert(ccall((:IsConstantStructured, LIB_PATH), Bool, (Ptr{Void},), mknob_B))
 
+    fill_matrix_info_once(mknob_A, A)
+    fill_matrix_info_once(mknob_D, D)
+    fill_matrix_info_once(mknob_B, B)
+
     m = size(A, 1)
     n = size(B, 2)
     k = size(A, 2)
@@ -1137,6 +1133,12 @@ function SpSquareWithEps(
     eps   :: Number,
     fknob :: Ptr{Void} = C_NULL)
 
+    if fknob != C_NULL
+        mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+        assert(mknob_A != C_NULL)
+        fill_matrix_info_once(mknob_A, A)
+    end
+    
     m = size(A, 1)
     n = size(A, 2)
 
@@ -1241,6 +1243,8 @@ function cholfact_int32(
 
     mknob_A = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
     assert(mknob_A != C_NULL)
+
+    fill_matrix_info_once(mknob_A, A)
 
     ccall((:CholFact, LIB_PATH), Ptr{Void},
          (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Void}),
@@ -1360,10 +1364,12 @@ function reorder_arrays(
             end
         else
             assert(typeof(A) <: AbstractSparseMatrix)
-            # For each matrix, 2 permutation vectors follow
+            # For each matrix, 2 permutation vectors and 1 matrix knob follow
             perm1 = permutation_vectors[array_tuple[i + 1]]
             perm2 = permutation_vectors[array_tuple[i + 2]]
-            i     = i + 3
+            mknob = array_tuple[i + 3]
+            fill_matrix_info_once(mknob, A)
+            i     = i + 4
             if inverse_reorder
                 reorder_matrix!(A, perm2, perm1)
             else

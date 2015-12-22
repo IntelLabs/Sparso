@@ -45,7 +45,7 @@ function pagerank_call_replacement(A, p, r, d_inv, maxiter, do_print) # p: initi
   t = time()
   reorder_time = 0.
 
-  __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, false, false)
+  __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, false, false)
 
   fknob_spmv = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(__mknobA, fknob_spmv)
@@ -84,7 +84,7 @@ function pagerank_call_replacement_and_context_opt(A, p, r, d_inv, maxiter, do_p
   t = time()
   reorder_time = 0.
 
-  __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, true, false)
+  __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, true, false)
 
   fknob_spmv = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(__mknobA, fknob_spmv)
@@ -123,7 +123,7 @@ function pagerank_call_replacement_and_context_opt_and_reordering(A, p, r, d_inv
   t = time()
   reorder_time = 0.
 
-  __mknobA = (SparseAccelerator.new_matrix_knob)(A, true, true, true, true, true, false)
+  __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, true, false)
 
   fknob_spmv = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(__mknobA, fknob_spmv)

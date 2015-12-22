@@ -391,7 +391,7 @@ function CoSP2_call_replacement_and_context_opt(X, flops)
   spgemm_time = 0
   spadd_time = 0
 
-  mknobX = (SparseAccelerator.new_matrix_knob)(X, false, false, true, true, false, false) # X is symmetric
+  mknobX = (SparseAccelerator.new_matrix_knob)(:X, false, false, true, true, false, false) # X is symmetric
 
   fknob_spgemm = (SparseAccelerator.new_function_knob)()
   (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spgemm)
