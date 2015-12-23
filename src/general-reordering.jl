@@ -790,7 +790,7 @@ Perform analyses for reordering. Write the intended transformation into actions.
 """
 function reordering(
     actions     :: Vector{Action},
-    region      :: LoopRegion,
+    region      :: Region,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG,

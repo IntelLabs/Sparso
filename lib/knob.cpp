@@ -250,8 +250,7 @@ static bool CheckMatrixKnobConsistency(MatrixKnob *m)
 {
     if (m->constant_valued) {
         assert(m->constant_structured);
-        assert(!m->is_single_def); // There cannot be any definition.
-        if (!m->constant_structured || m->is_single_def) {
+        if (!m->constant_structured) {
             return false;
         }
     }

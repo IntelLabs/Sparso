@@ -176,7 +176,7 @@ function gather_context_sensitive_info(
         # reordering of data to impact many loop iterations, not sequential code.
         region = call_sites.region
         if typeof(region) == LoopRegion
-            region_immediate_members = region.immediate_members
+            region_immediate_members = region.members
             bb                       = call_sites.extra.bb
             if in(bb.label, region_immediate_members)
                 call_sites.extra.reordering_decider_fknob = fknob
@@ -1037,18 +1037,17 @@ of the expression and handle each with the handler. Otherwise, handle the
 expression with the handler.
 """
 function visit_expressions(
-    region                 :: LoopRegion,
+    region                 :: Region,
     cfg                    :: CFG,
     call_sites             :: CallSites,
     recursive              :: Bool,
     handler                :: Function,
     two_statements_handler :: Function = do_nothing
 )
-    L           = region.loop
     blocks      = cfg.basic_blocks
     symbol_info = call_sites.symbol_info
     liveness    = call_sites.liveness
-    for bb_idx in L.members
+    for bb_idx in region.members
         bb                             = blocks[bb_idx]
         statements                     = bb.statements
         call_sites.extra.bb            = bb
@@ -1112,26 +1111,41 @@ end
 gather_knobs(ast, call_sites :: CallSites, top_level_number, is_top_level, read) =
     gather_knobs(ast, call_sites)
 
+@doc """ Create statements that will delete matrix and function knobs. """
+function delete_knobs(
+    action         :: Action,
+    matrix_knobs   :: Set{Symbol},
+    function_knobs :: Set{Symbol},
+    call_sites     :: CallSites
+)
+    for mknob in matrix_knobs
+        create_delete_matrix_knob(action.new_stmts, mknob)
+    end
+
+    for fknob in function_knobs
+        fknob_creator, fknob_deletor = call_sites.extra.fknob2ctor_dtor[fknob]
+        create_delete_function_knob(action.new_stmts, fknob, fknob_deletor)
+    end
+end
+
 @doc """
 Create statements that will create and intialize a knob for a matrix/function
 before the loop, and statements that will delete all the matrix/function
 knobs at each exit of the loop.
 """
 function generate_and_delete_knobs(
-    region     :: LoopRegion,
+    region     :: Region,
     call_sites :: CallSites
 )
-    # So far, we handle only a loop region
-    assert(typeof(call_sites.region) == LoopRegion)
-
     region         = call_sites.region
-    L              = region.loop
     matrix_knobs   = call_sites.extra.matrix_knobs
     function_knobs = call_sites.extra.function_knobs
     derivatives    = call_sites.extra.derivatives
     symbol_info    = call_sites.symbol_info
 
-    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
+    action_before_region = (typeof(region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
     push!(call_sites.actions, action_before_region)
 
     # Add statements that generates mknobs and fknobs
@@ -1187,18 +1201,16 @@ function generate_and_delete_knobs(
         create_set_derivative(action_before_region.new_stmts, mknob1, relation, mknob2)
     end
 
-    # Create statements that will delete the knobs at region exits
-    for exit in region.exits
-        action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
-        push!(call_sites.actions, action)
-
-        for mknob in matrix_knobs
-            create_delete_matrix_knob(action.new_stmts, mknob)
-        end
-
-        for fknob in function_knobs
-            fknob_creator, fknob_deletor = call_sites.extra.fknob2ctor_dtor[fknob]
-            create_delete_function_knob(action.new_stmts, fknob, fknob_deletor)
+    if (typeof(region) == FunctionRegion)
+            action  = InsertBeforeOrAfterStatement(Vector{Statement}(), false, region.exit, length(region.exit.statements))
+            push!(call_sites.actions, action)
+            delete_knobs(action, matrix_knobs, function_knobs, call_sites)
+    else
+        # Create statements that will delete the knobs at region exits
+        for exit in region.exits
+            action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
+            push!(call_sites.actions, action)
+            delete_knobs(action, matrix_knobs, function_knobs, call_sites)
         end
     end
 end
@@ -1211,11 +1223,10 @@ function add_matrix_knobs_to_function_knobs(
 )
     assert(!call_sites.extra.ast_may_change)
 
-   # So far, we handle only a loop region
-    assert(typeof(call_sites.region) == LoopRegion)
-
-    L                    = call_sites.region.loop
-    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
+    region               = call_sites.region
+    action_before_region = (typeof(region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
     push!(call_sites.actions, action_before_region)
     
     for fknob in call_sites.extra.function_knobs
@@ -1283,7 +1294,7 @@ function-specific context info (mknobs and fknobs).
 """
 function context_sensitive_transformation(
     actions         :: Vector{Action},
-    region          :: LoopRegion,
+    region          :: Region,
     lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
@@ -1360,13 +1371,17 @@ function AST_context_sensitive_transformation(
     liveness    :: Liveness, 
     cfg         :: CFG
 )
-    func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
-
-    # Discover context info for each loop region
-    for region in regions
-        context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
+    if context_sensitive_opt_for_func
+        # Context opt for the function
+        context_sensitive_transformation(actions, func_region, lambda, symbol_info, liveness, cfg)
+    else
+        # Context opt for each loop region
+       func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
+       for region in regions
+            context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
+        end
     end
-
+    
     dprintln(1, 0, "\nContext-sensitive actions to take:")
     dprintln(1, 1, "", actions)
     
