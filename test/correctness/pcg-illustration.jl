@@ -5,13 +5,15 @@ include("../../src/SparseAccelerator.jl")
 include("./utils.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS, SA_REORDER)
+set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_CONTEXT_FUNC, SA_REPLACE_CALLS, SA_REORDER)
 
 function pcg_symgs(x, A, b, tolerance, maxiter)
     set_matrix_property(:L, SA_LOWER_OF, :A)
     set_matrix_property(:U, SA_UPPER_OF, :A)
     set_matrix_property(Dict(
-        :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
+        :A => SA_CONST_VALUED | SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
+        :L => SA_CONST_VALUED,
+        :U => SA_CONST_VALUED,
         )
     )
 
@@ -22,6 +24,7 @@ function pcg_symgs(x, A, b, tolerance, maxiter)
     U  = SparseMatrixCSC{Cdouble, Cint}(spdiagm(1./diag(A)))*triu(A)
     r = b - A * x
     normr0 = norm(r)
+    z = copy(r) # A workaround when SA_CONTEXT_FUNC is enabled so that z is defined before the following statement is replaced with fwdTriSolve!(z, ..)
     z = L \ r    
     z = U \ z    
     p = copy(z)

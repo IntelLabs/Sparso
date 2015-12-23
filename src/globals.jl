@@ -48,6 +48,9 @@ const SA_USE_SPLITTING_PATTERNS = 42
 @doc """ Enable context-sensitive optimization. """
 const SA_CONTEXT = 48
 
+@doc """ Enable context-sensitive optimization for a whole function. """
+const SA_CONTEXT_FUNC = 50
+
 @doc """ Enable reordering of arrays. """
 const SA_REORDER = 56
 
@@ -65,6 +68,7 @@ use_splitting_patterns                  = false
 reorder_enabled                         = false
 reorder_when_beneficial                 = true # By default, reordering with benefit-cost analysis
 context_sensitive_opt_enabled           = false
+context_sensitive_opt_for_func          = false
 collective_structure_prediction_enabled = true
 
 # A control used only for trace call replacement internally
@@ -101,6 +105,8 @@ function set_options(args...)
             global use_splitting_patterns = true
         elseif arg == SA_CONTEXT
             global context_sensitive_opt_enabled = true
+        elseif arg == SA_CONTEXT_FUNC
+            global context_sensitive_opt_for_func = true
         elseif arg == SA_REORDER
             # Reordering is a kind of context-sensitive optimization: without
             # know a matrix is constant valued, the library might not want to

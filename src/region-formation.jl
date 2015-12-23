@@ -1,10 +1,14 @@
 @doc """ The whole function region. Not really used so far. """
 type FunctionRegion <: Region
-    func_ast        :: Expr
-    symbol_property :: Symexpr2PropertiesMap
+    func_ast         :: Expr
+    members          :: Set{BasicBlockIndex}
+    entry            :: Any #BasicBlock
+    exit             :: Any #BasicBlock
+    symbol_property  :: Symexpr2PropertiesMap
     property_proxies :: Any
     
-    FunctionRegion(_func_ast) = new(_func_ast, Symexpr2PropertiesMap(), nothing)
+    FunctionRegion(_func_ast) = new(_func_ast, Set{BasicBlockIndex}(), nothing,
+        nothing, Symexpr2PropertiesMap(), nothing)
 end
 
 @doc """ 
@@ -27,20 +31,20 @@ type LoopRegion <: Region
     loop              :: Loop
     exits             :: Set{LoopExit}
     symbol_property   :: Symexpr2PropertiesMap
-    property_proxies :: Any
-    immediate_members :: Set{BasicBlockIndex} 
+    property_proxies  :: Any
+    members           :: Set{BasicBlockIndex} # immediate members only
 end
 
 @doc """ 
 Form a region with the loop.
 """
 function loop_region_formation(
-    parent            :: Region,
-    L                 :: Loop,
-    cfg               :: CFG,
-    immediate_members :: Set{BasicBlockIndex} 
+    parent  :: Region,
+    L       :: Loop,
+    cfg     :: CFG,
+    members :: Set{BasicBlockIndex} 
 )
-    region = LoopRegion(parent, L, Set{LoopExit}(), Symexpr2PropertiesMap(), nothing, immediate_members)
+    region = LoopRegion(parent, L, Set{LoopExit}(), Symexpr2PropertiesMap(), nothing, members)
     blocks = cfg.basic_blocks
     for bb_index in L.members
         bb = blocks[bb_index]
@@ -65,7 +69,7 @@ function loop_region_formation(
     regions = Vector{LoopRegion}()
     for L in loop_info.loops
         is_outermost      = true
-        immediate_members = copy(L.members)
+        members = copy(L.members)
         for L1 in loop_info.loops
             assert(L == L1 || L.members != L1.members)
             if L != L1 && L.members < L1.members
@@ -73,12 +77,12 @@ function loop_region_formation(
                 break
             end
             if L != L1 && L1.members < L.members
-                setdiff!(immediate_members, L1.members)
+                setdiff!(members, L1.members)
             end            
         end
         
         if is_outermost
-            region = loop_region_formation(parent , L, cfg, immediate_members)
+            region = loop_region_formation(parent , L, cfg, members)
             push!(regions, region)
         end
     end
@@ -89,12 +93,22 @@ end
 Form regions.
 """
 function region_formation(
-    parent    :: Region,
-    cfg       :: CFG, 
-    loop_info :: DomLoops
+    func_region :: FunctionRegion,
+    cfg         :: CFG, 
+    loop_info   :: DomLoops
 )
+    for (bb_idx, bb) in cfg.basic_blocks
+        push!(func_region.members, bb_idx)
+        if bb_idx == -1
+            func_region.entry = bb
+        end
+        if bb_idx == -2
+            func_region.exit = bb
+        end
+    end
+
     # So far, form only loop regions.
     # TODO: (1) Connect multiple loop regions together into a bigger region 
     #       (2) Extend a region to include non-loop code
-    return loop_region_formation(parent, cfg, loop_info)
+    return loop_region_formation(func_region, cfg, loop_info)
 end
