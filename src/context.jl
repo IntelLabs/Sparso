@@ -176,23 +176,6 @@ function gather_context_sensitive_info(
         # a loop region.
         # The decider should not be in the function region: we want one
         # reordering of data to impact many loop iterations, not sequential code.
-<<<<<<< HEAD
-        region = call_sites.region
-        if typeof(region) == LoopRegion
-            region_immediate_members = region.members
-            bb                       = call_sites.extra.bb
-            if in(bb.label, region_immediate_members)
-                call_sites.extra.reordering_decider_fknob = fknob
-                call_sites.extra.reordering_decider_power = reordering_power
-                call_sites.extra.reordering_FAR           = []
-                for arg in reordering_FAR
-                    new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
-                    assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
-                    M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
-                    push!(call_sites.extra.reordering_FAR, M)
-                end
-            end
-=======
         call_sites.extra.reordering_decider_fknob = fknob
         call_sites.extra.reordering_decider_power = reordering_power * weight
         call_sites.extra.reordering_FAR           = []
@@ -201,7 +184,6 @@ function gather_context_sensitive_info(
             assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
             M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
             push!(call_sites.extra.reordering_FAR, M)
->>>>>>> new_branch_name
         end
     end
 
@@ -1059,18 +1041,11 @@ function visit_expressions(
     handler                :: Function,
     two_statements_handler :: Function = do_nothing
 )
-<<<<<<< HEAD
-    blocks      = cfg.basic_blocks
-    symbol_info = call_sites.symbol_info
-    liveness    = call_sites.liveness
-    for bb_idx in region.members
-=======
     members     = (typeof(region) == FunctionRegion) ? region.members : region.loop.members
     blocks      = cfg.basic_blocks
     symbol_info = call_sites.symbol_info
     liveness    = call_sites.liveness
     for bb_idx in members
->>>>>>> new_branch_name
         bb                             = blocks[bb_idx]
         statements                     = bb.statements
         call_sites.extra.bb            = bb
@@ -1225,11 +1200,6 @@ function generate_and_delete_knobs(
     end
 
     if (typeof(region) == FunctionRegion)
-<<<<<<< HEAD
-            action  = InsertBeforeOrAfterStatement(Vector{Statement}(), false, region.exit, length(region.exit.statements))
-            push!(call_sites.actions, action)
-            delete_knobs(action, matrix_knobs, function_knobs, call_sites)
-=======
         for pred_bb in region.exit.preds
             len = length(pred_bb.statements)
             assert(len > 0)
@@ -1241,7 +1211,6 @@ function generate_and_delete_knobs(
             push!(call_sites.actions, action)
             delete_knobs(action, matrix_knobs, function_knobs, call_sites)
         end
->>>>>>> new_branch_name
     else
         # Create statements that will delete the knobs at region exits
         for exit in region.exits
@@ -1332,10 +1301,7 @@ function-specific context info (mknobs and fknobs).
 function context_sensitive_transformation(
     actions         :: Vector{Action},
     region          :: Region,
-<<<<<<< HEAD
-=======
     bb2depth        :: Dict{BasicBlock, Int}, 
->>>>>>> new_branch_name
     lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
@@ -1413,17 +1379,6 @@ function AST_context_sensitive_transformation(
     liveness    :: Liveness, 
     cfg         :: CFG
 )
-<<<<<<< HEAD
-    if context_sensitive_opt_for_func
-        # Context opt for the function
-        context_sensitive_transformation(actions, func_region, lambda, symbol_info, liveness, cfg)
-    else
-        # Context opt for each loop region
-       func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
-       for region in regions
-            context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
-        end
-=======
     # Find properties for the function and loop regions.
     func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
     for region in regions
@@ -1438,7 +1393,6 @@ function AST_context_sensitive_transformation(
        for region in regions
             context_sensitive_transformation(actions, region, bb2depth, lambda, symbol_info, liveness, cfg)
        end
->>>>>>> new_branch_name
     end
     
     dprintln(1, 0, "\nContext-sensitive actions to take:")

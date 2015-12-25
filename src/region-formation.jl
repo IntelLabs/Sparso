@@ -1,11 +1,7 @@
 @doc """ The whole function region. Not really used so far. """
 type FunctionRegion <: Region
     func_ast         :: Expr
-<<<<<<< HEAD
-    members          :: Set{BasicBlockIndex}
-=======
     members          :: Set{BasicBlockIndex} # All members in the function
->>>>>>> new_branch_name
     entry            :: Any #BasicBlock
     exit             :: Any #BasicBlock
     symbol_property  :: Symexpr2PropertiesMap
@@ -36,11 +32,7 @@ type LoopRegion <: Region
     exits             :: Set{LoopExit}
     symbol_property   :: Symexpr2PropertiesMap
     property_proxies  :: Any
-<<<<<<< HEAD
-    members           :: Set{BasicBlockIndex} # immediate members only
-=======
     immediate_members :: Set{BasicBlockIndex}
->>>>>>> new_branch_name
 end
 
 @doc """ 
@@ -100,13 +92,6 @@ end
 @doc """ 
 Form regions.
 """
-<<<<<<< HEAD
-function region_formation(
-    func_region :: FunctionRegion,
-    cfg         :: CFG, 
-    loop_info   :: DomLoops
-)
-=======
 function map_blocks_to_loop_nesting_depths(
     cfg       :: CFG,
     loop_info :: DomLoops
@@ -140,7 +125,6 @@ function region_formation(
     cfg         :: CFG, 
     loop_info   :: DomLoops
 )
->>>>>>> new_branch_name
     for (bb_idx, bb) in cfg.basic_blocks
         push!(func_region.members, bb_idx)
         if bb_idx == -1
@@ -154,9 +138,6 @@ function region_formation(
     # So far, form only loop regions.
     # TODO: (1) Connect multiple loop regions together into a bigger region 
     #       (2) Extend a region to include non-loop code
-<<<<<<< HEAD
-    return loop_region_formation(func_region, cfg, loop_info)
-=======
     regions = loop_region_formation(func_region, cfg, loop_info)
     
     # Create a map from blocks to loop nesting depth. A block outside any loop has
@@ -164,5 +145,4 @@ function region_formation(
     bb2depth = map_blocks_to_loop_nesting_depths(cfg, loop_info)
     
     return regions, bb2depth
->>>>>>> new_branch_name
 end
