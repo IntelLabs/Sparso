@@ -11,6 +11,7 @@ The CallSites' extra field for context info discovery.
 type ContextExtra
     # Environment before the AST walking
     matrix_properties        :: Symexpr2PropertiesMap
+    bb2depth                 :: Dict{BasicBlock, Int}
 
     # Flag if ast may be under change. We visite the AST twice. It is true
     # the first time (allowing pattern replacement; knobs are generated as well),
@@ -47,8 +48,8 @@ type ContextExtra
     # subtrees to match, which are no longer in the same statement.
     non_splitting_patterns  :: Vector{Pattern}
 
-    ContextExtra(_matrix_properties, _ast_may_change) = new(
-            _matrix_properties, _ast_may_change, :nothing, 0, [],
+    ContextExtra(_matrix_properties, _bb2depth, _ast_may_change) = new(
+            _matrix_properties, _bb2depth, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
@@ -167,13 +168,15 @@ function gather_context_sensitive_info(
         push!(call_sites.extra.fknob2mknobs[fknob], call_sites.extra.matrix2mknob[M])
     end
 
-    if reorder_enabled && call_sites.extra.reordering_decider_power < reordering_power
+    bb     = call_sites.extra.bb
+    depth  = call_sites.extra.bb2depth[bb]
+    weight = 2 << depth 
+    if reorder_enabled && depth > 0 && call_sites.extra.reordering_decider_power < (reordering_power * weight)
         # The decider should be in a basic block that is an immediate member of
-        # a loop region. That is, it should be contained in the outermost loop, not
-        # in any inner loop, because doing reordering and reverse reordering
-        # in an inner loop seems too expensive.
-        # The decider should not be in the function region either: we want one
+        # a loop region.
+        # The decider should not be in the function region: we want one
         # reordering of data to impact many loop iterations, not sequential code.
+<<<<<<< HEAD
         region = call_sites.region
         if typeof(region) == LoopRegion
             region_immediate_members = region.members
@@ -189,6 +192,16 @@ function gather_context_sensitive_info(
                     push!(call_sites.extra.reordering_FAR, M)
                 end
             end
+=======
+        call_sites.extra.reordering_decider_fknob = fknob
+        call_sites.extra.reordering_decider_power = reordering_power * weight
+        call_sites.extra.reordering_FAR           = []
+        for arg in reordering_FAR
+            new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
+            assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
+            M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
+            push!(call_sites.extra.reordering_FAR, M)
+>>>>>>> new_branch_name
         end
     end
 
@@ -242,7 +255,9 @@ function CS_ADAT_post_replacement(
     #     out of loop)
     # (2) Replace ADB(A, D, A) as ADB(A, D, AT).
     # fknob is not added for now, which will be added automatically later.
-    action = InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
+    action = (typeof(call_sites.region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, call_sites.region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
     push!(call_sites.actions, action)
 
     A = ast.args[4]
@@ -1044,10 +1059,18 @@ function visit_expressions(
     handler                :: Function,
     two_statements_handler :: Function = do_nothing
 )
+<<<<<<< HEAD
     blocks      = cfg.basic_blocks
     symbol_info = call_sites.symbol_info
     liveness    = call_sites.liveness
     for bb_idx in region.members
+=======
+    members     = (typeof(region) == FunctionRegion) ? region.members : region.loop.members
+    blocks      = cfg.basic_blocks
+    symbol_info = call_sites.symbol_info
+    liveness    = call_sites.liveness
+    for bb_idx in members
+>>>>>>> new_branch_name
         bb                             = blocks[bb_idx]
         statements                     = bb.statements
         call_sites.extra.bb            = bb
@@ -1202,9 +1225,23 @@ function generate_and_delete_knobs(
     end
 
     if (typeof(region) == FunctionRegion)
+<<<<<<< HEAD
             action  = InsertBeforeOrAfterStatement(Vector{Statement}(), false, region.exit, length(region.exit.statements))
             push!(call_sites.actions, action)
             delete_knobs(action, matrix_knobs, function_knobs, call_sites)
+=======
+        for pred_bb in region.exit.preds
+            len = length(pred_bb.statements)
+            assert(len > 0)
+            last_stmt = pred_bb.statements[len]
+            last_expr = last_stmt.expr
+            assert(typeof(last_expr) <: Expr && last_expr.head == :return)
+
+            action  = InsertBeforeOrAfterStatement(Vector{Statement}(), true, pred_bb, len)
+            push!(call_sites.actions, action)
+            delete_knobs(action, matrix_knobs, function_knobs, call_sites)
+        end
+>>>>>>> new_branch_name
     else
         # Create statements that will delete the knobs at region exits
         for exit in region.exits
@@ -1295,13 +1332,15 @@ function-specific context info (mknobs and fknobs).
 function context_sensitive_transformation(
     actions         :: Vector{Action},
     region          :: Region,
+<<<<<<< HEAD
+=======
+    bb2depth        :: Dict{BasicBlock, Int}, 
+>>>>>>> new_branch_name
     lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
     cfg             :: CFG
 )
-    matrix_properties = find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
-
     # We need to walk the AST recursively twice: first, match/replace and gather
     # context info. We cannot add context info into the AST yet, because
     # replacement happens recursively: a subtree might be replaced, and then
@@ -1318,13 +1357,15 @@ function context_sensitive_transformation(
     ast_may_change = true
     call_sites = CallSites(Set{CallSite}(), region, lambda, symbol_info, liveness,
                            CS_transformation_patterns,
-                           actions, ContextExtra(matrix_properties, ast_may_change))
+                           actions, ContextExtra(region.symbol_property, bb2depth, ast_may_change))
     
-    #global trace_call_replacement = true
+#    global trace_call_replacement = true
     
     # All patterns are non-splittable.
     call_sites.extra.non_splitting_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
+
+#    global trace_call_replacement = false
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
     # were generated in the first walk. Not all those generated are gathered,
@@ -1366,11 +1407,13 @@ function AST_context_sensitive_transformation(
     actions     :: Vector{Action},
     func_region :: FunctionRegion,
     regions     :: Vector{LoopRegion},
+    bb2depth    :: Dict{BasicBlock, Int},
     lambda      :: LambdaInfo,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG
 )
+<<<<<<< HEAD
     if context_sensitive_opt_for_func
         # Context opt for the function
         context_sensitive_transformation(actions, func_region, lambda, symbol_info, liveness, cfg)
@@ -1380,6 +1423,22 @@ function AST_context_sensitive_transformation(
        for region in regions
             context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
         end
+=======
+    # Find properties for the function and loop regions.
+    func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
+    for region in regions
+        region.symbol_property = find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
+    end
+
+    if context_sensitive_opt_for_func
+        # Context opt for the function
+        context_sensitive_transformation(actions, func_region, bb2depth, lambda, symbol_info, liveness, cfg)
+    else
+        # Context opt for each loop region
+       for region in regions
+            context_sensitive_transformation(actions, region, bb2depth, lambda, symbol_info, liveness, cfg)
+       end
+>>>>>>> new_branch_name
     end
     
     dprintln(1, 0, "\nContext-sensitive actions to take:")

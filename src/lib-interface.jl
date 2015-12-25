@@ -203,10 +203,12 @@ function fwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
-    mknob_L = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    assert(mknob_L != C_NULL)
-    fill_matrix_info_once(mknob_L, L)
-
+    if fknob != C_NULL
+        mknob_L = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+        assert(mknob_L != C_NULL)
+        fill_matrix_info_once(mknob_L, L)
+    end
+    
     ccall((:ForwardTriangularSolve, LIB_PATH), Void,
            (
             Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, 
@@ -241,10 +243,12 @@ function bwdTriSolve!(
     b     :: Vector,
     fknob :: Ptr{Void}
  )
-    mknob_U = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
-    assert(mknob_U != C_NULL)
-    fill_matrix_info_once(mknob_U, U)
-    
+    if fknob != C_NULL
+        mknob_U = ccall((:GetMatrixKnob, LIB_PATH), Ptr{Void}, (Ptr{Void}, Cint), fknob, 0)
+        assert(mknob_U != C_NULL)
+        fill_matrix_info_once(mknob_U, U)
+    end
+        
     ccall((:BackwardTriangularSolve, LIB_PATH), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
@@ -277,7 +281,8 @@ function speye_int32(m::Integer)
 end
 
 function ilu(
-    A     :: SparseMatrixCSC{Float64, Int32}
+    A     :: SparseMatrixCSC{Float64, Int32},
+    fknob :: Ptr{Void} = C_NULL
  )
     LU_nzval = zeros(nnz(A))
 
@@ -286,7 +291,7 @@ function ilu(
           size(A, 1), size(A, 2),
           A.colptr, A.rowval, A.nzval,
           LU_nzval,
-          C_NULL)
+          fknob)
 
     LU = SparseMatrixCSC{Cdouble, Cint}(size(A, 1), size(A, 2), copy(A.colptr), copy(A.rowval), LU_nzval)
     LU = LU'
@@ -295,6 +300,23 @@ function ilu(
     U = triu(LU)
 
     L, U
+end
+
+function ichol(
+    A     :: SparseMatrixCSC{Float64, Int32}
+ )
+    L_nzval = zeros(nnz(A))
+
+    ccall((:IChol, LIB_PATH), Void,
+          (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}),
+          size(A, 1), size(A, 2),
+          A.colptr, A.rowval, A.nzval,
+          L_nzval,
+          C_NULL)
+
+    L = SparseMatrixCSC{Cdouble, Cint}(size(A, 1), size(A, 2), copy(A.colptr), copy(A.rowval), L_nzval)
+    L = L'
+    L
 end
 
 @doc """ 
@@ -346,11 +368,12 @@ function inverse_reorder_vector!(
 end
 
 function set_reordering_decision_maker(
-    fknob :: Ptr{Void}
+    fknob            :: Ptr{Void},
+    perm_restriction = PERM_VECTORS_ARE_INDEPENDENT
  )
     ccall((:SetReorderingDecisionMaker, LIB_PATH), Void,
-         (Ptr{Void},),
-         fknob)
+         (Ptr{Void}, Cint),
+         fknob, perm_restriction)
 end
 
 function get_reordering_vectors(
@@ -1313,6 +1336,17 @@ const ROW_INV_PERM = 2
 const COL_PERM     = 3
 const COL_INV_PERM = 4
 const NEVER_PERM   = 5 # Never permute. This state can not change to any other.
+
+# The row and column permutation vectors might have some restrictions from the
+# source code. For example, from pcg source code: "z=L\r" and "dot(r,z)", we
+# know "Lz=r" and "dot(r,z)", and therefore: 
+#    L's row permutation vector is the same as r's, which is the same as z's,
+#    which is inverse to L's column permutation vector.
+# Therefore,
+#    L's row and column permutation vector must be inverse to each other.
+const PERM_VECTORS_ARE_INDEPENDENT = 0
+const PERM_VECTORS_ARE_INVERSE     = 1
+const PERM_VECTORS_ARE_SAME        = 2
 
 const LOG_REORDERING = false
 
