@@ -192,7 +192,7 @@ void DeleteFunctionKnob(FunctionKnob* fknob);
  * Other functions just respect the decision, makes no decision, nor does any
  * reordering.
  */
-void SetReorderingDecisionMaker(FunctionKnob *fknob);
+void SetReorderingDecisionMaker(FunctionKnob *fknob, int perm_restriction);
 int *GetRowReorderingVector(FunctionKnob *fknob, int *len);
 int *GetRowInverseReorderingVector(FunctionKnob *fknob, int *len);
 int *GetColReorderingVector(FunctionKnob *fknob, int *len);

@@ -33,14 +33,15 @@ Inter-dependence graph. It separately represents rows and columns of arrays. It
 will be colored starting from the seed.
 """
 type InterDependenceGraph
-    rows    :: Dict{Symexpr, InterDependenceGraphVertex}
-    columns :: Dict{Symexpr, InterDependenceGraphVertex}
-    seed    :: Sym
+    rows             :: Dict{Symexpr, InterDependenceGraphVertex}
+    columns          :: Dict{Symexpr, InterDependenceGraphVertex}
+    seed             :: Sym
+    perm_restriction :: Int
     
     InterDependenceGraph(_seed) = new(
         Dict{Symexpr, InterDependenceGraphVertex}(),
         Dict{Symexpr, InterDependenceGraphVertex}(),
-        _seed)
+        _seed, PERM_VECTORS_ARE_INDEPENDENT)
 end
  
 @doc """
@@ -186,27 +187,6 @@ function build_vertices_and_edge(
         vertex2 = build_vertex(array2, true, graph)
         build_edge(vertex1, vertex2, false)
     end
-end
-
-@doc """
-Build two vertices and and an edge between them in the inter-dependence graph.
-"""
-function build_vertices_and_edge(
-    array_index1 :: Int,
-    array_index2 :: Int,
-    relation     :: Int,
-    ast          :: Expr,
-    args         :: Vector,
-    graph        :: InterDependenceGraph
-)
-    array1 = (array_index1 == 0) ? ast :
-             (typeof(args[array_index1]) == SymbolNode ?
-              args[array_index1].name : args[array_index1])
-    array2 = (array_index2 == 0) ? ast :
-             (typeof(args[array_index2]) == SymbolNode ?
-              args[array_index2].name : args[array_index2])
-
-    build_vertices_and_edge(array1, array2, relation, graph)
 end
 
 @doc """
@@ -392,6 +372,29 @@ function build_inter_dependence_graph_for_set_get_index(
 end
 
 @doc """
+Get the symbol or expr representing the array. If array_index is something like 
+"0.1", it means the return result of the AST is a tuple, and element 1 of the tuple
+is needed; in this case, we return a manually made expression 
+Expr(:TupleElement, ast, 1).
+"""
+function get_array(
+    array_index :: Union{Int, String},
+    ast         :: Expr,
+    args        :: Vector,
+)
+    if typeof(array_index) <: Int
+        a = (array_index == 0) ? ast :
+             (typeof(args[array_index]) == SymbolNode ?
+              args[array_index].name : args[array_index])
+        return a
+    else   
+        assert(array_index[1] == '0' && array_index[2] == '.')
+        index = parse(Int, array_index[3:end])
+        return Expr(:TupleElement, ast, index)
+    end
+end
+
+@doc """
 Build inter-dependence graph with the inter-dependence information drawn from
 the AST of a function call.
 """
@@ -407,7 +410,13 @@ function build_inter_dependence_graph_for_call(
     for arg in args
         build_inter_dependence_graph(arg, call_sites)
     end
-    
+
+    if function_name == "tuple" || function_name == "apply_type"
+        # TODO: for each element of a tuple, build an interdependence between
+        # it and an Expr(TupleElement, result ast, index of the element)
+        return nothing
+    end
+
     # Now handle the call itself
     all_numbers, some_arrays = numbers_or_arrays(ast.typ, arg_types)
     if all_numbers || !some_arrays
@@ -444,9 +453,13 @@ function build_inter_dependence_graph_for_call(
     if !fd.distributive
         throw(NonDistributiveFunction(module_name, function_name, arg_types))
     end
+
     for (array_index1, array_index2, relation) in fd.IA
-        build_vertices_and_edge(array_index1, array_index2, relation, ast, args, graph)
+        array1 = get_array(array_index1, ast, args)
+        array2 = get_array(array_index2, ast, args)
+        build_vertices_and_edge(array1, array2, relation, graph)
     end
+
     return nothing
 end
     
@@ -467,7 +480,7 @@ function build_inter_dependence_graph(
 
 
     local asttyp = typeof(ast)
-    if asttyp <: Tuple
+    if asttyp <: Tuple || asttyp <: Array
         for i = 1:length(ast)
             build_inter_dependence_graph(ast[i], call_sites)
         end
@@ -497,6 +510,32 @@ function build_inter_dependence_graph(
             return build_inter_dependence_graph_for_call(ast, module_name,
                                 function_name, arg_types, arguments, call_sites)
         elseif head == :(=)
+            prev_stmt_idx = call_sites.extra.prev_stmt_idx
+            if prev_stmt_idx > 0
+                # Test if the previous and the current expr compose of a pattern
+                # like this:
+                #   GenSym(1) = (top(indexed_next))(GenSym(0),x,#s73)    
+                #   L = (top(getfield))(GenSym(1),1)
+                # where GenSym(0) is a tuple of SparseMatrixCSC.
+                prev_expr                = call_sites.extra.bb.statements[prev_stmt_idx].expr
+                cur_expr                 = ast
+                live_in_before_prev_expr = call_sites.extra.live_in_before_prev_expr
+                live_in_before_expr      = call_sites.extra.live_in_before_expr
+                pattern_skeleton1        = (:(=), Tuple{SparseMatrixCSC,Int}, Expr(:call, TopNode(:indexed_next), Tuple{SparseMatrixCSC, SparseMatrixCSC}, Int, Int))
+                pattern_skeleton2        = (:(=), SparseMatrixCSC, Expr(:call, TopNode(:getfield), :f1, 1))
+                if match_skeletons(prev_expr, pattern_skeleton1,  call_sites, live_in_before_prev_expr, prev_expr, cur_expr, false) &&
+                   match_skeletons(cur_expr, pattern_skeleton2,  call_sites, live_in_before_expr, prev_expr, cur_expr, false)
+                    graph       = call_sites.extra.inter_dependence_graph
+                    arr         = cur_expr.args[1]          # L
+                    tup         = prev_expr.args[2].args[2] # GenSym(0)
+                    index       = prev_expr.args[2].args[3] # x
+                    tup_element = Expr(:TupleElement, tup, index)
+                    build_vertices_and_edge(arr, tup_element, ROW_ROW, graph)
+                    build_vertices_and_edge(arr, tup_element, COLUMN_COLUMN, graph)
+                    return nothing
+                end
+            end
+        
             rhs_type = type_of_ast_node(args[2], symbol_info)
             if !(rhs_type <: Vector) && !(rhs_type <: AbstractMatrix)
                 # Look into rhs to see if its sub-expressions have anything to 
@@ -519,7 +558,7 @@ function build_inter_dependence_graph(
            asttyp == LabelNode   || asttyp == GotoNode || asttyp == LineNumberNode ||
            asttyp == ASCIIString || asttyp == LambdaStaticData ||
            asttyp <: Number      || asttyp == NewvarNode || asttyp == GlobalRef ||
-	   asttyp == QuoteNode
+           asttyp == QuoteNode
         return nothing
     else
         throw(UnknownASTDistributivity(ast, typeof(ast)))
@@ -575,6 +614,20 @@ function color_inter_dependence_graph(
                              permutation_color_to_str(vertex.color),
                              " must equal ", 
                              permutation_color_to_str(color))
+                    if (vertex.color == ROW_PERM && color == COL_INV_PERM) ||
+                       (vertex.color == COL_INV_PERM && color == ROW_PERM) ||
+                       (vertex.color == ROW_INV_PERM && color == COL_PERM) ||
+                       (vertex.color == COL_PERM && color == ROW_INV_PERM)
+                            graph.perm_restriction |= PERM_VECTORS_ARE_INVERSE
+                    elseif (vertex.color == ROW_PERM && color == COL_PERM) ||
+                           (vertex.color == COL_PERM && color == ROW_PERM) ||
+                           (vertex.color == ROW_INV_PERM && color == COL_INV_PERM) ||
+                           (vertex.color == COL_INV_PERM && color == ROW_INV_PERM)
+                            graph.perm_restriction |= PERM_VECTORS_ARE_SAME
+                    else
+                        # There is no other known case so far
+                        assert(false)
+                    end
                 end
             end
         else
@@ -720,29 +773,58 @@ function add_arrays_to_reversely_reorder(
 end
 
 @doc """
+Add to the new expression for reverse reordering all the arrays live into stmt.  
+This function should be called twice. The first time matrices_done = false, and 
+the second time matrices_done = true. They will add matrices and vectors,
+respectively.
+"""
+function add_arrays_to_reversely_reorder(
+    new_expr      :: Expr,
+    stmt          :: Statement,
+    symbol_info   :: Sym2TypeMap, 
+    liveness      :: Liveness, 
+    graph         :: InterDependenceGraph,
+    matrices_done :: Bool,
+    matrix2mknob  :: Dict{Symexpr, Symbol}
+)
+    live_in  = LivenessAnalysis.live_in(stmt, liveness)
+    for A in live_in
+        add_array(new_expr, A, symbol_info, graph, matrices_done, matrix2mknob)
+    end
+end
+
+@doc """
 Create reorder actions for the loop region.
 """
 function create_reorder_actions(
-    actions          :: Vector{Action},
-    region           :: LoopRegion,
-    symbol_info      :: Sym2TypeMap, 
-    liveness         :: Liveness, 
-    graph            :: InterDependenceGraph,
-    cfg              :: CFG, 
-    FAR              :: Vector, # Vector{Symbol},
-    fknob            :: Symbol,
-    decider_bb       :: Any,   # BasicBlock,
-    decider_stmt_idx :: StatementIndex,
-    matrix2mknob     :: Dict{Symexpr, Symbol}
+    actions     :: Vector{Action},
+    region      :: Region,
+    symbol_info :: Sym2TypeMap, 
+    liveness    :: Liveness, 
+    graph       :: InterDependenceGraph,
+    cfg         :: CFG,
+    call_sites  :: CallSites,
+    FAR         :: Vector, # Vector{Symbol},
+    fknob       :: Symbol,
 )
+    decider_bb       = call_sites.extra.decider_bb
+    decider_stmt_idx = call_sites.extra.decider_stmt_idx
+    matrix2mknob     = call_sites.extra.matrix2mknob
+                               
     # Create an action that would insert new statements before the region
-    # loop's head block. There are two new statements: one is to set
-    # the reordering decision maker; the other is to initialize reordering_status.
-    before_loop_action = InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
-    push!(actions, before_loop_action)
+    # loop's head block (If it is a loop region), or at the beginning (if it is
+    # a function region). There are two new statements: one is to set
+    # the reordering decision maker, with the restrictioins of permutations,
+    # and the other is to initialize reordering_status.
+    region               = call_sites.region
+    action_before_region = (typeof(region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
+    push!(actions, action_before_region)
 
-    stmt = Expr(:call, GlobalRef(SparseAccelerator, :set_reordering_decision_maker), fknob)
-    push!(before_loop_action.new_stmts,  Statement(0, stmt))
+    restriction = graph.perm_restriction
+    stmt        = Expr(:call, GlobalRef(SparseAccelerator, :set_reordering_decision_maker), fknob, restriction)
+    push!(action_before_region.new_stmts,  Statement(0, stmt))
 
     reordering_status = new_symbol("reordering_status")
     stmt              = Expr(:(=), reordering_status,
@@ -752,36 +834,57 @@ function create_reorder_actions(
                                     GlobalRef(Main, :C_NULL),
                                     GlobalRef(Main, :C_NULL),
                                     0.0))
-    push!(before_loop_action.new_stmts,  Statement(0, stmt))
+    push!(action_before_region.new_stmts,  Statement(0, stmt))
 
-    # In the loop, after the statement that contains the reordering decision maker,
+    # In the region, after the statement that contains the reordering decision maker,
     # insert a statement to reorder other arrays. 
-    inside_loop_action = InsertBeforeOrAfterStatement(Vector{Statement}(),
+    inside_region_action = InsertBeforeOrAfterStatement(Vector{Statement}(),
                             false, decider_bb, decider_stmt_idx)
-    push!(actions, inside_loop_action)
+    push!(actions, inside_region_action)
     
     stmt = Expr(:call, GlobalRef(SparseAccelerator, :reordering),
                  fknob, reordering_status)
-    push!(inside_loop_action.new_stmts,  Statement(0, stmt))
+    push!(inside_region_action.new_stmts,  Statement(0, stmt))
 
     decider_stmt = decider_bb.statements[decider_stmt_idx]
     add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, false, matrix2mknob)
     push!(stmt.args, QuoteNode(:__delimitor__))
     add_arrays_to_reorder(stmt, decider_stmt, symbol_info, liveness, graph, FAR, true, matrix2mknob)
     
-    # At each loop exit, insert reverse reordering of array.
+    # At each region exit, insert reverse reordering of array.
     # Create statements that will delete the function knob at region exits
-    for exit in region.exits
-        action = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
-        push!(actions, action)
+    if (typeof(region) == FunctionRegion)
+        for pred_bb in region.exit.preds
+            len = length(pred_bb.statements)
+            assert(len > 0)
+            last_stmt = pred_bb.statements[len]
+            last_expr = last_stmt.expr
+            assert(typeof(last_expr) <: Expr && last_expr.head == :return)
 
-        stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
-                     reordering_status)
-        push!(action.new_stmts,  Statement(0, stmt))
+            action  = InsertBeforeOrAfterStatement(Vector{Statement}(), true, pred_bb, len)
+            push!(actions, action)
+
+            stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
+                         reordering_status)
+            push!(action.new_stmts,  Statement(0, stmt))
+            
+            add_arrays_to_reversely_reorder(stmt, last_stmt, symbol_info, liveness, graph, false, matrix2mknob)
+            push!(stmt.args, QuoteNode(:__delimitor__))
+            add_arrays_to_reversely_reorder(stmt, last_stmt, symbol_info, liveness, graph, true, matrix2mknob)
+        end
+    else
+        for exit in region.exits
+            action = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
+            push!(actions, action)
     
-        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, false, matrix2mknob)
-        push!(stmt.args, QuoteNode(:__delimitor__))
-        add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, true, matrix2mknob)
+            stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
+                         reordering_status)
+            push!(action.new_stmts,  Statement(0, stmt))
+        
+            add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, false, matrix2mknob)
+            push!(stmt.args, QuoteNode(:__delimitor__))
+            add_arrays_to_reversely_reorder(stmt, exit.from_bb, exit.to_bb, symbol_info, liveness, graph, true, matrix2mknob)
+        end
     end
 end
 
@@ -790,7 +893,7 @@ Perform analyses for reordering. Write the intended transformation into actions.
 """
 function reordering(
     actions     :: Vector{Action},
-    region      :: LoopRegion,
+    region      :: Region,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG,
@@ -826,12 +929,9 @@ function reordering(
 
         new_actions = Vector{Action}()
         create_reorder_actions(new_actions, region, symbol_info, liveness, graph, 
-                               cfg, FAR, fknob, 
-                               call_sites.extra.decider_bb,
-                               call_sites.extra.decider_stmt_idx,
-                               call_sites.extra.matrix2mknob)
+                               cfg, call_sites, FAR, fknob)
 
-        dprintln(1, 0, "\nReordering actions to take:", new_actions)
+        dprintln(1, 0, "\nReordering actions to take:\n", new_actions)
 
         for action in new_actions
             push!(actions, action)

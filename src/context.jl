@@ -11,6 +11,7 @@ The CallSites' extra field for context info discovery.
 type ContextExtra
     # Environment before the AST walking
     matrix_properties        :: Symexpr2PropertiesMap
+    bb2depth                 :: Dict{BasicBlock, Int}
 
     # Flag if ast may be under change. We visite the AST twice. It is true
     # the first time (allowing pattern replacement; knobs are generated as well),
@@ -47,8 +48,8 @@ type ContextExtra
     # subtrees to match, which are no longer in the same statement.
     non_splitting_patterns  :: Vector{Pattern}
 
-    ContextExtra(_matrix_properties, _ast_may_change) = new(
-            _matrix_properties, _ast_may_change, :nothing, 0, [],
+    ContextExtra(_matrix_properties, _bb2depth, _ast_may_change) = new(
+            _matrix_properties, _bb2depth, _ast_may_change, :nothing, 0, [],
             Dict{Expr, Symbol}(), Dict{Symbol, Expr}(), Dict{Symbol, Vector}(),
             Dict{Symbol, Tuple}(), Dict{Symexpr, Symbol}(),
             Dict{Symbol, Symexpr}(), Set{Tuple}(),
@@ -167,28 +168,22 @@ function gather_context_sensitive_info(
         push!(call_sites.extra.fknob2mknobs[fknob], call_sites.extra.matrix2mknob[M])
     end
 
-    if reorder_enabled && call_sites.extra.reordering_decider_power < reordering_power
+    bb     = call_sites.extra.bb
+    depth  = call_sites.extra.bb2depth[bb]
+    weight = 2 << depth 
+    if reorder_enabled && depth > 0 && call_sites.extra.reordering_decider_power < (reordering_power * weight)
         # The decider should be in a basic block that is an immediate member of
-        # a loop region. That is, it should be contained in the outermost loop, not
-        # in any inner loop, because doing reordering and reverse reordering
-        # in an inner loop seems too expensive.
-        # The decider should not be in the function region either: we want one
+        # a loop region.
+        # The decider should not be in the function region: we want one
         # reordering of data to impact many loop iterations, not sequential code.
-        region = call_sites.region
-        if typeof(region) == LoopRegion
-            region_immediate_members = region.immediate_members
-            bb                       = call_sites.extra.bb
-            if in(bb.label, region_immediate_members)
-                call_sites.extra.reordering_decider_fknob = fknob
-                call_sites.extra.reordering_decider_power = reordering_power
-                call_sites.extra.reordering_FAR           = []
-                for arg in reordering_FAR
-                    new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
-                    assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
-                    M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
-                    push!(call_sites.extra.reordering_FAR, M)
-                end
-            end
+        call_sites.extra.reordering_decider_fknob = fknob
+        call_sites.extra.reordering_decider_power = reordering_power * weight
+        call_sites.extra.reordering_FAR           = []
+        for arg in reordering_FAR
+            new_arg = replacement_arg(arg, args, ast, call_sites, prev_expr, cur_expr)
+            assert(typeof(new_arg) == SymbolNode || typeof(new_arg) <: Symexpr)
+            M = ((typeof(new_arg) == SymbolNode) ? new_arg.name : new_arg)
+            push!(call_sites.extra.reordering_FAR, M)
         end
     end
 
@@ -242,7 +237,9 @@ function CS_ADAT_post_replacement(
     #     out of loop)
     # (2) Replace ADB(A, D, A) as ADB(A, D, AT).
     # fknob is not added for now, which will be added automatically later.
-    action = InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
+    action = (typeof(call_sites.region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, call_sites.region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), call_sites.region.loop, true)
     push!(call_sites.actions, action)
 
     A = ast.args[4]
@@ -1037,18 +1034,18 @@ of the expression and handle each with the handler. Otherwise, handle the
 expression with the handler.
 """
 function visit_expressions(
-    region                 :: LoopRegion,
+    region                 :: Region,
     cfg                    :: CFG,
     call_sites             :: CallSites,
     recursive              :: Bool,
     handler                :: Function,
     two_statements_handler :: Function = do_nothing
 )
-    L           = region.loop
+    members     = (typeof(region) == FunctionRegion) ? region.members : region.loop.members
     blocks      = cfg.basic_blocks
     symbol_info = call_sites.symbol_info
     liveness    = call_sites.liveness
-    for bb_idx in L.members
+    for bb_idx in members
         bb                             = blocks[bb_idx]
         statements                     = bb.statements
         call_sites.extra.bb            = bb
@@ -1112,26 +1109,41 @@ end
 gather_knobs(ast, call_sites :: CallSites, top_level_number, is_top_level, read) =
     gather_knobs(ast, call_sites)
 
+@doc """ Create statements that will delete matrix and function knobs. """
+function delete_knobs(
+    action         :: Action,
+    matrix_knobs   :: Set{Symbol},
+    function_knobs :: Set{Symbol},
+    call_sites     :: CallSites
+)
+    for mknob in matrix_knobs
+        create_delete_matrix_knob(action.new_stmts, mknob)
+    end
+
+    for fknob in function_knobs
+        fknob_creator, fknob_deletor = call_sites.extra.fknob2ctor_dtor[fknob]
+        create_delete_function_knob(action.new_stmts, fknob, fknob_deletor)
+    end
+end
+
 @doc """
 Create statements that will create and intialize a knob for a matrix/function
 before the loop, and statements that will delete all the matrix/function
 knobs at each exit of the loop.
 """
 function generate_and_delete_knobs(
-    region     :: LoopRegion,
+    region     :: Region,
     call_sites :: CallSites
 )
-    # So far, we handle only a loop region
-    assert(typeof(call_sites.region) == LoopRegion)
-
     region         = call_sites.region
-    L              = region.loop
     matrix_knobs   = call_sites.extra.matrix_knobs
     function_knobs = call_sites.extra.function_knobs
     derivatives    = call_sites.extra.derivatives
     symbol_info    = call_sites.symbol_info
 
-    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
+    action_before_region = (typeof(region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
     push!(call_sites.actions, action_before_region)
 
     # Add statements that generates mknobs and fknobs
@@ -1187,18 +1199,24 @@ function generate_and_delete_knobs(
         create_set_derivative(action_before_region.new_stmts, mknob1, relation, mknob2)
     end
 
-    # Create statements that will delete the knobs at region exits
-    for exit in region.exits
-        action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
-        push!(call_sites.actions, action)
+    if (typeof(region) == FunctionRegion)
+        for pred_bb in region.exit.preds
+            len = length(pred_bb.statements)
+            assert(len > 0)
+            last_stmt = pred_bb.statements[len]
+            last_expr = last_stmt.expr
+            assert(typeof(last_expr) <: Expr && last_expr.head == :return)
 
-        for mknob in matrix_knobs
-            create_delete_matrix_knob(action.new_stmts, mknob)
+            action  = InsertBeforeOrAfterStatement(Vector{Statement}(), true, pred_bb, len)
+            push!(call_sites.actions, action)
+            delete_knobs(action, matrix_knobs, function_knobs, call_sites)
         end
-
-        for fknob in function_knobs
-            fknob_creator, fknob_deletor = call_sites.extra.fknob2ctor_dtor[fknob]
-            create_delete_function_knob(action.new_stmts, fknob, fknob_deletor)
+    else
+        # Create statements that will delete the knobs at region exits
+        for exit in region.exits
+            action  = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
+            push!(call_sites.actions, action)
+            delete_knobs(action, matrix_knobs, function_knobs, call_sites)
         end
     end
 end
@@ -1211,11 +1229,10 @@ function add_matrix_knobs_to_function_knobs(
 )
     assert(!call_sites.extra.ast_may_change)
 
-   # So far, we handle only a loop region
-    assert(typeof(call_sites.region) == LoopRegion)
-
-    L                    = call_sites.region.loop
-    action_before_region = InsertBeforeLoopHead(Vector{Statement}(), L, true)
+    region               = call_sites.region
+    action_before_region = (typeof(region) == FunctionRegion) ? 
+        InsertBeforeOrAfterStatement(Vector{Statement}(), true, region.entry, 1) :
+        InsertBeforeLoopHead(Vector{Statement}(), region.loop, true)
     push!(call_sites.actions, action_before_region)
     
     for fknob in call_sites.extra.function_knobs
@@ -1283,14 +1300,13 @@ function-specific context info (mknobs and fknobs).
 """
 function context_sensitive_transformation(
     actions         :: Vector{Action},
-    region          :: LoopRegion,
+    region          :: Region,
+    bb2depth        :: Dict{BasicBlock, Int}, 
     lambda          :: LambdaInfo,
     symbol_info     :: Sym2TypeMap,
     liveness        :: Liveness,
     cfg             :: CFG
 )
-    matrix_properties = find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
-
     # We need to walk the AST recursively twice: first, match/replace and gather
     # context info. We cannot add context info into the AST yet, because
     # replacement happens recursively: a subtree might be replaced, and then
@@ -1307,13 +1323,15 @@ function context_sensitive_transformation(
     ast_may_change = true
     call_sites = CallSites(Set{CallSite}(), region, lambda, symbol_info, liveness,
                            CS_transformation_patterns,
-                           actions, ContextExtra(matrix_properties, ast_may_change))
+                           actions, ContextExtra(region.symbol_property, bb2depth, ast_may_change))
     
-    #global trace_call_replacement = true
+#    global trace_call_replacement = true
     
     # All patterns are non-splittable.
     call_sites.extra.non_splitting_patterns = copy(CS_transformation_patterns)
     visit_expressions(region, cfg, call_sites, recursive, match_replace_an_expr_pattern, match_replace_an_two_statements_pattern)
+
+#    global trace_call_replacement = false
 
     # The second walk: gather the knobs of the nodes in the AST. The knobs
     # were generated in the first walk. Not all those generated are gathered,
@@ -1355,16 +1373,26 @@ function AST_context_sensitive_transformation(
     actions     :: Vector{Action},
     func_region :: FunctionRegion,
     regions     :: Vector{LoopRegion},
+    bb2depth    :: Dict{BasicBlock, Int},
     lambda      :: LambdaInfo,
     symbol_info :: Sym2TypeMap, 
     liveness    :: Liveness, 
     cfg         :: CFG
 )
+    # Find properties for the function and loop regions.
     func_region.symbol_property = find_properties_of_matrices(func_region, lambda, symbol_info, liveness, cfg)
-
-    # Discover context info for each loop region
     for region in regions
-        context_sensitive_transformation(actions, region, lambda, symbol_info, liveness, cfg)
+        region.symbol_property = find_properties_of_matrices(region, lambda, symbol_info, liveness, cfg)
+    end
+
+    if context_sensitive_opt_for_func
+        # Context opt for the function
+        context_sensitive_transformation(actions, func_region, bb2depth, lambda, symbol_info, liveness, cfg)
+    else
+        # Context opt for each loop region
+       for region in regions
+            context_sensitive_transformation(actions, region, bb2depth, lambda, symbol_info, liveness, cfg)
+       end
     end
 
     dprintln(1, 0, "\nContext-sensitive actions to take:")
