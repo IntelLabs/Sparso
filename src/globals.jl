@@ -15,47 +15,50 @@ typealias Symexpr         Union{Symbol, GenSym, Expr} # A Symbol, GenSym or Expr
 
 # Options controlling debugging, performance (library choice, cost model), etc.
 @doc """ Enable Sparse Accelerator """
-const SA_ENABLE = 0
+const SA_ENABLE = 1
 
 @doc """ Print verbose dump """
-const SA_VERBOSE = 8
+const SA_VERBOSE = 2
 
 @doc """ Use Jula's default sparse matrix functions """
-const SA_USE_JULIA = 16
+const SA_USE_JULIA = 4
 
 @doc """ Use MKL sparse matrix functions """
-const SA_USE_MKL = 24
+const SA_USE_MKL = 8
 
 @doc """ 
 Use Sparse Matrix Pre-processing library (SpMP) functions. SPMP is a 
 high-performance parallel implementation of BFS/RCM reordering, 
 Gauss-Seidel smoother, sparse triangular solver, etc. 
 """
-const SA_USE_SPMP = 32
+const SA_USE_SPMP = 16
 
 @doc """" 
 Pattern match and replace the code that is functionally equivalent to SpMV, dot,
 WAXPBY, etc. with calls to the corresponding SPMP library functions.
 """
-const SA_REPLACE_CALLS = 40
+const SA_REPLACE_CALLS = 32
 
 @doc """
 Use splitting patterns during call replacement. Effective only when 
 SA_REPLACE_CALLS has been specified
 """
-const SA_USE_SPLITTING_PATTERNS = 42
+const SA_USE_SPLITTING_PATTERNS = 64
 
 @doc """ Enable context-sensitive optimization. """
-const SA_CONTEXT = 48
+const SA_CONTEXT = 128
+
+@doc """ Enable context-sensitive optimization for a whole function. """
+const SA_CONTEXT_FUNC = 256
 
 @doc """ Enable context-sensitive optimization for a whole function. """
 const SA_CONTEXT_FUNC = 50
 
 @doc """ Enable reordering of arrays. """
-const SA_REORDER = 56
+const SA_REORDER = 512
 
 @doc """ Disable collective structure prediction. """
-const SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION = 64
+const SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION = 1024
 
 # The internal booleans corresponding to the above options, and their default values
 sparse_acc_enabled                      = false
@@ -159,7 +162,6 @@ function build_symbol_dictionary(lambda :: LambdaInfo)
         # Note that a GenSym id starts from 0
         symbol_info[GenSym(id - 1)] = lambda.gen_sym_typs[id] 
     end
-
     symbol_info
 end
 
@@ -175,7 +177,7 @@ function type_of_ast_node(node, symbol_info :: Sym2TypeMap)
         # Return Void if no info found
         return get(symbol_info, node, Void)
     elseif typ == GenSym
-        return get(symbol_info, node.id, Void)
+        return get(symbol_info, node, Void)
     elseif typ == Expr || typ == SymbolNode
         return node.typ
     else
@@ -249,8 +251,20 @@ function resolve_call_names(call_args :: Vector)
             function_name = "typeof"
     elseif  isa(call_args[1], TopNode) && call_args[1] == TopNode(:fieldtype)
             function_name = "fieldtype"
+    elseif  isa(call_args[1], TopNode) && call_args[1] == TopNode(:tuple)
+            function_name = "tuple"
+    elseif  isa(call_args[1], TopNode) && call_args[1] == TopNode(:apply_type)
+            function_name = "apply_type"
     elseif isa(call_args[1], Expr) && call_args[1].head == :call
-        # Example: (:call, top(getfield), SparseAccelerator,:SpMV)
+        # The function may be represented in an Expr. Example 1: 
+        #           Expr call [SparseMatrixCSC{Float64,Int32}]
+        #                Expr call [Type{SparseMatrixCSC{Float64,Int32}}]
+        #                    top(apply_type) [TopNode]
+        #                    Main.SparseMatrixCSC [GlobalRef]
+        #                    Main.Cdouble [GlobalRef]
+        #                    Main.Cint [GlobalRef]
+        # In this apply_type case, the function can be treated as an assignment.
+        # Example 2: (:call, top(getfield), SparseAccelerator,:SpMV)
         return resolve_call_names(call_args[1].args)
     end
     module_name, function_name
@@ -434,7 +448,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
         dsprintln(1, 1, symbol_info, liveness, func_ast)
 
         func_region = FunctionRegion(func_ast) 
-        regions = region_formation(func_region, cfg, loop_info)
+        regions, bb2depth = region_formation(func_region, cfg, loop_info)
 
         if context_sensitive_opt_enabled
             # Reordering and context-sensitive optimization: Do all analyses, and 
@@ -452,7 +466,7 @@ function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
             # have to rebuild liveness in order for subsequent optimizations (
             # like call replacement) to continue.  
             actions = Vector{Action}()
-            actions = AST_context_sensitive_transformation(actions, func_region, regions, lambda, symbol_info, liveness, cfg)
+            actions = AST_context_sensitive_transformation(actions, func_region, regions, bb2depth, lambda, symbol_info, liveness, cfg)
             CFG_transformation(actions, cfg)
         end
 

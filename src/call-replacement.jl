@@ -1514,6 +1514,7 @@ function match_skeletons(
     symbol_info = call_sites.symbol_info
     skeleton    = expr_skeleton(expr, symbol_info)
     if trace_pattern_match
+        println("\t expr: ", expr)
         println("\t skeleton: ", skeleton)
     end
 
@@ -1529,9 +1530,10 @@ function match_skeletons(
                 typ = typeof(pattern_skeleton[i])
                 
                 if trace_pattern_match
+                    println("\t skeleton[", i, "]=", skeleton[i])
                     println("\t pattern_skeleton[", i, "]=", pattern_skeleton[i], "::", typ)
                 end
-                
+
                 if typ == Expr
                     if pattern_skeleton[i].typ == Function
                         # Literally match the module and function name
@@ -1582,7 +1584,7 @@ function match_skeletons(
                     if real_arg != pattern_skeleton[i]
                         return false
                     end
-                elseif typ == GlobalRef
+                elseif typ == GlobalRef || typ == TopNode
                     # We need literal match in these cases.
                     if skeleton[i] != pattern_skeleton[i]
                         return false
