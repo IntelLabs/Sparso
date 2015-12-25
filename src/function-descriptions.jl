@@ -19,6 +19,8 @@ const COLUMN_ROW         = 3 # A's column permutation vector is B's row permutat
 # and its arguments by number 1, 2, and so on.
 # Some arguments may be output as well, which will be described by
 # the "output" field.
+# If the return result is a tuple, the elements of the tuple are denoted 0.1,
+# 0.2, etc.
 # ASSUMPTION: all the described is "must" information. That is, the information
 # is true in all cases.
 # ISSUE: depending on the specific inputs, a function "may" have different
@@ -273,6 +275,18 @@ const star2_Desc = FunctionDescription(
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
     Set([ (0, 2, ROW_ROW) ])
+)
+
+const star3_Desc = FunctionDescription(
+    "Main", 
+    "*",
+    (SparseMatrixCSC, SparseMatrixCSC),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (1, 2, COLUMN_ROW_INVERSE),
+          (0, 2, COLUMN_COLUMN)
+    ])
 )
 
 const A_mul_B!_Desc = FunctionDescription(
@@ -757,6 +771,18 @@ const asignment1_Desc = FunctionDescription(
     Set([ (1, 2, ROW_ROW) ])
 )
 
+# Make apply_type as a special assignment
+const apply_type_Desc = FunctionDescription(
+    "", 
+    "apply_type",
+    (AbstractMatrix,),                # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 1, COLUMN_COLUMN)
+    ])
+)
+
 const Printf_Desc = FunctionDescription(
     "Base", 
     "Printf",
@@ -801,6 +827,63 @@ const lbfgs_loss_function2!_Desc = FunctionDescription(
     ])
 )
 
+const ilu_Desc = FunctionDescription(
+    "SparseAccelerator", 
+    "ilu",
+    (SparseMatrixCSC,),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ ("0.1", 1, ROW_ROW),          # The return value is a tuple. Both elements
+          ("0.1", 1, COLUMN_COLUMN),    #   in the tuple are inter-dependent with the
+          ("0.2", 1, ROW_ROW),          #   input.
+          ("0.2", 1, COLUMN_COLUMN),
+    ])
+)
+
+const tril_Desc = FunctionDescription(
+    "Main", 
+    "tril",
+    (SparseMatrixCSC,),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 1, COLUMN_COLUMN),
+    ])
+)
+
+const triu_Desc = FunctionDescription(
+    "Main", 
+    "triu",
+    (SparseMatrixCSC,),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 1, COLUMN_COLUMN),
+    ])
+)
+
+const diag_Desc = FunctionDescription(
+    "Main", 
+    "diag",
+    (SparseMatrixCSC,),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),
+          (0, 1, COLUMN_COLUMN),
+    ])
+)
+
+const spdiagm_Desc = FunctionDescription(
+    "Main", 
+    "spdiagm",
+    (Vector,),
+    UPDATED_NONE,                     # No argument is updated
+    true,                             # The function is distributive
+    Set([ (0, 1, ROW_ROW),            # Both the rows and the columns of the result
+          (0, 1, COLUMN_ROW),         # are dependent on the vector
+    ])
+)
+
 function_descriptions  = [
     element_wise_multiply_Desc,
     element_wise_multiply1_Desc,
@@ -820,6 +903,7 @@ function_descriptions  = [
     star_Desc,
     star1_Desc,
     star2_Desc,
+    star3_Desc,
     A_mul_B!_Desc,
     Dot_Desc,
     dot_Desc,
@@ -863,9 +947,15 @@ function_descriptions  = [
     min1_Desc,
     asignment_Desc,
     asignment1_Desc,
+    apply_type_Desc,
     lbfgs_compute_direction!_Desc,
     lbfgs_loss_function1_Desc,
-    lbfgs_loss_function2!_Desc
+    lbfgs_loss_function2!_Desc,
+    ilu_Desc,
+    tril_Desc,
+    triu_Desc,
+    diag_Desc,
+    spdiagm_Desc
 ]
 
 function look_for_function_description(

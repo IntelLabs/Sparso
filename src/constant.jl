@@ -55,10 +55,17 @@ function find_single_defs(
     single_defs = Set{Sym}()
     blocks      = cfg.basic_blocks
 
+    # ISSUE: What is exactly the definition and usage of single-def?
+    # Should the initial values of single_defs include the symbols live into the
+    # region, even if they are not defined in the region?
     if isa(region, LoopRegion)
-        bb_idxs = region.loop.members
+        bb_idxs     = region.loop.members
+#        head_bb     = blocks[region.loop.head]
+#        single_defs = LivenessAnalysis.live_in(head_bb, liveness)
     else
-        bb_idxs = keys(blocks)
+        bb_idxs     = keys(blocks)
+#        entry_bb    = blocks[-1]
+#        single_defs = LivenessAnalysis.live_in(entry_bb, liveness)
     end
 
     for bb_idx in bb_idxs

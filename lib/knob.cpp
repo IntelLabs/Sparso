@@ -250,8 +250,7 @@ static bool CheckMatrixKnobConsistency(MatrixKnob *m)
 {
     if (m->constant_valued) {
         assert(m->constant_structured);
-        assert(!m->is_single_def); // There cannot be any definition.
-        if (!m->constant_structured || m->is_single_def) {
+        if (!m->constant_structured) {
             return false;
         }
     }
@@ -1360,8 +1359,9 @@ double Trace(int n, int *A_colptr, int *A_rowval, double *A_nzval)
     return trace;
 }
 
-void SetReorderingDecisionMaker(FunctionKnob *fknob)
+void SetReorderingDecisionMaker(FunctionKnob *fknob, int perm_restriction)
 {
+    // TODO: see how to make use of the restriction parameter.
     fknob->is_reordering_decision_maker = true;
 }
 

@@ -1,7 +1,7 @@
 # This file contains all the print parameters and routines for warnings,
 # errors, and debugging.
 
-import Base.show_expr_type, Base.show_linenumber
+import Base.show_expr_type, Base.show_linenumber, Base.show_call
 # Re-define the function. Otherwise, the show of an expression may be too verbose
 function show_expr_type(io::IO, ty)
     return
@@ -9,6 +9,31 @@ end
 
 function show_linenumber(io::IO, file, line) 
     return
+end
+
+if false
+    # This method is modified based on show_call in Julia/base
+    # ISSUE: Should NOT be opened source as it is basically the same as that function
+    # with just slight modification. Used only for convenience of generating better
+    # readable code, internally for debugging.
+    function show_call(io::IO, head, func, func_args, indent)
+        op, cl = Base.expr_calls[head]
+        if isa(func, Symbol) || (isa(func, Expr) &&
+                (func.head == :. || func.head == :curly))
+            Base.show_unquoted(io, func, indent)
+        else
+            Base.show_unquoted(io, func, indent)
+        end
+        if !isempty(func_args) && isa(func_args[1], Expr) && func_args[1].head === :parameters
+            print(io, op)
+            Base.show_list(io, func_args[2:end], ',', indent)
+            print(io, "; ")
+            Base.show_list(io, func_args[1].args, ',', indent)
+            print(io, cl)
+        else
+            Base.show_enclosed_list(io, op, func_args, ",", cl, indent)
+        end
+    end
 end
 
 # Buffer the messages so that indentation can be inserted before sending
@@ -251,8 +276,8 @@ function show(
                     println(io_buffer, "    ", stmt.expr)
                 end
                 if typeof(action) <: InsertBeforeOrAfterStatement
-                    println(io_buffer, action.before ? "before" : "after", " BB ", action.bb.label, " statement")
-                    println(io_buffer, "    ", action.bb.statements[action.stmt_idx].expr)
+                    println(io_buffer, action.before ? "before" : "after", " BB ", action.bb.label, " statement ", action.stmt_idx)
+                    println(io_buffer, "    ", action.stmt_idx > 0 ? action.bb.statements[action.stmt_idx].expr : "None")
                 elseif typeof(action) <: InsertBeforeLoopHead
                     print(io_buffer, action.outside_loop ? "outisde" : "inside", " loop of BBs [")
                     total = 0
