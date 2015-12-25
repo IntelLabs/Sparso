@@ -276,11 +276,7 @@ function show(
                     println(io_buffer, "    ", stmt.expr)
                 end
                 if typeof(action) <: InsertBeforeOrAfterStatement
-<<<<<<< HEAD
-                    println(io_buffer, action.before ? "before" : "after", " BB ", action.bb.label, " statement")
-=======
                     println(io_buffer, action.before ? "before" : "after", " BB ", action.bb.label, " statement ", action.stmt_idx)
->>>>>>> new_branch_name
                     println(io_buffer, "    ", action.stmt_idx > 0 ? action.bb.statements[action.stmt_idx].expr : "None")
                 elseif typeof(action) <: InsertBeforeLoopHead
                     print(io_buffer, action.outside_loop ? "outisde" : "inside", " loop of BBs [")
