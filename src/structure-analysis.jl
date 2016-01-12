@@ -1,6 +1,6 @@
 # --- begin: set_matrix_property inferface --->
 
-@doc """interface to explicitly specify matrix property in source code"""
+@doc """ interface to explicitly specify matrix property in source code"""
 function set_matrix_property(
     pmap    :: Dict{Symbol, Int}
 ) 
@@ -22,321 +22,14 @@ end
 
 # --- end: set_matrix_property inferface --- 
 
-const PROP_NEGATIVE_VAL = -1
-const PROP_POSITIVE_VAL = 1
- 
-@doc """"""
-type PropertyValue
-    predefined  :: Bool
-    vals        :: Set{Any}
-    final_val   :: Any
- 
-    PropertyValue() = new(false, Set{Any}(), nothing)
-end
-
-@doc """
-Describe part (lower, upper, diagonal) of a matrix, of which the structure matters.
-"""
-type MatrixPropertyValues
-    constant_valued         :: PropertyValue
-    constant_structured     :: PropertyValue
-    symmetric_valued        :: PropertyValue
-    symmetric_structured    :: PropertyValue
-    structure_only          :: PropertyValue
-    has_dedicated_memory    :: PropertyValue # this array (may be a matrix or vector) has a decidated memory space, so no worry of aliases or memory allocation.
-    lower_of                :: PropertyValue
-    upper_of                :: PropertyValue
-    transpose_of            :: PropertyValue
-    proxy                   :: Any
-
-    MatrixPropertyValues() = new(PropertyValue(), PropertyValue(),
-                            PropertyValue(), PropertyValue(),
-                            PropertyValue(), PropertyValue(),
-                            PropertyValue(), PropertyValue(),
-                            PropertyValue(), nothing)
-end
-
-@doc "sorter for symbol indexed map"
-sort_by_str_key = (x) -> sort(collect(keys(x)), by=v->string(v))
-
-@doc "print out the content of property proxies"
-function dprint_property_proxies(
-    pmap    :: Dict 
-)
-    val_or_nothing = (x) -> x.final_val == nothing ? "-" : x.final_val
-    dprintln(1, 1, "Sym : CV CS SV SS SO DM Lower Upper Trans")
-    for k in sort_by_str_key(pmap)
-        v = pmap[k]
-        dprintln(1, 1, k, " : ", 
-                    val_or_nothing(v.constant_valued), "  ", 
-                    val_or_nothing(v.constant_structured), "  ",
-                    val_or_nothing(v.symmetric_valued), "  ",
-                    val_or_nothing(v.symmetric_structured), "  ",
-                    val_or_nothing(v.structure_only), "  ",
-                    val_or_nothing(v.has_dedicated_memory), "  ",
-                    val_or_nothing(v.lower_of), " ",
-                    val_or_nothing(v.upper_of), " ",
-                    val_or_nothing(v.transpose_of)
-                    )
-    end
-end
-
-const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor, Factorization]
-
-#
-# data types shared by analysis passes 
-#
-abstract MatrixPropertyPass
-
-@doc """
-Allocate a new symbol to property map
-"""
-function new_sym_property_map()
-    return Dict{Sym, PropertyValue}()
-end
-
-@doc """
-Allocate a new symbol/expr to property map
-"""
-function new_symexpr_property_map()
-    return Dict{Symexpr, PropertyValue}()
-end
-
-@doc """
-Print out a property map.
-"""
-function dprint_property_map(
-    level       :: Int,
-    pmap        :: Dict,
-)
-    dprintln(1, level, "Sym \tPre Final\tVals")
-    for k in sort_by_str_key(pmap)
-        v = pmap[k]
-        # skip default values
-        if !v.predefined && v.final_val == nothing && isempty(v.vals)
-            continue
-        end
-        dprintln(1, level, k, "\t", v.predefined, " ", v.final_val, "\t", v.vals)
-    end
-end
-
-@doc """
-Context used for analyzing one statement
-"""
-type StmtContextArgs
-    changed              :: Set{Sym}              # symbols property has been changed?
-    property_map         :: Dict{Sym, PropertyValue}      # symbol -> property
-    local_map            :: Dict{Symexpr, PropertyValue}  # symbol|expr -> property
-    pattern_match_filter :: Dict{Tuple{Expr, ExprPattern}, Int}
-    live_in_before_expr  :: Set{Sym}
-
-    # Such patterns should be matched at the last, because otherwise, other 
-    # patterns may not be able to match what they should: they cannot find the
-    # subtrees to match, which are no longer in the same statement.    
-    # We call such patterns splitting patterns, and the other non-splitting.
-    # We can top-down match non-splitting patterns once, and bottom-up match
-    # all patterns (including splitting and non-splitting) once.
-    non_splitting_patterns :: Vector{ExprPattern}
-end
-
-@doc """
-Get property value for a symbol or expr
-"""
-function get_property_val(
-    call_sites  :: CallSites,
-    sym_name    :: Symexpr
-)
-    assert(isa(call_sites.extra, StmtContextArgs))
-    if in(typeof(sym_name), [Expr])
-        pmap = call_sites.extra.local_map 
-    else
-        pmap = call_sites.extra.property_map
-        assert(haskey(pmap, sym_name))
-    end
-
-    if !haskey(pmap, sym_name)
-        pmap[sym_name] = PropertyValue()
-    end
-
-    return pmap[sym_name]
-end
-
-@doc """
-Add a value to property value set for a symbol or expr
-"""
-function set_property_final_val(
-    call_sites  :: CallSites,
-    sym_name    :: Symexpr,
-    value       :: Any
-)
-    assert(isa(call_sites.extra, StmtContextArgs))
-    if in(typeof(sym_name), [ Expr])
-        pmap = call_sites.extra.local_map 
-    else
-        pmap = call_sites.extra.property_map
-        assert(haskey(pmap, sym_name))
-
-       #
-        if pmap[sym_name].predefined 
-            dprintln(1, 1, "WW: unable to change predefined value (", sym_name, " -> ", value,")")
-            return 
-        end
-
-        if pmap[sym_name].final_val != value
-            push!(call_sites.extra.changed, sym_name)
-            push!(pmap[sym_name].vals, value)
-            dprintln(1, 1, "set_property_val: ", sym_name, " -> ",  value)
-        end
-    end
-
-    if !haskey(pmap, sym_name)
-        pmap[sym_name] = PropertyValue()
-    end
-
-    pmap[sym_name].final_val = value
-end
-
-function is_property_negative(
-    pv :: PropertyValue
-)
-    return pv.final_val == PROP_NEGATIVE_VAL || in(PROP_NEGATIVE_VAL, pv.vals)
-end
-
-# Symbol types unimportant to analysis
-const skip_types = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString, Complex]
-
-@doc """
-"""
-function build_depend_set_from_args(
-    args    :: Array,
-    call_sites :: CallSites,
-    level      :: Int
-)
-    dep_set = Set{Sym}()
-    
-    for arg in args
-        arg_tp = typeof(arg)
-        if arg_tp <: Expr 
-            union!(dep_set, build_dependence(arg, call_sites, level+1))
-        elseif arg_tp <: Symbol || typeof(arg) <: GenSym 
-            push!(dep_set, arg)
-        elseif arg_tp <: SymbolNode  
-            push!(dep_set, arg.name)
-        elseif in(arg_tp, skip_types)
-            # skip GlobalRef
-        else
-            dprintln(1, 2, typeof(arg), "\n")
-            #dump(arg)
-            error("Unknown type")
-        end
-    end
-
-    dep_set
-end
-
-@doc """
-Build dependence map for all symbols in a region
-"""
-function build_dependence(
-    ast        :: Any,
-    call_sites :: CallSites,
-    level      :: Int
-)
-    symbol_info = call_sites.symbol_info
-    patterns    = call_sites.patterns
-    depend_sets = call_sites.extra
-
-    ret_set = Set{Sym}()
-
-    if typeof(ast) <: Expr
-        dprintln(1, level, "-> ", ast)
-        if ast.head == :(=)
-            if ast.head == :(=)
-                # must be at top level?
-                if level != 1
-                    error("Non-top level assignment")
-                end
-            end
-            k =  ast.args[1]
-
-            if typeof(k) != Symbol && typeof(k) != GenSym
-                dprintln(1, 2, k, "\n")
-                #dump(k)
-                error("LHS is not symbol")
-            end
-
-            if !haskey(depend_sets, k)
-                depend_sets[k] = Set{Sym}() 
-            end 
-            
-            union!(depend_sets[k],
-                build_depend_set_from_args(ast.args[2:end], call_sites, level))
-
-            dprintln(1, 1, k, " : ", depend_sets[k], "\n")
-        elseif ast.head == :call 
-            m, func_name = resolve_call_names(ast.args)
-
-            # this is not direct type of args
-            args_real_types = expr_skeleton(ast, symbol_info)[2:end]
-
-            # a quick hack for setfield! call
-            if func_name == "setfield!" && ast.args[2].typ <: SparseMatrixCSC
-                assert(ast.args[2].typ == args_real_types[2])
-                m = ast.args[2].name
-                if ast.args[3].value != :nzval
-                    #dump(ast.args[3])
-                    if !haskey(depend_sets, m)
-                        depend_sets[m] = Set{Sym}()
-                    end
-                    push!(depend_sets[m], :NEGATIVE_PROPERTY)
-                end
-                return ret_set 
-            end
-
-            ret_set = build_depend_set_from_args(ast.args[2:end], call_sites, level)
-
-            # check function's output set
-            # an arg depends on all other args (including itself?) if it's an ouput
-            func_desc = look_for_function_description(m, func_name, args_real_types[2:end])
-            if func_desc != nothing
-                for out in func_desc.output
-                    k = ast.args[out]
-                    if !haskey(depend_sets, k)
-                    #    depend_sets[k] = Set{Sym}() 
-                    end
-                    #union!(depend_sets[k], ret_set)
-                end
-            end
-        elseif in(ast.head, [:gotoifnot, :return])
-            # skip
-        else
-            #dump(ast)
-            error("Unhandled expr type")
-        end
-    end
-
-    return ret_set
-end
-
-@doc """
-This function is called by analysis passes (ASTWalker) 
-to build an dependance map for symbols
-"""
-function build_dependence_cb(ast, call_sites :: CallSites, top_level_number, is_top_level, read)
-    build_dependence(ast, call_sites, 1)
-    return nothing
-end
-
 @doc """
 A regions's basic information:
 """
 type RegionInfo
     region              :: Region
     name                :: AbstractString
-    stmts               :: Array
-
-    depend_map          :: Dict 
-    reverse_depend_map  :: Dict 
+    stmts               :: Vector{Statement}
+    bblocks             :: Dict{Int, BasicBlock}
 
     lambda              :: LambdaInfo
     symbol_info         :: Sym2TypeMap
@@ -363,14 +56,19 @@ type RegionInfo
         info.cfg = cfg
 
         info.pattern_match_filter = Dict{Tuple{Expr, ExprPattern}, Int}()
+        info.bblocks = Dict{Int, BasicBlock}()
 
         if isa(region, LoopRegion)
             first_bb_idx = sort(collect(region.loop.members))[1]
             info.name = "Loop" * string(first_bb_idx)
             bb_idxs = region.loop.members
+            for i in bb_idxs
+                info.bblocks[i] = cfg.basic_blocks[i]
+            end
         else
             info.name = "Func"
             bb_idxs = keys(cfg.basic_blocks)
+            info.bblocks = cfg.basic_blocks
         end
 
         # collect all statements in this region
@@ -380,50 +78,84 @@ type RegionInfo
             append!(info.stmts, bb.statements)
         end
 
-        # dependence map: k -> symbols that k depends on
-        info.depend_map = Dict{Sym, Set{Sym}}()
-
-        call_sites  = CallSites(Set{CallSite}(), region, lambda, symbol_info,
-                                liveness, [],
-                                Vector{Action}(), info.depend_map)
-
         info.constants = find_constant_values(region, liveness, cfg)
         info.single_defs = find_single_defs(region, liveness, cfg)
-
-        # fill the dependence map by walking through all statements in the region
-        for stmt in info.stmts
-            expr = stmt.expr
-            if typeof(expr) != Expr
-                continue
-            end
-            CompilerTools.AstWalker.AstWalk(expr, build_dependence_cb, call_sites)
-        end
-
-        # reverse dependence map: k -> symbols that depends on k 
-        info.reverse_depend_map = Dict{Sym, Set{Sym}}()
-
-        # fill reverse dependence map
-        for (k, s) in info.depend_map
-            for v in s
-                if !haskey(info.reverse_depend_map, v)
-                    info.reverse_depend_map[v] = Set{Sym}()
-                end
-                push!(info.reverse_depend_map[v], k)
-            end
-        end
 
         return info
     end
 end
 
-include("property-constant-structure.jl")
 
-include("property-common-patterns.jl")
-include("property-symmetric-value.jl")
-include("property-symmetric-structure.jl")
-include("property-structure-only.jl")
-include("property-lowerupper.jl")
-include("property-transpose.jl")
+include("symbolic-analysis.jl")
+using .SymbolicAnalysis
+
+@doc """
+Describe part (lower, upper, diagonal) of a matrix, of which the structure matters.
+"""
+type MatrixPropertyValues
+    constant_valued         :: AbstractSymbol
+#    constant_size           :: AbstractSymbol
+    constant_structured     :: AbstractSymbol
+    symmetric_valued        :: AbstractSymbol
+    symmetric_structured    :: AbstractSymbol
+    structure_only          :: AbstractSymbol
+    has_dedicated_memory    :: AbstractSymbol # this array (may be a matrix or vector) has a decidated memory space, so no worry of aliases or memory allocation.
+    lower_of                :: AbstractSymbol
+    upper_of                :: AbstractSymbol
+    transpose_of            :: AbstractSymbol
+    proxy                   :: Any
+
+    MatrixPropertyValues() = new(TOP_SYMBOL, TOP_SYMBOL,
+                            TOP_SYMBOL, TOP_SYMBOL,
+                            TOP_SYMBOL, TOP_SYMBOL,
+                            TOP_SYMBOL, TOP_SYMBOL,
+                            TOP_SYMBOL, nothing)
+end
+
+@doc "sorter for symbol indexed map"
+sort_by_str_key = (x) -> sort(collect(keys(x)), by=v->string(v))
+
+function to_string(s :: AbstractSymbol)
+    if s == TOP_SYMBOL
+        return "T"
+    elseif s == BOTTOM_SYMBOL
+        return "B"
+    else
+        return s.value
+    end
+end
+
+@doc "print out the content of property proxies"
+function dprint_property_proxies(
+    pmap    :: Dict 
+)
+    val_or_nothing = x -> isa(x, MiddleSymbol)? x.value : "-"
+    dprintln(1, 1, "Sym : CV CS SV SS SO DM Lower Upper Trans")
+    for k in sort_by_str_key(pmap)
+        v = pmap[k]
+        dprintln(1, 1, k, " : ", 
+                    to_string(v.constant_valued), "  ", 
+                    to_string(v.constant_structured), "  ",
+                    to_string(v.symmetric_valued), "  ",
+                    to_string(v.symmetric_structured), "  ",
+                    to_string(v.structure_only), "  ",
+                    to_string(v.has_dedicated_memory), "  ",
+                    to_string(v.lower_of), " ",
+                    to_string(v.upper_of), " ",
+                    to_string(v.transpose_of)
+                    )
+    end
+end
+
+# 
+const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor, Factorization]
+
+# Symbol types unimportant to analysis
+const SKIP_TYPES = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString, Complex]
+
+include("structure-analysis-const-size.jl")
+include("structure-analysis-transpose.jl")
+include("structure-analysis-symm-value.jl")
 
 const prop_field_const_map = [
            (SA_CONST_VALUED, :constant_valued),
@@ -434,7 +166,7 @@ const prop_field_const_map = [
            (SA_HAS_DEDICATED_MEMORY, :has_dedicated_memory)]
 
 @doc """
-Collect predefined maxtric property accoding from set_matrix_property statements
+Collect predefined maxtric property according from set_matrix_property statements
 in a loop region.
 """
 function find_predefined_properties(
@@ -460,19 +192,16 @@ function find_predefined_properties(
                     property_proxies[sym] = MatrixPropertyValues()
                 end
                 if ast.args[3].name == :SA_LOWER_OF
-                    v = property_proxies[sym].lower_of
+                    property_proxies[sym].lower_of = MiddleSymbol(psym)
                     dprintln(1, 1, "Predef: ", sym, " is lower of ", psym)
                 elseif ast.args[3].name == :SA_UPPER_OF
-                    v = property_proxies[sym].upper_of
+                    property_proxies[sym].upper_of = MiddleSymbol(psym)
                     dprintln(1, 1, "Predef: ", sym, " is upper of ", psym)
                 else
                     assert(ast.args[3].name == :SA_TRANSPOSE_OF)
-                    v = property_proxies[sym].transpose_of
+                    property_proxies[sym].transpose_of = MiddleSymbol(psym)
                     dprintln(1, 1, "Predef: ", sym, " is transpose of ", psym)
                 end
-                v.predefined = true
-                v.final_val = get_symexpr(psym)
-                push!(v.vals, v.final_val)
             else # set other properties
                 pmap = eval(ast.args[2])
                 #dump(pmap)
@@ -487,9 +216,7 @@ function find_predefined_properties(
                     for (prop_const_val, prop_field) in prop_field_const_map 
                         if (p & prop_const_val) != 0
                             dprintln(1, 1, "Predef: ", sym, ".", prop_field)
-                            sp.(prop_field).predefined = true
-                            push!(sp.(prop_field).vals, PROP_POSITIVE_VAL)
-                            sp.(prop_field).final_val = PROP_POSITIVE_VAL
+                            sp.(prop_field) = MiddleSymbol(:true)
                         end
                     end
 
@@ -503,67 +230,6 @@ function find_predefined_properties(
     end
 
     property_proxies
-end
-
-
-@doc """
-Data-flow based property propagate
-"""
-function propagate_property(
-    property_map            :: Dict, 
-    region_info             :: RegionInfo,
-    propagation_patterns    :: Vector, #{Pattern},
-    ctx_arg_initializer     :: Any
-)
-    assert(ctx_arg_initializer == nothing || isa(ctx_arg_initializer, Function))
-
-    # ctx_args is attached to call_sites so that
-    # pattern functions can pass back their results
-    ctx_args = StmtContextArgs(Set{Sym}(), 
-                property_map, Dict{Expr, PropertyValue}(),
-                region_info.pattern_match_filter,
-                Set{Sym}(), Vector{Pattern}())
-    call_sites  = CallSites(Set{CallSite}(), region_info.region, region_info.lambda, 
-                            region_info.symbol_info,
-                            region_info.liveness, propagation_patterns,
-                            Vector{Action}(), ctx_args)
-
-
-
-
-    # All patterns are non-splittable.
-    call_sites.extra.non_splitting_patterns = propagation_patterns
-    
-    converged = false
-    cnt = 0
-    while !converged
-        converged = true
-        old_pmap = copy(property_map)
-        ctx_args.changed = Set{Sym}()
-        for stmt in region_info.stmts
-            expr = stmt.expr
-            if typeof(expr) != Expr
-                continue
-            end
-            ctx_args.local_map = new_symexpr_property_map()
-            if ctx_arg_initializer != nothing
-                ctx_arg_initializer(ctx_args)
-            end
-            call_sites.extra.live_in_before_expr = LivenessAnalysis.live_in(stmt, region_info.liveness)
-            CompilerTools.AstWalker.AstWalk(expr, match_replace_an_expr_pattern, call_sites)
-        end
-        if !isempty(ctx_args.changed)
-            converged = true
-            for s in ctx_args.changed 
-               if property_map[s].final_val != old_pmap[s].final_val 
-                   converged = false 
-                   break
-               end
-            end
-        end
-        cnt = cnt + 1
-    end
-    return cnt
 end
 
 @doc """ Find the properties of all the matrices in the region. 
@@ -581,28 +247,18 @@ function find_properties_of_matrices(
 
     dprintln(1, 0, "\n---- Matrix Structure Property Analysis for " * region_info.name * " -----\n")
 
-    # print dependence map 
-    dprintln(1, 0, "\n", region_info.name, " dependence sets:")
-    for k in sort_by_str_key(region_info.depend_map)
-        dprintln(1, 1, k, "\t", set_to_str(region_info.depend_map[k]))
-    end
-
-    # print reverse dependence map 
-    dprintln(1, 0, "\n", region_info.name, " reverse dependence sets:")
-    for k in sort_by_str_key(region_info.reverse_depend_map)
-        dprintln(1, 1, k, "\t", set_to_str(region_info.reverse_depend_map[k]))
-    end
-
     # symbol does not have a constant structure?
     property_proxies = find_predefined_properties(region_info)
     predefined_symbols = keys(property_proxies)
+
+    region.property_proxies = property_proxies
 
     prop_fields = [:constant_valued, :constant_structured, 
                    :symmetric_valued, :symmetric_structured,
                    :structure_only, :has_dedicated_memory,
                    :lower_of, :upper_of, :transpose_of ]
 
-    #inherite positive properties from parent
+    #inherite positive properties from the parent
     if isa(region, LoopRegion)
         for (sym, p) in region.parent.property_proxies
             if !haskey(property_proxies, sym)
@@ -612,19 +268,10 @@ function find_properties_of_matrices(
 
             for prop in prop_fields
                 p_val = getfield(p, prop)
-                sp_val = getfield(sp, prop)
-                if !sp_val.predefined && !is_property_negative(p_val)
-                    sp_val.predefined = p_val.predefined
-                    sp_val.final_val = p_val.final_val
-                    sp_val.vals = copy(p_val.vals)
+                if isa(p_val, MiddleSymbol)
+                    sp.(prop) = MiddleSymbol(copy(p_val.value))
                 end
             end
-        end
-    end
-
-    for k in union(keys(region_info.depend_map), keys(region_info.reverse_depend_map))
-        if !haskey(property_proxies, k)
-            property_proxies[k] = MatrixPropertyValues()
         end
     end
 
@@ -633,36 +280,59 @@ function find_properties_of_matrices(
         if !haskey(property_proxies, c)
             property_proxies[c] = MatrixPropertyValues()
         end
-        if property_proxies[c].constant_valued.final_val == nothing
-            property_proxies[c].constant_valued.final_val = PROP_POSITIVE_VAL
-        end
+        property_proxies[c].constant_valued = MiddleSymbol(:true)
     end
 
     dprintln(1, 0, "\nInitial structure proxies:")
     dprint_property_proxies(property_proxies)
 
-    structure_property_passes = [
-        ConstantStructureProperty(),
-        SymmetricValueProperty(),
-        SymmetricStructureProperty(),
-        StructureOnlyProperty(),
-        LowerUpperProperty(),
-        TransposeProperty()
-    ]
+    structure_property_passes = (
+         StructureAnalysisConstSize.pass_info,
+         StructureAnalysisTranspose.pass_info,
+         StructureAnalysisSymmValue.pass_info,
+    )
 
     for pass in structure_property_passes
-        dprintln(1, 0, "\nBegin ", pass.name, " pass:")
-        pass.set_property_for(region_info, property_proxies)
+        assert(isa(pass[1], AbstractString)) # name
+        assert(isa(pass[2], Tuple)) # rules
+        assert(isa(pass[3], Union{Function, Void})) # preprocess
+        assert(isa(pass[4], Union{Function, Void})) # postprocess
+        assert(isa(pass[5], Function)) # symbolizer
+
+        dprintln(1, 0, "\nBegin ", pass[1], " pass:")
+
+        rules = check_and_gen_transfer_rules(pass[2])
+        analyzer = SymbolicAnalyzer(pass[1], rules, pass[5])
+
+        # preprocess
+        if pass[3] == nothing
+            predefined = []
+        else
+            predefined = pass[3](region.property_proxies, symbol_info)
+        end
+        
+        #
+        res = run_analyzer(analyzer, region_info, predefined) 
+        # creat entry for k if k is missing
+        for k in keys(res)
+            if !haskey(property_proxies, k)
+                property_proxies[k] = MatrixPropertyValues()
+            end
+        end
+
+        # postprocess
+        if pass[4] != nothing
+            pass[4](res, region.property_proxies, symbol_info)
+        end
     end
 
     dprintln(1, 0, "\nFinal structure proxies:")
     dprint_property_proxies(property_proxies)
 
-    # filter out matrix type
-#    is_matrix_type = (x) ->  in(x, predefined_symbols) || any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
+
     is_matrix_type = (x) ->  any(t -> (haskey(symbol_info, x) && symbol_info[x]<:t), MATRIX_RELATED_TYPES)
     mfilter = (x) -> filter(is_matrix_type, x)
-    has_pos_val = (v) -> v.final_val != nothing && v.final_val != PROP_NEGATIVE_VAL
+    has_pos_val = (v) -> isa(v, MiddleSymbol)
 
     dprintln(1, 0, "\n" * region_name * " Matrix structures discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(property_proxies)))
@@ -689,10 +359,10 @@ function find_properties_of_matrices(
     for k in sort_by_str_key(property_proxies)
         v = property_proxies[k]
         if has_pos_val(v.lower_of)
-            dprintln(1, 1, k, " is lower of ", v.lower_of.final_val)
+            dprintln(1, 1, k, " is lower of ", v.lower_of.value)
         end
         if has_pos_val(v.upper_of)
-            dprintln(1, 1, k, " is upper of ", v.upper_of.final_val)
+            dprintln(1, 1, k, " is upper of ", v.upper_of.value)
         end
     end
 
@@ -700,7 +370,7 @@ function find_properties_of_matrices(
     for k in sort_by_str_key(property_proxies)
         v = property_proxies[k]
         if has_pos_val(v.transpose_of)
-            dprintln(1, 1, k, " is transpose of ", v.transpose_of.final_val)
+            dprintln(1, 1, k, " is transpose of ", v.transpose_of.value)
         end
     end
 
@@ -709,7 +379,8 @@ function find_properties_of_matrices(
 
     matrix_properties = Symexpr2PropertiesMap()
 
-    get_pos_val_or_bool = (v) -> isa(v.final_val, Symbol) ? v.final_val : v.final_val == PROP_POSITIVE_VAL
+    is_middle_symbol = (v) -> isa(v, MiddleSymbol)
+    get_sym_or_nothing = (v) -> isa(v, MiddleSymbol) ? v.value : nothing
 
     for s in symbols
         ## These symbols are not necessary related with matrices. But
@@ -723,19 +394,18 @@ function find_properties_of_matrices(
         
         if haskey(property_proxies, s) 
             p = property_proxies[s]
-            matrix_properties[s].constant_valued = get_pos_val_or_bool(p.constant_valued)
-            matrix_properties[s].constant_structured = get_pos_val_or_bool(p.constant_structured)
-            matrix_properties[s].is_symmetric = get_pos_val_or_bool(p.symmetric_valued)
-            matrix_properties[s].is_structure_symmetric = get_pos_val_or_bool(p.symmetric_structured)
-            matrix_properties[s].is_structure_only = get_pos_val_or_bool(p.structure_only)
-            matrix_properties[s].has_dedicated_memory = get_pos_val_or_bool(p.has_dedicated_memory)
-            matrix_properties[s].lower_of = p.lower_of.final_val
-            matrix_properties[s].upper_of = p.upper_of.final_val
-            matrix_properties[s].transpose_of = p.transpose_of.final_val
+            matrix_properties[s].constant_valued = is_middle_symbol(p.constant_valued)
+            matrix_properties[s].constant_structured = is_middle_symbol(p.constant_structured)
+            matrix_properties[s].is_symmetric = is_middle_symbol(p.symmetric_valued)
+            matrix_properties[s].is_structure_symmetric = is_middle_symbol(p.symmetric_structured)
+            matrix_properties[s].is_structure_only = is_middle_symbol(p.structure_only)
+            matrix_properties[s].has_dedicated_memory = is_middle_symbol(p.has_dedicated_memory)
+            matrix_properties[s].lower_of = get_sym_or_nothing(p.lower_of)
+            matrix_properties[s].upper_of = get_sym_or_nothing(p.upper_of)
+            matrix_properties[s].transpose_of = get_sym_or_nothing(p.transpose_of)
         end
     end
 
-    region.property_proxies = property_proxies
     region.symbol_property = matrix_properties
 
     matrix_properties
