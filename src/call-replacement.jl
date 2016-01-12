@@ -68,6 +68,9 @@ function LHS_in_RHS(
     return is_an_arg(ast.args[1], ast.args[2]);
 end
 
+
+abstract AbstractPatternAction
+
 # There are two kinds of patterns: one is ExprPattern, the other TwoStatementsPattern.
 # ExprPattern is for matching an expression within a statement (It can be the
 # whole or part of the statement). TwoStatementsPattern is for matching
@@ -112,9 +115,9 @@ immutable ExprPattern <: Pattern
     name              :: AbstractString # Name of the pattern
     skeleton          :: Tuple
     sub_expr_patterns :: Tuple
-    pre_processing    :: Function
+    pre_processing    :: Union{Function, AbstractPatternAction}
     substitute        :: Tuple
-    post_processing   :: Function
+    post_processing   :: Union{Function, AbstractPatternAction}
     fknob_creator     :: AbstractString
     fknob_deletor     :: AbstractString
     matrices_to_track :: Tuple
@@ -1685,13 +1688,25 @@ function match_replace(
         end
 
         if pattern.post_processing != do_nothing
-            if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
+            if isa(pattern.post_processing, Function)
+                if !pattern.post_processing(ast, call_sites, pattern.fknob_creator,
                                         pattern.fknob_deletor, pattern.matrices_to_track,
                                         pattern.reordering_power, pattern.reordering_FAR)
-                # AST has already been changed by replace(). However, post 
-                # processing fails. That AST might be wrong. So abort 
-                dprintln(1, 2, "Post-processing failed.")
-                throw(PostPatternReplacementFailure(pattern))
+                    # AST has already been changed by replace(). However, post 
+                    # processing fails. That AST might be wrong. So abort 
+                    dprintln(1, 2, "Post-processing failed.")
+                    throw(PostPatternReplacementFailure(pattern))
+                end
+            else
+                assert(isa(pattern.post_processing, AbstractPatternAction))
+                if !pattern.post_processing.caller(ast, call_sites, pattern.fknob_creator,
+                                        pattern.fknob_deletor, pattern.matrices_to_track,
+                                        pattern.reordering_power, pattern.reordering_FAR)
+                    # AST has already been changed by replace(). However, post 
+                    # processing fails. That AST might be wrong. So abort 
+                    dprintln(1, 2, "Post-processing failed.")
+                    throw(PostPatternReplacementFailure(pattern))
+                end
             end
         end
 

@@ -42,8 +42,8 @@ include("code-transformation.jl")
 include("constant.jl")
 include("lib-interface.jl")
 include("general-reordering.jl")
-include("structure-analysis.jl")
 include("context.jl")
 include("show.jl")
+include("structure-analysis.jl")
 
 end

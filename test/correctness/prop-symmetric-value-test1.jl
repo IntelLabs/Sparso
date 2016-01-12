@@ -16,7 +16,8 @@ function foo()
     NS = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
 
     for i = 1:2
-        B = S + S + S # symm
+        B = S + S
+#        B = S + S + S # symm
         C = S + S + NS
         D = S - NS
         E = B + B # symm

@@ -17,7 +17,7 @@ function foo()
 
     for i = 1:2
         B = S + S # symm
-        C = m * B * m # symm
+        C = m * B # symm
         D = S - NS 
         E = m * D * m
         F = B * C
