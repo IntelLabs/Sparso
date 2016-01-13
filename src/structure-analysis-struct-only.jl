@@ -1,12 +1,12 @@
-module StructureAnalysisTranspose
-    
+module StructureAnalysisStructOnly
+   
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
     function symbolize(e :: Symexpr, tp :: Type)
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
-                s = MiddleSymbol(e)
+                s = MiddleSymbol(:true)
             else
                 dump(tp)
                 assert(0)
@@ -20,9 +20,9 @@ module StructureAnalysisTranspose
     function preprocess(property_proxies, symbol_info)
         predefined = Dict{Sym, AbstractSymbol}()
         for (s, v) in property_proxies 
-            if isa(v.transpose_of, MiddleSymbol)
-                assert(isa(v.transpose_of.value, Sym))
-                predefined[s] = v.transpose_of
+            if isa(v.structure_only, MiddleSymbol)
+                assert(v.structure_only.value == :true)
+                predefined[s] = v.structure_only
             end
         end 
         predefined
@@ -32,18 +32,17 @@ module StructureAnalysisTranspose
         for (s, v) in res
             assert(isa(s, Sym))
             if isa(v, MiddleSymbol)
-                assert(isa(v.value, Sym))
-                property_proxies[s].transpose_of = v
+                assert(v.value == :true)
+                property_proxies[s].structure_only = v
             end
         end 
     end
 
-    function transpose_action(e)
-        e.svalue = symbolize(e.args[1].raw_expr, SparseMatrixCSC)
+    function set_true_action(e)
+        e.svalue = MiddleSymbol(:true)
     end
 
     function pass_a1_action(e)
-        #dump(e.args[1])
         e.svalue = e.args[1].svalue
     end
 
@@ -52,14 +51,14 @@ module StructureAnalysisTranspose
     end
 
     const transfer_rules = (
-        ((:(=), Any, SparseMatrixCSC), assign_action),
-        ((:(=), Factorization, Any), assign_action),
-        ((:(=), Any, Vector), assign_action),
+        ((:(=), Any, Any), assign_action),
 
-        ((:call, GlobalRef(Main, :ctranspose), SparseMatrixCSC), transpose_action),
+        ((:call, GlobalRef(Main, :spones), SparseMatrixCSC), set_true_action),
+        ((:call, GlobalRef(Main, :speye), Any), set_true_action),
 
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
+        ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Cdouble), GlobalRef(Main, :Cint)), Any), pass_a1_action),
     )
 
-    const pass_info = ("Transpose", transfer_rules, preprocess, postprocess, symbolize) 
+    const pass_info = ("StructOnly", transfer_rules, preprocess, postprocess, symbolize) 
 end

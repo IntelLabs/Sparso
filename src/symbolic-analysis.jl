@@ -642,7 +642,7 @@ function run_analyzer(
  
             # update out_symbolic_vals
             for (se, se_ctx) in stmt_ctx.context_map
-                if isa(se, Symbol) #&& se_ctx.svalue != nothing 
+                if isa(se, Sym) #&& se_ctx.svalue != nothing 
                     if se_ctx.svalue == nothing
                         #dump(se_ctx)
                         #assert(0)

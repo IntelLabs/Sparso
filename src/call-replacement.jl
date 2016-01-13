@@ -1699,7 +1699,7 @@ function match_replace(
                 end
             else
                 assert(isa(pattern.post_processing, AbstractPatternAction))
-                if !pattern.post_processing.caller(ast, call_sites, pattern.fknob_creator,
+                if !pattern.post_processing.caller(pattern.post_processing, ast, call_sites, pattern.fknob_creator,
                                         pattern.fknob_deletor, pattern.matrices_to_track,
                                         pattern.reordering_power, pattern.reordering_FAR)
                     # AST has already been changed by replace(). However, post 

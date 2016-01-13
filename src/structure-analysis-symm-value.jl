@@ -38,7 +38,7 @@ module StructureAnalysisSymmValue
 
     function postprocess(res, property_proxies, symbol_info)
         for (s, v) in res
-            assert(isa(s, Symbol))
+            assert(isa(s, Sym))
             if isa(v, MiddleSymbol)
                 assert(v.value == :true)
                 property_proxies[s].symmetric_valued = v

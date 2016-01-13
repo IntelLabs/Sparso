@@ -156,6 +156,9 @@ const SKIP_TYPES = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIStri
 include("structure-analysis-const-size.jl")
 include("structure-analysis-transpose.jl")
 include("structure-analysis-symm-value.jl")
+include("structure-analysis-lower.jl")
+include("structure-analysis-upper.jl")
+include("structure-analysis-struct-only.jl")
 
 const prop_field_const_map = [
            (SA_CONST_VALUED, :constant_valued),
@@ -290,6 +293,9 @@ function find_properties_of_matrices(
          StructureAnalysisConstSize.pass_info,
          StructureAnalysisTranspose.pass_info,
          StructureAnalysisSymmValue.pass_info,
+         StructureAnalysisLower.pass_info,
+         StructureAnalysisUpper.pass_info,
+         StructureAnalysisStructOnly.pass_info,
     )
 
     for pass in structure_property_passes
