@@ -25,7 +25,7 @@ export set_options, matrix_market_read
 export FunctionDescription
 
 # Explicitly specify matrix property
-export  SA_CONST_VALUED, SA_CONST_STRUCTURED, 
+export  SA_CONST_VALUED, SA_CONST_SIZED, SA_MAXIMAL_STRUCTURED, 
         SA_SYMM_VALUED, SA_SYMM_STRUCTURED,
         SA_STRUCTURE_ONLY, SA_HAS_DEDICATED_MEMORY
 

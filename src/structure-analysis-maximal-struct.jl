@@ -1,16 +1,18 @@
-module StructureAnalysisConstSize
+module StructureAnalysisMaximalStruct
     
+    import SparseAccelerator
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
+    using ..SymbolicAnalysis: SA_SUCC
 
-    function symbolize(e :: Symexpr, tp :: Type)
+    function symbolize(e :: Symexpr, tp :: Type, unique = false)
         if isa(e, Sym)
             if tp <: Vector
-                s = MiddleSymbol(Tuple{Symbol, Symbol}((e, :NUM_1)))
+                s = MiddleSymbol((e))
             elseif tp <: SparseMatrixCSC
-                s = MiddleSymbol((Symbol(string("R_", e)), Symbol(string("C_", e))))
+                s = MiddleSymbol((e))
             elseif tp <:Int || tp <: Float64
-                s = MiddleSymbol(Tuple{Symbol, Symbol}((:NUM_1, :NUM_1)))
+                s = MiddleSymbol((:NUM_1))
             else
                 dump(tp)
                 assert(0)
@@ -28,14 +30,23 @@ module StructureAnalysisConstSize
                 continue
             end
             if isa(v.constant_valued, MiddleSymbol)
-                if v.constant_valued.value == :true
-                    predefined[s] = symbolize(s, symbol_info[s]) 
-                else
-                    predefined[s] = v.constant_valued
-                end
+                predefined[s] = symbolize(s, symbol_info[s]) 
+            end
+
+            if isa(v.maximal_structured, MiddleSymbol)
+                predefined[s] = v.maximal_structured
             end
         end 
         predefined
+    end
+
+    function postprocess(res, property_proxies, symbol_info)
+        for (s, v) in res
+            assert(isa(s, Sym))
+            if isa(v, MiddleSymbol)
+                property_proxies[s].maximal_structured = v
+            end
+        end 
     end
 
     function add_sub_action(e)
@@ -144,5 +155,7 @@ module StructureAnalysisConstSize
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
     )
 
-    const pass_info = ("ConstantSize", transfer_rules, preprocess, nothing, symbolize) 
+    const empty_rules = ()
+
+    const pass_info = ("MaximalStruct", empty_rules, preprocess, postprocess, symbolize) 
 end

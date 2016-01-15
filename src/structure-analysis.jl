@@ -94,8 +94,9 @@ Describe part (lower, upper, diagonal) of a matrix, of which the structure matte
 """
 type MatrixPropertyValues
     constant_valued         :: AbstractSymbol
-#    constant_size           :: AbstractSymbol
+    constant_sized          :: AbstractSymbol
     constant_structured     :: AbstractSymbol
+    maximal_structured      :: AbstractSymbol
     symmetric_valued        :: AbstractSymbol
     symmetric_structured    :: AbstractSymbol
     structure_only          :: AbstractSymbol
@@ -109,6 +110,7 @@ type MatrixPropertyValues
                             TOP_SYMBOL, TOP_SYMBOL,
                             TOP_SYMBOL, TOP_SYMBOL,
                             TOP_SYMBOL, TOP_SYMBOL,
+                            TOP_SYMBOL, TOP_SYMBOL,
                             TOP_SYMBOL, nothing)
 end
 
@@ -117,9 +119,9 @@ sort_by_str_key = (x) -> sort(collect(keys(x)), by=v->string(v))
 
 function to_string(s :: AbstractSymbol)
     if s == TOP_SYMBOL
-        return "T"
+        return "-"
     elseif s == BOTTOM_SYMBOL
-        return "B"
+        return "b"
     else
         return s.value
     end
@@ -130,12 +132,14 @@ function dprint_property_proxies(
     pmap    :: Dict 
 )
     val_or_nothing = x -> isa(x, MiddleSymbol)? x.value : "-"
-    dprintln(1, 1, "Sym : CV CS SV SS SO DM Lower Upper Trans")
+    dprintln(1, 1, "Sym : CV CSize CStruct MStruct SV SS SO DM Lower Upper Trans")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
         dprintln(1, 1, k, " : ", 
                     to_string(v.constant_valued), "  ", 
+                    to_string(v.constant_sized), "  ",
                     to_string(v.constant_structured), "  ",
+                    to_string(v.maximal_structured), "  ",
                     to_string(v.symmetric_valued), "  ",
                     to_string(v.symmetric_structured), "  ",
                     to_string(v.structure_only), "  ",
@@ -154,6 +158,7 @@ const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor, Fact
 const SKIP_TYPES = [GlobalRef, Int32, Int64, Float64, Bool, QuoteNode, ASCIIString, Complex]
 
 include("structure-analysis-const-size.jl")
+include("structure-analysis-maximal-struct.jl")
 include("structure-analysis-transpose.jl")
 include("structure-analysis-symm-value.jl")
 include("structure-analysis-lower.jl")
@@ -162,6 +167,8 @@ include("structure-analysis-struct-only.jl")
 
 const prop_field_const_map = [
            (SA_CONST_VALUED, :constant_valued),
+           (SA_CONST_SIZED, :constant_sized),
+           (SA_MAXIMAL_STRUCTURED, :maximal_structured),
            (SA_CONST_STRUCTURED, :constant_structured),
            (SA_SYMM_VALUED, :symmetric_valued),
            (SA_SYMM_STRUCTURED, :symmetric_structured),
@@ -219,7 +226,13 @@ function find_predefined_properties(
                     for (prop_const_val, prop_field) in prop_field_const_map 
                         if (p & prop_const_val) != 0
                             dprintln(1, 1, "Predef: ", sym, ".", prop_field)
-                            sp.(prop_field) = MiddleSymbol(:true)
+                            if prop_const_val == SA_CONST_SIZED
+                                sp.(prop_field) = MiddleSymbol((sym, sym))
+                            elseif prop_const_val == SA_MAXIMAL_STRUCTURED
+                                sp.(prop_field) = MiddleSymbol((sym))
+                            else
+                                sp.(prop_field) = MiddleSymbol(:true)
+                            end
                         end
                     end
 
@@ -257,6 +270,7 @@ function find_properties_of_matrices(
     region.property_proxies = property_proxies
 
     prop_fields = [:constant_valued, :constant_structured, 
+                   :constant_sized, :maximal_structured,
                    :symmetric_valued, :symmetric_structured,
                    :structure_only, :has_dedicated_memory,
                    :lower_of, :upper_of, :transpose_of ]
@@ -291,8 +305,9 @@ function find_properties_of_matrices(
 
     structure_property_passes = (
          StructureAnalysisConstSize.pass_info,
-         StructureAnalysisTranspose.pass_info,
+         StructureAnalysisMaximalStruct.pass_info,
          StructureAnalysisSymmValue.pass_info,
+         StructureAnalysisTranspose.pass_info,
          StructureAnalysisLower.pass_info,
          StructureAnalysisUpper.pass_info,
          StructureAnalysisStructOnly.pass_info,
@@ -318,7 +333,7 @@ function find_properties_of_matrices(
         end
         
         #
-        res = run_analyzer(analyzer, region_info, predefined) 
+        res = run_analyzer(analyzer, region_info, predefined, 1) 
         # creat entry for k if k is missing
         for k in keys(res)
             if !haskey(property_proxies, k)
@@ -346,8 +361,14 @@ function find_properties_of_matrices(
     dprintln(1, 0, "\n" * region_name * " Constant value discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.constant_valued), property_proxies))))
 
+    dprintln(1, 0, "\n" * region_name * " Constant size discovered:")
+    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.constant_sized), property_proxies))))
+
     dprintln(1, 0, "\n" * region_name * " Constant structures discovered:")
-    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.constant_structured), property_proxies))))
+    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.maximal_structured), property_proxies))))
+
+    dprintln(1, 0, "\n" * region_name * " Maximal structures discovered:")
+    dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.maximal_structured), property_proxies))))
 
     dprintln(1, 0, "\n" * region_name * " Value symmetry discovered:")
     dprintln(1, 1, mfilter(sort_by_str_key(filter((k, v) -> has_pos_val(v.symmetric_valued), property_proxies))))
@@ -401,7 +422,8 @@ function find_properties_of_matrices(
         if haskey(property_proxies, s) 
             p = property_proxies[s]
             matrix_properties[s].constant_valued = is_middle_symbol(p.constant_valued)
-            matrix_properties[s].constant_structured = is_middle_symbol(p.constant_structured)
+            matrix_properties[s].constant_structured = is_middle_symbol(p.maximal_structured)
+            #matrix_properties[s].constant_sized = is_middle_symbol(p.constant_sized)
             matrix_properties[s].is_symmetric = is_middle_symbol(p.symmetric_valued)
             matrix_properties[s].is_structure_symmetric = is_middle_symbol(p.symmetric_structured)
             matrix_properties[s].is_structure_only = is_middle_symbol(p.structure_only)

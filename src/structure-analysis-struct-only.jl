@@ -3,7 +3,12 @@ module StructureAnalysisStructOnly
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
-    function symbolize(e :: Symexpr, tp :: Type)
+    function symbolize(e :: Symexpr, tp :: Type, unique)
+        if unique == true 
+            sym = new_symbol("unknown")
+            return MiddleSymbol(sym)
+        end 
+
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
                 s = MiddleSymbol(:true)
@@ -31,8 +36,7 @@ module StructureAnalysisStructOnly
     function postprocess(res, property_proxies, symbol_info)
         for (s, v) in res
             assert(isa(s, Sym))
-            if isa(v, MiddleSymbol)
-                assert(v.value == :true)
+            if isa(v, MiddleSymbol) && v.value == :true
                 property_proxies[s].structure_only = v
             end
         end 

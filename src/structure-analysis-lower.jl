@@ -1,10 +1,15 @@
 module StructureAnalysisLower
    
     import SparseAccelerator
-    using SparseAccelerator: Sym, Symexpr, TypedExprNode
+    using SparseAccelerator: Sym, Symexpr, TypedExprNode, new_symbol
     using ..SymbolicAnalysis
 
-    function symbolize(e :: Symexpr, tp :: Type)
+    function symbolize(e :: Symexpr, tp :: Type, unique)
+        if unique == true 
+            sym = new_symbol("unknown")
+            return MiddleSymbol(sym)
+        end 
+
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
                 s = MiddleSymbol(e)
@@ -31,7 +36,6 @@ module StructureAnalysisLower
 
     function postprocess(res, property_proxies, symbol_info)
         for (s, v) in res
-            assert(isa(s, Sym))
             if isa(v, MiddleSymbol) && isa(v.value, Sym) && v.value != :SA_DIAGONAL
                 property_proxies[s].lower_of = v
             end
