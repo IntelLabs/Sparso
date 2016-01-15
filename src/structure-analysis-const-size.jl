@@ -1,9 +1,15 @@
 module StructureAnalysisConstSize
     
+    import SparseAccelerator
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
+    using ..SymbolicAnalysis: SA_SUCC
 
-    function symbolize(e :: Symexpr, tp :: Type)
+    function symbolize(e :: Symexpr, tp :: Type, unique = false)
+        if unique == true 
+            sym = new_symbol("unknown")
+            return MiddleSymbol((sym, sym))
+        end 
         if isa(e, Sym)
             if tp <: Vector
                 s = MiddleSymbol(Tuple{Symbol, Symbol}((e, :NUM_1)))
@@ -34,8 +40,21 @@ module StructureAnalysisConstSize
                     predefined[s] = v.constant_valued
                 end
             end
+
+            if isa(v.constant_sized, MiddleSymbol)
+                predefined[s] = v.constant_sized
+            end
         end 
         predefined
+    end
+
+    function postprocess(res, property_proxies, symbol_info)
+        for (s, v) in res
+            assert(isa(s, Sym))
+            if isa(v, MiddleSymbol)
+                property_proxies[s].constant_sized = v
+            end
+        end 
     end
 
     function add_sub_action(e)
@@ -49,6 +68,7 @@ module StructureAnalysisConstSize
                 end
             end
         end
+        return SA_SUCC
     end
 
     # A * B -> (A, B)
@@ -56,6 +76,7 @@ module StructureAnalysisConstSize
         if isa(e.args[1].svalue, MiddleSymbol) && isa(e.args[2].svalue, MiddleSymbol) 
             e.svalue = MiddleSymbol((e.args[1].svalue.value[1], e.args[2].svalue.value[2]))
         end
+        return SA_SUCC
     end
 
     # A * B * C
@@ -66,6 +87,7 @@ module StructureAnalysisConstSize
                 e.args[2].svalue = e.svalue
             end
         end
+        return SA_SUCC
     end
 
     ## v * M -> size of v
@@ -81,6 +103,7 @@ module StructureAnalysisConstSize
         if isa(e.args[1].svalue, MiddleSymbol)
             e.svalue = MiddleSymbol((e.args[1].svalue.value[1], :NUM_1))
         end
+        return SA_SUCC
     end
 
     function elem_mul_action(e)
@@ -89,30 +112,39 @@ module StructureAnalysisConstSize
         elseif isa(e.args[2].svalue, MiddleSymbol)
             e.svalue = e.args[2].svalue
         end
+        return SA_SUCC
     end
 
     function speye_action(e)
-        e.svalue = MiddleSymbol((Symbol(e.args[1].raw_expr), Symbol(e.args[1].raw_expr)))
-        dump(e.svalue)
+        if isa(e.args[1].raw_expr, Int) # constant
+            e.svalue = MiddleSymbol((symbol(e.args[1].raw_expr), symbol(e.args[1].raw_expr)))
+        else
+            e.svalue = MiddleSymbol((Symbol(e.args[1].raw_expr), Symbol(e.args[1].raw_expr)))
+        end
+        return SA_SUCC
     end
 
     function transpose_action(e)
         if isa(e.args[1].svalue, MiddleSymbol)
             e.svalue = MiddleSymbol((e.args[1].svalue.value[2], e.args[1].svalue.value[1]))
         end
+        return SA_SUCC
     end
 
     function pass_a1_action(e)
         #dump(e.args[1])
         e.svalue = e.args[1].svalue
+        return SA_SUCC
     end
 
     function pass_a2_action(e)
         e.svalue = e.args[2].svalue
+        return SA_SUCC
     end
 
     function assign_action(e)
         e.args[1].svalue = e.args[2].svalue
+        return SA_SUCC
     end
 
     const transfer_rules = (
@@ -144,5 +176,5 @@ module StructureAnalysisConstSize
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
     )
 
-    const pass_info = ("ConstantSize", transfer_rules, preprocess, nothing, symbolize) 
+    const pass_info = ("ConstantSize", transfer_rules, preprocess, postprocess, symbolize) 
 end

@@ -3,7 +3,12 @@ module StructureAnalysisTranspose
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
-    function symbolize(e :: Symexpr, tp :: Type)
+    function symbolize(e :: Symexpr, tp :: Type, unique = false)
+        if unique == true 
+            sym = new_symbol("unknown")
+            return MiddleSymbol(sym)
+        end 
+
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
                 s = MiddleSymbol(e)

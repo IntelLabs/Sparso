@@ -42,6 +42,7 @@ module StructureAnalysisSymmValue
             if isa(v, MiddleSymbol)
                 assert(v.value == :true)
                 property_proxies[s].symmetric_valued = v
+                property_proxies[s].symmetric_structured = v
             end
         end 
     end

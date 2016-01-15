@@ -138,6 +138,8 @@ const SA_UPPER_OF             = 64
 const SA_TRANSPOSE_OF         = 128
 const SA_HAS_FREE_MEMORY      = 1024 # Used only in a pattern's skeleton
 const SA_HAS_DEDICATED_MEMORY = 2048 # Difference from SA_HAS_FREE_MEMORY: not only the memory is free, but dedicated to an array, not shared/aliased with any other.
+const SA_CONST_SIZED          = 4096
+const SA_MAXIMAL_STRUCTURED   = 8192
 
 # Create a path to libcsr. This is a CSR(Compressed Sparse Row format)-based
 # interface to the SPMP library.

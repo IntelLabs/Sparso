@@ -27,6 +27,8 @@ export union_symbols
 export check_and_gen_transfer_rules
 export run_analyzer
 
+export SA_SUCC
+
 typealias BasicBlock      CompilerTools.CFGs.BasicBlock
 typealias Statement       CompilerTools.CFGs.TopLevelStatement
 typealias Liveness        CompilerTools.LivenessAnalysis.BlockLiveness
@@ -39,6 +41,8 @@ typealias CFG             CompilerTools.CFGs.CFG
 typealias Sym             Union{Symbol, GenSym} # A Symbol or GenSym.
 #typealias Sym2TypeMap     Dict{Sym, Type}
 typealias Symexpr         Union{Symbol, GenSym, Expr} # A Symbol, GenSym or Expr
+
+const SA_SUCC = true
 
 abstract AbstractSymbol
 
@@ -60,7 +64,7 @@ const BOTTOM_SYMBOL = BottomSymbol()
 
 @doc """
 any ^ Bottom = Bottom
-any ^ Top = Top
+any ^ Top = any 
 Mi ^ Mi = Mi
 Mi ^ Mj = Bottom (if i != j)
 """
@@ -69,7 +73,11 @@ function DefaultMeetRule(s1::AbstractSymbol, s2::AbstractSymbol)
         return BOTTOM_SYMBOL
     end
 
-    if s1 == TOP_SYMBOL || s2 == TOP_SYMBOL
+    if s1 == TOP_SYMBOL && s2 != TOP_SYMBOL
+        return s2
+    elseif s2 == TOP_SYMBOL && s1 != TOP_SYMBOL
+        return s1
+    elseif s1 == TOP_SYMBOL && s2 == TOP_SYMBOL
         return TOP_SYMBOL
     end
 
@@ -191,6 +199,7 @@ end
 Context used for the whole analysis
 """
 type AnalysisContext
+    analyzer                :: SymbolicAnalyzer
     stmt_contexts           :: Dict{Statement, StmtContext}
     curr_context            :: Union{StmtContext, Void}
 
@@ -204,9 +213,12 @@ type AnalysisContext
     # all patterns (including splitting and non-splitting) once.
     non_splitting_patterns  :: Vector{ExprPattern}
 
-    AnalysisContext() = new(
+    AnalysisContext(analyzer) = new(
+        analyzer,
+
         Dict{Statement, StmtContext}(), 
         nothing,                         # curr_context
+
         Set{Sym}(),                      # live_in_before_expr 
         Dict{Sym, Vector{Sym}}(),        # equivalent_sets
 
@@ -328,7 +340,12 @@ function call_post_action(
     # wrap env
     stmt_ctx = call_sites.extra.curr_context
     env = prepare_pattern_action_env(stmt_ctx, ast, call_sites.symbol_info)
-    functor.action(env) # 
+    ret = functor.action(env) # 
+    # assign a unique symbolic value if expr matched but not processed 
+    # by the user defined pattern rules
+    #if ret != SA_SUCC && env.svalue == nothing && isa(env.raw_expr, Symexpr) && env.raw_expr.head != :(=) 
+    #    env.svalue = call_sites.extra.analyzer.symbolizer(env.raw_expr, Any, true)
+    #end
     done_pattern_action_env(stmt_ctx, env)
     return true
 end
@@ -552,12 +569,13 @@ end
 function run_analyzer(
     analyzer    :: SymbolicAnalyzer,
     region      :: RegionInfo,
-    predefined::Dict{Sym, AbstractSymbol}, 
+    predefined  ::Dict{Sym, AbstractSymbol}, 
+    verbose 
 ) 
 
     # initialize property values for all Syms according to
 
-    analysis_context = AnalysisContext()
+    analysis_context = AnalysisContext(analyzer)
 
     analysis_context.stmt_contexts = build_stmt_contexts(region) 
 
@@ -594,7 +612,9 @@ function run_analyzer(
         converged = true
         for (stmt, stmt_ctx) in analysis_context.stmt_contexts
 
-            dprintln(1, 0, stmt.index, " ", stmt.expr)
+            if verbose > 1
+                dprintln(1, 0, stmt.index, " ", stmt.expr)
+            end
 
             new_symbolic_vals = Dict{Sym, SymbolicValue}()
             for in_ctx in stmt_ctx.in
@@ -608,12 +628,16 @@ function run_analyzer(
                 #end
             end
 
-            dprintln(1, 1, "IN ")
-            show_symbolic_vals(new_symbolic_vals, 2)
+            if verbose > 1
+                dprintln(1, 1, "IN ")
+                show_symbolic_vals(new_symbolic_vals, 2)
+            end
 
             expr = stmt.expr
             if stmt_ctx.in_symbolic_vals == new_symbolic_vals 
-                dprintln(1, 1, "IN_NOT_CHANGED")
+                if verbose > 1
+                    dprintln(1, 1, "IN_NOT_CHANGED")
+                end
                 continue
             else
                 stmt_ctx.in_symbolic_vals = new_symbolic_vals
@@ -621,8 +645,10 @@ function run_analyzer(
 
             if typeof(expr) != Expr || expr.head == :return
                 stmt_ctx.out_symbolic_vals = new_symbolic_vals
-                dprintln(1, 1, "SKIP")
-                show_symbolic_vals(new_symbolic_vals, 2)
+                if verbose > 1
+                    dprintln(1, 1, "SKIP")
+                    show_symbolic_vals(new_symbolic_vals, 2)
+                end
                 continue
             end
 
@@ -670,11 +696,15 @@ function run_analyzer(
                 stmt_ctx.out_symbolic_vals = new_symbolic_vals
                 converged = false
 
-                dprintln(1, 1, "OUT")
-                show_symbolic_vals(new_symbolic_vals, 2)
+                if verbose > 1
+                    dprintln(1, 1, "OUT")
+                    show_symbolic_vals(new_symbolic_vals, 2)
+                end
             else
-                dprintln(1, 1, "OUT_NOT_CHANGED")
-                show_symbolic_vals(new_symbolic_vals, 2)
+                if verbose > 1
+                    dprintln(1, 1, "OUT_NOT_CHANGED")
+                    show_symbolic_vals(new_symbolic_vals, 2)
+                end
             end
         end
     end 
@@ -686,8 +716,10 @@ function run_analyzer(
         merge_symbolic_vals(global_symbolic_vals, stmt_ctx.out_symbolic_vals, analyzer.meet_rule)
     end
 
-    dprintln(1, 0, "\n", region.name, " ", analyzer.name)
-    show_symbolic_vals(global_symbolic_vals)
+    if verbose > 0
+        dprintln(1, 0, "\n", region.name, " ", analyzer.name)
+        show_symbolic_vals(global_symbolic_vals)
+    end
 
     return global_symbolic_vals
 end
