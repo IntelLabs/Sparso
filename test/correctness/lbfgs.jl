@@ -122,7 +122,6 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
 #  dx = zeros(n)
 
   for it=1:100
-    set_matrix_property(:Xt, SA_TRANSPOSE_OF, :X) 
     set_matrix_property(Dict(
         :temp  => SA_HAS_DEDICATED_MEMORY,
         :Xw    => SA_HAS_DEDICATED_MEMORY,
