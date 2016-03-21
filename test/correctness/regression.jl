@@ -1130,6 +1130,29 @@ const prop_structure_only_test1 = Test(
 )
 
 
+const prop_structure_only_test2 = Test(
+    "prop-structure-only-test2",
+    "prop-structure-only-test2.jl",
+    [
+        TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:A])),
+                     "Test that A is recognized as pattern-only structure."
+        ),
+        exception_pattern
+    ]
+)
+
+const prop_structure_only_test3 = Test(
+    "prop-structure-only-test3",
+    "prop-structure-only-test3.jl",
+    [
+        TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:A])),
+                     "Test that A is recognized as pattern-only structure."
+        ),
+        exception_pattern
+    ]
+)
+
+
 const prop_lower_upper_test1 = Test(
     "prop-lower-upper-test1",
     "prop-lower-upper-test1.jl",
@@ -1214,6 +1237,8 @@ const all_tests = [
     prop_symmetric_value_test4,
 #    symmetric_structure_test1,
     prop_structure_only_test1,
+    prop_structure_only_test2,
+    prop_structure_only_test3,
     prop_lower_upper_test1,
     prop_lower_upper_test2,
     prop_transpose_test1,
