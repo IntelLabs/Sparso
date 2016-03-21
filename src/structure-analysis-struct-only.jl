@@ -84,8 +84,10 @@ module StructureAnalysisStructOnly
     const transfer_rules = (
         ((:(=), Any, Any), assign_action),
 
-        ((:call, GlobalRef(Main, :spones), SparseMatrixCSC), set_true_action),
-        ((:call, GlobalRef(Main, :speye), Any), set_true_action),
+        ((:call, GlobalRef(Main, :spones), Any), set_true_action),
+        ((:call, GlobalRef(Main, :zeros), Any, Any), set_true_action),
+        ((:call, GlobalRef(Main, :sparse), Any), pass_a1_action),
+        ((:call, GlobalRef(Main, :scale), SparseMatrixCSC, Any), pass_a1_action),
 
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Cdouble), GlobalRef(Main, :Cint)), Any), pass_a1_action),
