@@ -81,6 +81,14 @@ module StructureAnalysisStructOnly
         e.args[1].svalue = e.args[2].svalue
     end
 
+    function set_elem_action(e)
+        dump(e.args[2].raw_expr)
+        val = e.args[2].raw_expr
+        if !isa(val, Int) || (val != 0 && val != 1)
+            e.args[1].svalue = MiddleSymbol(:false)
+        end
+    end
+
     const transfer_rules = (
         ((:(=), Any, Any), assign_action),
 
@@ -88,6 +96,7 @@ module StructureAnalysisStructOnly
         ((:call, GlobalRef(Main, :zeros), Any, Any), set_true_action),
         ((:call, GlobalRef(Main, :sparse), Any), pass_a1_action),
         ((:call, GlobalRef(Main, :scale), SparseMatrixCSC, Any), pass_a1_action),
+        ((:call, GlobalRef(Main, :setindex!), Array, Any, Any, Any), set_elem_action),
 
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Cdouble), GlobalRef(Main, :Cint)), Any), pass_a1_action),
