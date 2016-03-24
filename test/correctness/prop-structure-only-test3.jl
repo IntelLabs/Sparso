@@ -33,6 +33,8 @@ set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 include("utils.jl")
 
 function foo()
+    nsets = 16
+    nqbits = 16
     Hdmat = zeros(nsets, nsets)
     for i=1:nsets
       for j=0:nqbits-1
