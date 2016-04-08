@@ -1313,8 +1313,7 @@ function get_temporary(
     len  = length(call_sites.extra.expression_temporaries)
     temp = Symbol(string("__", "temp", string(len), "__"))
     push!(call_sites.extra.expression_temporaries, temp)
-#println("****gen:", temp)
-        
+
     # Make the new temporary memory allocated.
     lambda   = call_sites.lambda
     bb       = call_sites.extra.bb
