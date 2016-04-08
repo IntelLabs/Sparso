@@ -1705,7 +1705,7 @@ function match_replace(
             end
         end
 
-        dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
+        #dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
     
         ast_changed = replace(pattern.substitute, ast, call_sites, trace_pattern_match)
 
