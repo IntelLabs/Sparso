@@ -1313,8 +1313,7 @@ function get_temporary(
     len  = length(call_sites.extra.expression_temporaries)
     temp = Symbol(string("__", "temp", string(len), "__"))
     push!(call_sites.extra.expression_temporaries, temp)
-#println("****gen:", temp)
-        
+
     # Make the new temporary memory allocated.
     lambda   = call_sites.lambda
     bb       = call_sites.extra.bb
@@ -1706,7 +1705,7 @@ function match_replace(
             end
         end
 
-        dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
+        #dprintln(1, 1, "Matched ", pattern.name, " with ", ast)
     
         ast_changed = replace(pattern.substitute, ast, call_sites, trace_pattern_match)
 
