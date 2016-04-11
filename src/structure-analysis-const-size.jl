@@ -44,6 +44,8 @@ module StructureAnalysisConstSize
                 s = MiddleSymbol((Symbol(string("R_", e)), Symbol(string("C_", e))))
             elseif tp <:Int || tp <: Float64
                 s = MiddleSymbol(Tuple{Symbol, Symbol}((:NUM_1, :NUM_1)))
+            elseif tp <:Bool
+                s = MiddleSymbol(Symbol(e))
             else
                 dump(tp)
                 assert(0)

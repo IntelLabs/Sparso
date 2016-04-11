@@ -126,6 +126,8 @@ module StructureAnalysisSymmValue
         ((:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC), A_mul_B_action),
         ((:call, GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC, Any), A_mul_B_action),
 
+        ((:call, GlobalRef(Main, :scale), SparseMatrixCSC, Any), pass_a1_action),
+
         ((:call, GlobalRef(Main, :A_mul_Bc), SparseMatrixCSC, SparseMatrixCSC), A_mul_Bc_action),
 #        ((:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC), mul3_action),
 #        ((:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector), M_mul_v_action),
