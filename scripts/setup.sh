@@ -54,7 +54,12 @@ make clean
 make -j 
 cd ..
 
-echo "* Extracting matrices"
+echo "* Downloading extra matrices"
 cd test
-tar xf matrices.tar.gz
+cd matrics
+wget ftp://math.nist.gov/pub/MatrixMarket2/Harwell-Boeing/bcsstruc2/bcsstk14.mtx.gz
+gunzip bcsstk14.mtx.gz
+wget https://raw.githubusercontent.com/exmatex/CoSP2/master/data/hmatrix.512.mtx
+wget https://raw.githubusercontent.com/exmatex/CoSP2/master/data/hmatrix.1024.mtx
+cd ..
 cd ..

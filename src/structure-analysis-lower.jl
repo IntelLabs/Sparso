@@ -26,7 +26,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisLower
-
     import SparseAccelerator
     using SparseAccelerator: Sym, Symexpr, TypedExprNode, new_symbol
     using ..SymbolicAnalysis

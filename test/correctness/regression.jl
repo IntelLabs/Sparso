@@ -104,7 +104,7 @@ const sanity_test3 = Test(
     "sanity-test3",
     "sanity-test3.jl",
     [
-        TestPattern(r"New AST:(.|\n)*?return A * x",
+        TestPattern(r"New AST:(.|\n)*?return A \* x",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
         ),
         exception_pattern
@@ -113,7 +113,7 @@ const sanity_test3 = Test(
 
 const spmv_sanity_test1 = Test(
     "spmv-sanity-test1",
-    "spmv-sanity-test1.jl ../matrices/niny-diag.mtx",
+    "spmv-sanity-test1.jl ../matrices/tiny-diag.mtx",
     [
         TestPattern(r"Original sum of p=20.169999999999995",
                      "Test original code"
@@ -485,8 +485,9 @@ const cosp2_test1 = Test(
     ]
 )
 
-const MTX_covtype = "../matrices/covtype.mtx" 
+#const MTX_covtype = "../matrices/covtype.mtx" 
 
+if false
 const lbfgs_test1 = Test(
     "lbfgs-test1",
     "lbfgs.jl $MTX_covtype",
@@ -653,6 +654,7 @@ const lbfgs_test2 = Test(
         exception_pattern
     ]
 )
+end
 
 const MTX_small_diag = "../matrices/small-diag.mtx"
 
@@ -1203,8 +1205,8 @@ const all_tests = [
     context_test5,
     pagerank_test1,
     cosp2_test1,
-    lbfgs_test1,
-    lbfgs_test2,
+#    lbfgs_test1,
+#    lbfgs_test2,
     liveness_test1,
     liveness_test2,
     call_replacement_test1,
@@ -1252,8 +1254,8 @@ const fast_tests = [
     context_test4,
     context_test5,
     pagerank_test1,
-    cosp2_test1,
-    lbfgs_test1
+    cosp2_test1
+#    lbfgs_test1
 ]
 
 # If true, use pcregrep for regular expression match. 
