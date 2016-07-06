@@ -26,16 +26,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisUpper
-    
+
     import SparseAccelerator
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
     function symbolize(e :: Symexpr, tp :: Type, unique)
-        if unique == true 
+        if unique == true
             sym = new_symbol("unknown")
             return MiddleSymbol(sym)
-        end 
+        end
 
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
@@ -44,7 +44,7 @@ module StructureAnalysisUpper
                 dump(tp)
                 assert(0)
             end
-            return s 
+            return s
         else
             assert(0)
         end
@@ -52,12 +52,12 @@ module StructureAnalysisUpper
 
     function preprocess(property_proxies, symbol_info)
         predefined = Dict{Sym, AbstractSymbol}()
-        for (s, v) in property_proxies 
+        for (s, v) in property_proxies
             if isa(v.upper_of, MiddleSymbol)
                 assert(isa(v.upper_of.value, Symbol))
                 predefined[s] = v.upper_of
             end
-        end 
+        end
         predefined
     end
 
@@ -68,7 +68,7 @@ module StructureAnalysisUpper
                 assert(isa(v.value, Sym))
                 property_proxies[s].upper_of = v
             end
-        end 
+        end
     end
 
     function ilu_action(e)
@@ -92,7 +92,7 @@ module StructureAnalysisUpper
     end
 
     function triu_action(e)
-        e.svalue = symbolize(e.args[1].raw_expr, SparseMatrixCSC)
+        e.svalue = symbolize(e.args[1].raw_expr, SparseMatrixCSC, false)
     end
 
     function pass_a1_action(e)
@@ -127,5 +127,5 @@ module StructureAnalysisUpper
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Cdouble), GlobalRef(Main, :Cint)), Any), pass_a1_action),
     )
 
-    const pass_info = ("Upper", transfer_rules, preprocess, postprocess, symbolize) 
+    const pass_info = ("Upper", transfer_rules, preprocess, postprocess, symbolize)
 end

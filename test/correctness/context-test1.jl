@@ -39,8 +39,8 @@ include("utils.jl")
 function pcg_symgs(x, A, b, tol, maxiter)
     # These are the only 3 properties we need to discover automatically.
     # We also require SA_CONST_STRUCTURED for A, but that has already been discovered.
-    set_matrix_property(:L, SA_LOWER_OF, :A)
-    set_matrix_property(:U, SA_UPPER_OF, :A)
+#    set_matrix_property(:L, SA_LOWER_OF, :A)
+#    set_matrix_property(:U, SA_UPPER_OF, :A)
     set_matrix_property(Dict(
         :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED,
         :U => SA_CONST_VALUED

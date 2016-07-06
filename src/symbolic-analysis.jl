@@ -663,7 +663,7 @@ function run_analyzer(
             expr = stmt.expr
             if stmt_ctx.in_symbolic_vals == new_symbolic_vals 
                 if verbose > 1
-                    dprintln(1, 1, "IN_NOT_CHANGED")
+                    dprintln(1, 1, "IN_SET_NOT_CHANGED")
                 end
                 continue
             else
@@ -729,7 +729,7 @@ function run_analyzer(
                 end
             else
                 if verbose > 1
-                    dprintln(1, 1, "OUT_NOT_CHANGED")
+                    dprintln(1, 1, "OUT_SET_NOT_CHANGED")
                     show_symbolic_vals(new_symbolic_vals, 2)
                 end
             end

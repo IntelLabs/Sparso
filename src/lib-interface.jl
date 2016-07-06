@@ -55,6 +55,8 @@ function new_matrix_knob(
  )
     # Note: is_structure_symmetric is only for CoSP2. In general, the matrix
     # must be constant valued or structured.
+    dump(A)
+    @printf("%d %d %d %d\n", constant_valued, constant_structured, is_structure_symmetric, collective_structure_prediction_enabled)
     assert(constant_valued || constant_structured || is_structure_symmetric || !collective_structure_prediction_enabled)
     assert(!constant_valued || constant_structured || !collective_structure_prediction_enabled)
     assert(!is_symmetric || is_structure_symmetric || !collective_structure_prediction_enabled)

@@ -26,16 +26,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisLower
-   
+
     import SparseAccelerator
     using SparseAccelerator: Sym, Symexpr, TypedExprNode, new_symbol
     using ..SymbolicAnalysis
 
     function symbolize(e :: Symexpr, tp :: Type, unique)
-        if unique == true 
+        if unique == true
             sym = new_symbol("unknown")
             return MiddleSymbol(sym)
-        end 
+        end
 
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
@@ -44,7 +44,7 @@ module StructureAnalysisLower
                 dump(tp)
                 assert(0)
             end
-            return s 
+            return s
         else
             assert(0)
         end
@@ -52,12 +52,12 @@ module StructureAnalysisLower
 
     function preprocess(property_proxies, symbol_info)
         predefined = Dict{Sym, AbstractSymbol}()
-        for (s, v) in property_proxies 
+        for (s, v) in property_proxies
             if isa(v.lower_of, MiddleSymbol)
                 assert(isa(v.lower_of.value, Symbol))
                 predefined[s] = v.lower_of
             end
-        end 
+        end
         predefined
     end
 
@@ -66,7 +66,7 @@ module StructureAnalysisLower
             if isa(v, MiddleSymbol) && isa(v.value, Sym) && v.value != :SA_DIAGONAL
                 property_proxies[s].lower_of = v
             end
-        end 
+        end
     end
 
     function ilu_action(e)
@@ -90,7 +90,7 @@ module StructureAnalysisLower
     end
 
     function tril_action(e)
-        e.svalue = symbolize(e.args[1].raw_expr, SparseMatrixCSC)
+        e.svalue = symbolize(e.args[1].raw_expr, SparseMatrixCSC, false)
     end
 
     function pass_a1_action(e)
@@ -115,7 +115,7 @@ module StructureAnalysisLower
 
         ((:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC), A_mul_B_action),
 
-        # ilu 
+        # ilu
         ((:call, GlobalRef(SparseAccelerator, :ilu), SparseMatrixCSC), ilu_action),
         ((:call, TopNode(:indexed_next), Tuple{SparseMatrixCSC, SparseMatrixCSC}, 1, Int), index1_action),
         ((:call, TopNode(:getfield), Any, 1), getfield1_action),
@@ -127,5 +127,5 @@ module StructureAnalysisLower
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Cdouble), GlobalRef(Main, :Cint)), Any), pass_a1_action),
     )
 
-    const pass_info = ("Lower", transfer_rules, preprocess, postprocess, symbolize) 
+    const pass_info = ("Lower", transfer_rules, preprocess, postprocess, symbolize)
 end
