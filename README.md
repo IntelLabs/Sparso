@@ -32,10 +32,10 @@ running Pkg.dir() in the Julia REPL) and doing the following git clone:
 
 git clone https://github.com/IntelLabs/Sparso.git
 
-This version of Sparse requires a Julia version of approximately version number 0.5.0.
+This version of Sparso requires a Julia version of approximately version number 0.5.0.
 Substantially later versions of Julia will not work although early versions of Julia may
 work.
-Then go into the Sparse/deps directory and run "julia build.jl".
+Then go into the Sparso/deps directory and run "julia build.jl".
 Then go into the scripts directory and run setup.sh.
 A correctness check of the package can then be performed by going into 
 tests/correctness and running "julia regression.jl".
