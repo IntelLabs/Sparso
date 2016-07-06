@@ -104,7 +104,7 @@ const sanity_test3 = Test(
     "sanity-test3",
     "sanity-test3.jl",
     [
-        TestPattern(r"New AST:(.|\n)*?return A * x",
+        TestPattern(r"New AST:(.|\n)*?return A \* x",
                      "Test if optimization framework invokes SparseAccelerator to generate a new AST."
         ),
         exception_pattern
@@ -113,7 +113,7 @@ const sanity_test3 = Test(
 
 const spmv_sanity_test1 = Test(
     "spmv-sanity-test1",
-    "spmv-sanity-test1.jl ../matrices/niny-diag.mtx",
+    "spmv-sanity-test1.jl ../matrices/tiny-diag.mtx",
     [
         TestPattern(r"Original sum of p=20.169999999999995",
                      "Test original code"
