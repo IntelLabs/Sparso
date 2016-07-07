@@ -161,10 +161,10 @@ const context_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test reordering"
         ),
-        TestPattern(r"SparseAccelerator.reordering\)\(__fknob\d*?__,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobU\d*?__,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobA\d*?__){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
+        TestPattern(r"\(SparseAccelerator.reordering\)\(__fknob\d*__,__reordering_status\d*__,A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobA\d*__,U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobU\d*__,:__delimitor__,p,SparseAccelerator.ROW_PERM,r,SparseAccelerator.ROW_PERM,x,SparseAccelerator.ROW_PERM\)",
                      "Test reordering"
         ),      
-        TestPattern(r"reverse_reordering\)\(##reordering_status#\d*?,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"reverse_reordering\)\(__reordering_status\d*__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
                      "Test reordering"
         ),
         TestPattern(r"Accelerated k=208",
@@ -425,10 +425,10 @@ const pagerank_test1 = Test(
     "pagerank-test1",
     "pagerank.jl  ../matrices/hmatrix.1024.mtx",
     [
-        TestPattern(r"Original:(.\n)*?\s*error = 1.53\d*e-8",
+        TestPattern(r"Original:(.|\n)*?\s*error = 1.53\d*e-8",
                      "Test original pagerank"
         ),
-        TestPattern(r"Accelerated:(.\n)*?\s*error = 1.53\d*e-8",
+        TestPattern(r"Accelerated:(.|\n)*?\s*error = 1.53\d*e-8",
                      "Test pagerank with reordering"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
