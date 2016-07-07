@@ -35,7 +35,7 @@ function SpMV_test(y, A, x)
 end
 
 m = 10
-A = sprand(m, m, 0.1)
+A = SparseMatrixCSC{Float64,Int32}(sprand(m, m, 0.1))
 x = repmat([1/m], m)
 y = copy(x)
 @acc SpMV_test(y, A, x)
