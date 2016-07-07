@@ -61,5 +61,16 @@ wget ftp://math.nist.gov/pub/MatrixMarket2/Harwell-Boeing/bcsstruc2/bcsstk14.mtx
 gunzip bcsstk14.mtx.gz
 wget https://raw.githubusercontent.com/exmatex/CoSP2/master/data/hmatrix.512.mtx
 wget https://raw.githubusercontent.com/exmatex/CoSP2/master/data/hmatrix.1024.mtx
+
+cd lp
+for i in `cat ../../correctness/ipm.lst`; do
+  wget http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/${i}.tar.gz
+  tar xzvf ${i}.tar.gz
+  rm ${i}.tar.gz
+done
+cd ..
+
+# TODO: download matrices of LBFGS, PageRank, and PCG
+
 cd ..
 cd ..
