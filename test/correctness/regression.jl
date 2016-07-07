@@ -779,7 +779,7 @@ const call_replacement_test8 = Test(
     "call-replacement-test8",
     "call-replacement-test8.jl $MTX_small_diag",
     [
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:SpMV\!\)\(p,1 - r::Float64::Float64,A::[^\s\\]*SparseMatrixCSC\{Float64,Int32\},p::Array\{Float64,1\},0,p::Array\{Float64,1\},r::Float64\)",
+	TestPattern(r"New AST:(.|\n)*?SparseAccelerator.SpMV\)\(1 - r,A,p\),r\)",
                      "Test call replacement of SpMV! in simple page rank."
         ),
         exception_pattern
