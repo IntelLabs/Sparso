@@ -27,6 +27,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
+echo "* Setting up BinDeps"
+cd deps
+julia build.jl
+cd ..
+
 echo "* Setting up submoduls"
 git submodule update --init
 cd deps/CompilerTools
