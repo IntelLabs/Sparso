@@ -56,7 +56,7 @@ cd ..
 
 echo "* Downloading extra matrices"
 cd test
-cd matrics
+cd matrices
 wget ftp://math.nist.gov/pub/MatrixMarket2/Harwell-Boeing/bcsstruc2/bcsstk14.mtx.gz
 gunzip bcsstk14.mtx.gz
 wget https://raw.githubusercontent.com/exmatex/CoSP2/master/data/hmatrix.512.mtx
