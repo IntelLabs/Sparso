@@ -496,15 +496,15 @@ println("End original.")
 # Number of iterations = 25
 # Expected results for hmatrix.1024.mtx: X sum = 12212.785128790038, max = 1.2808837088549991
 # Number of iterations = 25
-println("\nCoSP2_call_replacement:")
-CoSP2_call_replacement(X, flops)
-CoSP2_call_replacement(X, flops)
-println("End CoSP2_call_replacement.")
+#println("\nCoSP2_call_replacement:")
+#CoSP2_call_replacement(X, flops)
+#CoSP2_call_replacement(X, flops)
+#println("End CoSP2_call_replacement.")
 
-println("\nCoSP2_call_replacement_and_context_opt:")
-CoSP2_call_replacement_and_context_opt(X, flops)
-CoSP2_call_replacement_and_context_opt(X, flops)
-println("End CoSP2_call_replacement_and_context_opt.")
+#println("\nCoSP2_call_replacement_and_context_opt:")
+#CoSP2_call_replacement_and_context_opt(X, flops)
+#CoSP2_call_replacement_and_context_opt(X, flops)
+#println("End CoSP2_call_replacement_and_context_opt.")
 
 println("\nAccelerated:")
 @acc CoSP2_ref(X, flops)

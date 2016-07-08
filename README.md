@@ -29,10 +29,15 @@ Sparso is part of the High Performance Scripting (HPS) project at Intel Labs.
 
 1. Environment
 
-Sparso is independent of OS, and should work in both Linux and Windows. So far, we
-have tested it only on Ubuntu (version >= 14.01, 64 bit desktop).
+We have tested with the following setting:
 
-Julia 0.4.1 has been used for testing.
+Ubuntu 16.04 x86_64 desktop
+
+Julia 0.4.6 (julia-2e358ce975)
+
+Parallel Studio 2016 update 1 (2016.1.056)
+
+pcregrep 8.38 (pcregrep_8.38-3.1_amd64.deb from https://packages.debian.org/sid/amd64/pcregrep/download)
 
 2. Installation
 
@@ -40,7 +45,7 @@ Julia 0.4.1 has been used for testing.
 
 Download a binary from http://julialang.org/downloads/. Untar it and add to PATH.
 For example:
-	tar xvzf julia-0.4.1-linux-x86_64.tar.gz
+	tar xvzf julia-0.4.6-linux-x86_64.tar.gz
 	export PATH=path_to_the_julia_directory/bin:$PATH	
 	
 (2) cd path_to_Julia_package
