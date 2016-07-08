@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. /opt/intel/compiler/latest/bin/compilervars.sh intel64 # make sure you also did this before compiling libcsr.so
+#. /opt/intel/compiler/latest/bin/compilervars.sh intel64 # make sure you also did this before compiling libcsr.so
 
 # Use 1 socket, 1 HW thread per core
 export OMP_NUM_THREADS=14

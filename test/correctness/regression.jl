@@ -454,12 +454,12 @@ const cosp2_test1 = Test(
         TestPattern(r"Original:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End original.",
                      "Test original"
         ),
-        TestPattern(r"CoSP2_call_replacement:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
-                     "Test CoSP2_call_replacement"
-        ),
-        TestPattern(r"CoSP2_call_replacement_and_context_opt:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt.",
-                     "Test CoSP2_call_replacement_and_context_opt"
-        ),
+        #TestPattern(r"CoSP2_call_replacement:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement.",
+        #             "Test CoSP2_call_replacement"
+        #),
+        #TestPattern(r"CoSP2_call_replacement_and_context_opt:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt.",
+        #             "Test CoSP2_call_replacement_and_context_opt"
+        #),
         TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,false,.*?,true,true,false,false\)",
                      "Test accelerated"
         ),
