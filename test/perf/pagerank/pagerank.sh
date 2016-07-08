@@ -1,4 +1,6 @@
-#=
+#!/bin/bash
+
+<<"LICENSE"
 Copyright (c) 2015, Intel Corporation
 
 Redistribution and use in source and binary forms, with or without
@@ -23,30 +25,20 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-=#
+LICENSE
 
-include("../../src/SparseAccelerator.jl")
-using SparseAccelerator
-
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
-
-include("utils.jl")
-
-function foo()
-    set_matrix_property(Dict(
-        :A => SA_CONST_VALUED | SA_SYMM_VALUED, 
-        :B => SA_CONST_VALUED | SA_SYMM_STRUCTURED
-        )
-    )
-
-    m = 10
-    A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-
-    for i = 1:2
-        B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-        m = size(A, 1)
-        B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-    end
-end
-
-@acc foo()
+for i in `cat pagerank.lst`; do
+  echo !!!!$i
+  #echo %%%%baseline
+  #OMP_NUM_THREADS=1 julia pagerank-without-context.jl ../../matrices/$i.mtx
+  #echo %%%%auto-without-context
+  #julia pagerank-without-context.jl ../../matrices/$i.mtx
+  #echo
+  #echo %%%%auto-without-reordering
+  #julia pagerank-without-reordering.jl ../..//matrices/$i.mtx
+  #echo
+  #echo %%%%auto
+  julia pagerank.jl ../../matrices/$i.mtx
+  echo
+  echo
+done

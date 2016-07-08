@@ -27,22 +27,49 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *Sparso* is a Julia package for speeding up iterative sparse matrix Julia programs.  
 Sparso is part of the High Performance Scripting (HPS) project at Intel Labs.
 
-You can use Sparso by going into your Julia package directory (find this by 
-running Pkg.dir() in the Julia REPL) and doing the following git clone:
+1. Environment
 
-git clone https://github.com/IntelLabs/Sparso.git
+We have tested with the following setting:
 
-This version of Sparso requires a Julia version of approximately version number 0.5.0.
-Substantially later versions of Julia will not work although early versions of Julia may
-work.
-Then go into the Sparso/deps directory and run "julia build.jl".
-Then go into the scripts directory and run setup.sh.
-A correctness check of the package can then be performed by going into 
-tests/correctness and running "julia regression.jl".
+Ubuntu 16.04 x86_64 desktop
 
-To accelerate your own iterative sparse matrix applications with Sparso,
+Julia 0.4.6 (julia-2e358ce975)
+
+Parallel Studio 2016 update 1 (2016.1.056)
+
+pcregrep 8.38 (pcregrep_8.38-3.1_amd64.deb from https://packages.debian.org/sid/amd64/pcregrep/download)
+
+2. Installation
+
+(1) Getting Julia.
+
+Download a binary from http://julialang.org/downloads/. Untar it and add to PATH.
+For example:
+	tar xvzf julia-0.4.6-linux-x86_64.tar.gz
+	export PATH=path_to_the_julia_directory/bin:$PATH	
+	
+(2) cd path_to_Julia_package
+
+The path can be found in this way:
+	julia   // enter Julia interactive environment
+        Pkg.dir()
+It shows the path, for example, "/home/username/.julia/v0.4".
+
+(3) git clone https://github.com/IntelLabs/Sparso.git
+
+(4) cd Sparso/scripts; ./setup.sh; cd -
+
+3. Testing correctness
+
+(1) cd Sparso/tests/correctness
+(2) julia regression.jl all
+
+You can look at some simple tests there to see how easy it is to use Sparso. Basically,
+to accelerate your own iterative sparse matrix applications with Sparso,
 add "using Sparso" to your Julia program and add "@acc" in front of calls to functions
 that contain the iterative sparse matrix code you'd like to accelerate.
+
+4. Testing performance
 
 Sparso detects sparse matrix operations and redirects where possible to an optimized 
 implementation provided by the SpMP library.  Sparso does static and runtime matrix
@@ -51,6 +78,9 @@ a matrix having certain properties.  Moreover, Sparso detects constancy of value
 and/or structure of matrices allowing different library calls to share an inspector
 in the inspector/executor paradigm.  Finally, Sparso does analyses in order to 
 determine when to reorder matrices to try to provide higher locality.
+
+(1) cd Sparso/test/perf
+(2) julia perf.jl
 
 ## Resources
 

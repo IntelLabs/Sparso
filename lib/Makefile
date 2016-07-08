@@ -26,7 +26,7 @@ CXX=icpc
 
 SPMP_DIR=../deps/SpMP
 
-CFLAGS = -I. -I$(SPMP_DIR)/.. -fopenmp --std=c++11 -Wall -I$(MKLROOT)/include
+CFLAGS = -I. -I$(SPMP_DIR)/.. -qopenmp --std=c++11 -Wall -I$(MKLROOT)/include
 
 ifeq (yes, $(DBG))
   CFLAGS += -g -O0

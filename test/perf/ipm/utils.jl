@@ -25,28 +25,37 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
-using SparseAccelerator
-
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
-
-include("utils.jl")
-
-function foo()
-    set_matrix_property(Dict(
-        :A => SA_CONST_VALUED | SA_SYMM_VALUED, 
-        :B => SA_CONST_VALUED | SA_SYMM_STRUCTURED
-        )
-    )
-
-    m = 10
-    A = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-
-    for i = 1:2
-        B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-        m = size(A, 1)
-        B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)
-    end
+function generate_symmetric_sparse_matrix(m)
+    A = SparseMatrixCSC{Cdouble, Cint}(sprand(m, m, 0.1))
+    A = A*A'
+    return A
 end
 
-@acc foo()
+function generate_symmetric_nonzerodiagonal_sparse_matrix(m)
+    A = generate_symmetric_sparse_matrix(m)
+    
+    # Make digonal nonzero
+    for i = 1:m 
+        if abs(A[i, i]) < 0.5
+            A[i, i] = 1.0
+        end 
+    end
+    
+    return A
+end
+
+function check_symmetry(A)
+    println("**** Checking symmetry")
+    m = size(A, 1)
+    for i = 1:m 
+        for j = 1:m 
+            if A[i, j] != A[j, i]
+                println("Matrix is asymmetric!")
+                println("A[", i, ",", j, "] != A[", j, ",", i, "]")
+                break
+            end
+        end
+    end
+    println("Done checking")
+    flush(STDOUT::IO)
+end

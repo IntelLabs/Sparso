@@ -27,6 +27,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
+echo "* Setting up BinDeps"
+cd deps
+julia build.jl
+cd ..
+
 echo "* Setting up submoduls"
 git submodule update --init
 cd deps/CompilerTools
@@ -56,7 +61,7 @@ cd ..
 
 echo "* Downloading extra matrices"
 cd test
-cd matrics
+cd matrices
 wget ftp://math.nist.gov/pub/MatrixMarket2/Harwell-Boeing/bcsstruc2/bcsstk14.mtx.gz
 gunzip bcsstk14.mtx.gz
 wget https://raw.githubusercontent.com/exmatex/CoSP2/master/data/hmatrix.512.mtx

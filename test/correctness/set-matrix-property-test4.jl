@@ -34,7 +34,7 @@ include("utils.jl")
 
 function foo()
     set_matrix_property(Dict(
-        :A => SA_CONST_STRUCTURED, 
+        :A => SA_MAXIMAL_STRUCTURED, 
         )
     )
 
@@ -50,7 +50,7 @@ function foo()
 
     for i = 1:2
         set_matrix_property(Dict(
-            :B => SA_CONST_STRUCTURED, 
+            :B => SA_MAXIMAL_STRUCTURED, 
             )
         )
         B = generate_symmetric_nonzerodiagonal_sparse_matrix(m)

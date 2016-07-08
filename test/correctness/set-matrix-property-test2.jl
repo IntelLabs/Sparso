@@ -72,9 +72,9 @@ function pcg_symgs(x, A, b, tol, maxiter)
     while k <= maxiter
 
         set_matrix_property(Dict(
-            :A => SA_CONST_VALUED|SA_CONST_STRUCTURED|SA_SYMM_VALUED|SA_SYMM_STRUCTURED, 
-            :L => SA_CONST_VALUED|SA_CONST_STRUCTURED,
-            :U => SA_CONST_VALUED|SA_CONST_STRUCTURED
+            :A => SA_CONST_VALUED|SA_MAXIMAL_STRUCTURED|SA_SYMM_VALUED|SA_SYMM_STRUCTURED, 
+            :L => SA_CONST_VALUED|SA_MAXIMAL_STRUCTURED,
+            :U => SA_CONST_VALUED|SA_MAXIMAL_STRUCTURED
             )
         )
 
