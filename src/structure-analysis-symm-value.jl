@@ -26,7 +26,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisSymmValue
-    
+
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
@@ -42,7 +42,7 @@ module StructureAnalysisSymmValue
                 dump(tp)
                 assert(0)
             end
-            return s 
+            return s
         else
             assert(0)
         end
@@ -51,7 +51,7 @@ module StructureAnalysisSymmValue
     function preprocess(property_proxies, symbol_info)
         pproxies = property_proxies
         predefined = Dict{Sym, AbstractSymbol}()
-        for (s, v) in property_proxies 
+        for (s, v) in property_proxies
             if !isa(s, Symbol)
                 continue
             end
@@ -59,7 +59,7 @@ module StructureAnalysisSymmValue
                 assert(v.symmetric_valued.value == :true)
                 predefined[s] = v.symmetric_valued
             end
-        end 
+        end
         predefined
     end
 
@@ -71,13 +71,13 @@ module StructureAnalysisSymmValue
                 property_proxies[s].symmetric_valued = v
                 property_proxies[s].symmetric_structured = v
             end
-        end 
+        end
     end
 
     function add_sub_action(e)
         if any(a -> a.svalue == BOTTOM_SYMBOL, e.args)
             e.svalue = BOTTOM_SYMBOL
-        elseif all(a -> isa(a.svalue, MiddleSymbol), e.args)
+        elseif all(a -> (a.svalue == MiddleSymbol(:true)), e.args)
             e.svalue = MiddleSymbol(:true)
         end
     end
@@ -138,6 +138,7 @@ module StructureAnalysisSymmValue
 #        ((:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC), pass_a1_action),
         ((:call, GlobalRef(Main, :speye), Int), speye_action),
         ((:call, GlobalRef(Main, :speye_int32), Int), speye_action),
+        ((:call, GlobalRef(Main, :generate_symmetric_sparse_matrix), Int), speye_action),
 
         ((:call, GlobalRef(Main, :*), SparseMatrixCSC, Union{Float64, Int64, Int32}), pass_a1_action),
         ((:call, GlobalRef(Main, :/), SparseMatrixCSC, Union{Float64, Int64, Int32}), pass_a1_action),
@@ -146,5 +147,5 @@ module StructureAnalysisSymmValue
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
     )
 
-    const pass_info = ("SymmetricValue", transfer_rules, preprocess, postprocess, symbolize) 
+    const pass_info = ("SymmetricValue", transfer_rules, preprocess, postprocess, symbolize)
 end

@@ -1025,7 +1025,7 @@ const set_matrix_property_test6 = Test(
     "set-matrix-property-test6.jl",
     [
 
-        TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:A])),
+        TestPattern(Regex("Func Structure only discovered:.*\\n.*" * gen_set_regex_string([:A, :C])),
                      "Test that A is recognized as structure-only matrix."
         ),
 
@@ -1254,8 +1254,8 @@ const fast_tests = [
     context_test4,
     context_test5,
     pagerank_test1,
-    cosp2_test1
-#    lbfgs_test1
+    cosp2_test1,
+#    lbfgs_test1,
 ]
 
 # If true, use pcregrep for regular expression match. 

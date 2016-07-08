@@ -26,7 +26,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisMaximalStruct
-    
+
     import SparseAccelerator
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
@@ -35,16 +35,16 @@ module StructureAnalysisMaximalStruct
     function symbolize(e :: Symexpr, tp :: Type, unique = false)
         if isa(e, Sym)
             if tp <: Vector
-                s = MiddleSymbol((e))
+                s = MiddleSymbol((e, :NUM_1))
             elseif tp <: SparseMatrixCSC
-                s = MiddleSymbol((e))
+                s = MiddleSymbol((e, e))
             elseif tp <:Int || tp <: Float64
-                s = MiddleSymbol((:NUM_1))
+                s = MiddleSymbol((:NUM_1, :NUM_1))
             else
                 dump(tp)
                 assert(0)
             end
-            return s 
+            return s
         else
             assert(0)
         end
@@ -52,18 +52,18 @@ module StructureAnalysisMaximalStruct
 
     function preprocess(property_proxies, symbol_info)
         predefined = Dict{Sym, AbstractSymbol}()
-        for (s, v) in property_proxies 
+        for (s, v) in property_proxies
             if !isa(s, Symbol)
                 continue
             end
             if isa(v.constant_valued, MiddleSymbol)
-                predefined[s] = symbolize(s, symbol_info[s]) 
+                predefined[s] = symbolize(s, symbol_info[s])
             end
 
             if isa(v.maximal_structured, MiddleSymbol)
                 predefined[s] = v.maximal_structured
             end
-        end 
+        end
         predefined
     end
 
@@ -73,7 +73,7 @@ module StructureAnalysisMaximalStruct
             if isa(v, MiddleSymbol)
                 property_proxies[s].maximal_structured = v
             end
-        end 
+        end
     end
 
     function add_sub_action(e)
@@ -91,14 +91,14 @@ module StructureAnalysisMaximalStruct
 
     # A * B -> (A, B)
     function A_mul_B_action(e)
-        if isa(e.args[1].svalue, MiddleSymbol) && isa(e.args[2].svalue, MiddleSymbol) 
+        if isa(e.args[1].svalue, MiddleSymbol) && isa(e.args[2].svalue, MiddleSymbol)
             e.svalue = MiddleSymbol((e.args[1].svalue.value[1], e.args[2].svalue.value[2]))
         end
     end
 
     # A * B * C
     function mul3_action(e)
-        if isa(e.args[1].svalue, MiddleSymbol) && isa(e.args[3].svalue, MiddleSymbol) 
+        if isa(e.args[1].svalue, MiddleSymbol) && isa(e.args[3].svalue, MiddleSymbol)
             e.svalue = MiddleSymbol((e.args[1].svalue.value[1], e.args[3].svalue.value[2]))
             if !isa(e.args[2].svalue, MiddleSymbol)
                 e.args[2].svalue = e.svalue
@@ -131,7 +131,6 @@ module StructureAnalysisMaximalStruct
 
     function speye_action(e)
         e.svalue = MiddleSymbol((Symbol(e.args[1].raw_expr), Symbol(e.args[1].raw_expr)))
-        #dump(e.svalue)
     end
 
     function transpose_action(e)
@@ -141,7 +140,6 @@ module StructureAnalysisMaximalStruct
     end
 
     function pass_a1_action(e)
-        #dump(e.args[1])
         e.svalue = e.args[1].svalue
     end
 
@@ -180,10 +178,9 @@ module StructureAnalysisMaximalStruct
         ((:call, GlobalRef(Main, :-), Vector, Vector), add_sub_action),
         ((:call, GlobalRef(Main, :-), Vector, Vector), add_sub_action),
 
+        #((:call, TopNode(:setfield!), SparseMatrixCSC, QuoteNode(:nzval), Any), pass_a1_action_exit),
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Float64), GlobalRef(Main, :Int32)), Any), pass_a1_action),
     )
 
-    const empty_rules = ()
-
-    const pass_info = ("MaximalStruct", empty_rules, preprocess, postprocess, symbolize) 
+    const pass_info = ("MaximalStruct", transfer_rules, preprocess, postprocess, symbolize)
 end

@@ -26,15 +26,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisStructOnly
-   
+
     using SparseAccelerator: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
     function symbolize(e :: Symexpr, tp :: Type, unique)
-        if unique == true 
+        if unique == true
             sym = new_symbol("unknown")
             return MiddleSymbol(sym)
-        end 
+        end
 
         if isa(e, Sym)
             if tp <: SparseMatrixCSC
@@ -43,7 +43,7 @@ module StructureAnalysisStructOnly
                 dump(tp)
                 assert(0)
             end
-            return s 
+            return s
         else
             assert(0)
         end
@@ -51,12 +51,12 @@ module StructureAnalysisStructOnly
 
     function preprocess(property_proxies, symbol_info)
         predefined = Dict{Sym, AbstractSymbol}()
-        for (s, v) in property_proxies 
+        for (s, v) in property_proxies
             if isa(v.structure_only, MiddleSymbol)
                 assert(v.structure_only.value == :true)
                 predefined[s] = v.structure_only
             end
-        end 
+        end
         predefined
     end
 
@@ -66,7 +66,7 @@ module StructureAnalysisStructOnly
             if isa(v, MiddleSymbol) && v.value == :true
                 property_proxies[s].structure_only = v
             end
-        end 
+        end
     end
 
     function set_true_action(e)
@@ -102,5 +102,5 @@ module StructureAnalysisStructOnly
         ((:call, TypedExprNode(Function, :call, TopNode(:apply_type), GlobalRef(Main, :SparseMatrixCSC), GlobalRef(Main, :Cdouble), GlobalRef(Main, :Cint)), Any), pass_a1_action),
     )
 
-    const pass_info = ("StructOnly", transfer_rules, preprocess, postprocess, symbolize) 
+    const pass_info = ("StructOnly", transfer_rules, preprocess, postprocess, symbolize)
 end
