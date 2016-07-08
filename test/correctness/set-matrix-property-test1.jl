@@ -39,7 +39,7 @@ function foo()
     for i = 1:2
         set_matrix_property(Dict(
             :A => SA_CONST_VALUED | SA_SYMM_VALUED | SA_SYMM_STRUCTURED, 
-            :B => SA_CONST_STRUCTURED | SA_CONST_VALUED | SA_SYMM_VALUED
+            :B => SA_CONST_VALUED | SA_SYMM_VALUED
             )
         )
 

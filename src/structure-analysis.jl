@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 @doc """ interface to explicitly specify matrix property in source code"""
 function set_matrix_property(
     pmap    :: Dict{Symbol, Int}
-) 
+)
 end
 
 @doc """ specify that matrix A is the lower/upper part or transpose of B"""
@@ -38,16 +38,16 @@ function set_matrix_property(
     A       :: Symbol,
     part_of :: Int,
     B       :: Symbol
-) 
+)
 end
 
 @doc """inspect matrix property at run time"""
 function inspect_matrix_property(
     M       :: Symbol
-) 
+)
 end
 
-# --- end: set_matrix_property inferface --- 
+# --- end: set_matrix_property inferface ---
 
 @doc """
 A regions's basic information:
@@ -156,14 +156,14 @@ end
 
 @doc "print out the content of property proxies"
 function dprint_property_proxies(
-    pmap    :: Dict 
+    pmap    :: Dict
 )
     val_or_nothing = x -> isa(x, MiddleSymbol)? x.value : "-"
     dprintln(1, 1, "Sym : CV CSize CStruct MStruct SV SS SO DM Lower Upper Trans")
     for k in sort_by_str_key(pmap)
         v = pmap[k]
-        dprintln(1, 1, k, " : ", 
-                    to_string(v.constant_valued), "  ", 
+        dprintln(1, 1, k, " : ",
+                    to_string(v.constant_valued), "  ",
                     to_string(v.constant_sized), "  ",
                     to_string(v.constant_structured), "  ",
                     to_string(v.maximal_structured), "  ",
@@ -178,7 +178,7 @@ function dprint_property_proxies(
     end
 end
 
-# 
+#
 const MATRIX_RELATED_TYPES = [SparseMatrixCSC, SparseMatrix.CHOLMOD.Factor, Factorization]
 
 # Symbol types unimportant to analysis
@@ -250,7 +250,7 @@ function find_predefined_properties(
                         sp = MatrixPropertyValues()
                     end
 
-                    for (prop_const_val, prop_field) in prop_field_const_map 
+                    for (prop_const_val, prop_field) in prop_field_const_map
                         if (p & prop_const_val) != 0
                             dprintln(1, 1, "Predef: ", sym, ".", prop_field)
                             if prop_const_val == SA_CONST_SIZED
@@ -275,8 +275,8 @@ function find_predefined_properties(
     property_proxies
 end
 
-@doc """ Find the properties of all the matrices in the region. 
-A region is currently defined as a loop region. 
+@doc """ Find the properties of all the matrices in the region.
+A region is currently defined as a loop region.
 """
 function find_properties_of_matrices(
     region          :: Region,
@@ -296,7 +296,7 @@ function find_properties_of_matrices(
 
     region.property_proxies = property_proxies
 
-    prop_fields = [:constant_valued, :constant_structured, 
+    prop_fields = [:constant_valued, :constant_structured,
                    :constant_sized, :maximal_structured,
                    :symmetric_valued, :symmetric_structured,
                    :structure_only, :has_dedicated_memory,
@@ -358,9 +358,9 @@ function find_properties_of_matrices(
         else
             predefined = pass[3](region.property_proxies, symbol_info)
         end
-        
+
         #
-        res = run_analyzer(analyzer, region_info, predefined, 1) 
+        res = run_analyzer(analyzer, region_info, predefined, 1)
         # creat entry for k if k is missing
         for k in keys(res)
             if !haskey(property_proxies, k)
@@ -445,8 +445,8 @@ function find_properties_of_matrices(
         if in(s, region_info.single_defs)
             matrix_properties[s].is_single_def = true
         end
-        
-        if haskey(property_proxies, s) 
+
+        if haskey(property_proxies, s)
             p = property_proxies[s]
             matrix_properties[s].constant_valued = is_middle_symbol(p.constant_valued)
             matrix_properties[s].constant_structured = is_middle_symbol(p.maximal_structured)

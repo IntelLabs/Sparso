@@ -192,6 +192,7 @@ module StructureAnalysisConstSize
         ((:call, GlobalRef(Main, :ctranspose), SparseMatrixCSC), transpose_action),
         ((:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC), pass_a1_action),
         ((:call, GlobalRef(Main, :speye), Int), speye_action),
+        ((:call, GlobalRef(Main, :speye_int32), Int), speye_action),
 
         ((:call, GlobalRef(Main, :*), SparseMatrixCSC, Union{Float64, Int64, Int32}), pass_a1_action),
         ((:call, GlobalRef(Main, :/), SparseMatrixCSC, Union{Float64, Int64, Int32}), pass_a1_action),
