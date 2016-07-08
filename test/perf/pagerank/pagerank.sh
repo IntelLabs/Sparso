@@ -29,15 +29,15 @@ LICENSE
 
 for i in `cat pagerank.lst`; do
   echo !!!!$i
-  echo %%%%auto-without-context-serial
-  OMP_NUM_THREADS=1 julia pagerank-without-context.jl ../../matrices/$i.mtx
-  echo %%%%auto-without-context
-  julia pagerank-without-context.jl ../../matrices/$i.mtx
-  echo
-  echo %%%%auto-without-reordering
-  julia pagerank-without-reordering.jl ../..//matrices/$i.mtx
-  echo
-  echo %%%%auto
+  #echo %%%%baseline
+  #OMP_NUM_THREADS=1 julia pagerank-without-context.jl ../../matrices/$i.mtx
+  #echo %%%%auto-without-context
+  #julia pagerank-without-context.jl ../../matrices/$i.mtx
+  #echo
+  #echo %%%%auto-without-reordering
+  #julia pagerank-without-reordering.jl ../..//matrices/$i.mtx
+  #echo
+  #echo %%%%auto
   julia pagerank.jl ../../matrices/$i.mtx
   echo
   echo

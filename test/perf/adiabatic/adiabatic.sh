@@ -31,11 +31,8 @@ declare -a args=("12 5" "14 3" "16 1")
 
 for arg in "${args[@]}"; do
   echo "---- adiabatic: qbits=$arg"
-  echo "-------- serial"
+  echo "-------- baseline"
   OMP_NUM_THREADS=1 julia adiabatic.jl $arg M
-  echo
-  echo "-------- manual-parallel"
-  julia adiabatic.jl $arg M
   echo
   echo "-------- auto"
   julia adiabatic.jl $arg C

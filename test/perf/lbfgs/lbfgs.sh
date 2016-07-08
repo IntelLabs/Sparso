@@ -29,13 +29,13 @@ LICENSE
 
 for i in `cat lbfgs.lst`; do
   echo !!!!$i
-  echo %%%%parallel
+  #echo %%%%parallel
   julia lbfgs.jl ../../matrices/$i.mtx
   echo
-  echo %%%%parallel-new
-  julia lbfgs-new.jl ../../matrices/$i.mtx
-  echo
-  echo %%%%serial
-  OMP_NUM_THREADS=1 julia lbfgs-serial.jl ../../matrices/$i.mtx
-  echo
+  #echo %%%%parallel-new
+  #julia lbfgs-new.jl ../../matrices/$i.mtx
+  #echo
+  #echo %%%%serial
+  #OMP_NUM_THREADS=1 julia lbfgs-serial.jl ../../matrices/$i.mtx
+  #echo
 done

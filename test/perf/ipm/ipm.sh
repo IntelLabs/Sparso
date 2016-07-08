@@ -29,12 +29,12 @@ LICENSE
 
 for i in `cat ipm.lst`; do
   echo !!!!$i
-  echo %%%%auto-serial
-  OMP_NUM_THREADS=1 julia ipm.jl ../../matrices/lp/$i/$i
+  #echo %%%%auto-serial
+  #OMP_NUM_THREADS=1 julia ipm.jl ../../matrices/lp/$i/$i
   #echo %%%%manual
   #julia context-test4.jl ~/matrices/lp/$i/$i # run this if you want to compare with manually optimized version
   #echo
-  echo %%%%auto
+  #echo %%%%auto
   julia ipm.jl ../../matrices/lp/$i/$i
   echo
   echo

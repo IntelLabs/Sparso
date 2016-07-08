@@ -29,15 +29,16 @@ LICENSE
 
 for i in `cat pcg.lst`; do
   echo !!!!$i
-  echo %%%%auto-without-context-serial
-  OMP_NUM_THREADS=1 julia pcg-without-context.jl ../../matrices/$i.mtx
-  echo %%%%auto-without-context
-  julia pcg-without-context.jl ../../matrices/$i.mtx
+  #echo %%%%auto-without-context-serial
+  #OMP_NUM_THREADS=1 julia pcg-without-context.jl ../../matrices/$i.mtx
+  #echo %%%%auto-without-context
+  #julia pcg-without-context.jl ../../matrices/$i.mtx
+  #echo
+  #echo %%%%auto-without-reordering
+  #julia pcg-without-reordering.jl ../../matrices/$i.mtx
+  #echo
+  #echo %%%%auto
   echo
-  echo %%%%auto-without-reordering
-  julia pcg-without-reordering.jl ../../matrices/$i.mtx
-  echo
-  echo %%%%auto
   julia pcg.jl ../../matrices/$i.mtx
   echo
   echo
