@@ -82,7 +82,6 @@ module StructureAnalysisStructOnly
     end
 
     function set_elem_action(e)
-        dump(e.args[2].raw_expr)
         val = e.args[2].raw_expr
         if !isa(val, Int) || (val != 0 && val != 1)
             e.args[1].svalue = MiddleSymbol(:false)

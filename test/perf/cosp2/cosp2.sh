@@ -27,27 +27,23 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
-for i in `cat lbfgs.lst`; do
+for i in hmatrix.512.mtx hmatrix.1024.mtx; do
   echo "#### INPUT: $i"
   echo
 
+  #OMP_NUM_THREADS=1 julia cosp2.jl ../matrices/$i.mtx
   echo "---- BEGIN: julia-as-is"
-  julia lbfgs-new.jl ../inputs/$i.mtx "julia"
+  julia cosp2.jl ../inputs/$i "julia"
   echo "---- END: julia-as-is"
   echo
 
   echo "---- BEGIN: baseline (call-repl)"
-  julia lbfgs-new.jl ../inputs/$i.mtx "call-repl"
+  julia cosp2.jl ../inputs/$i "call-repl"
   echo "---- END: baseline"
   echo
 
   echo "---- BEGIN: context"
-  julia lbfgs-new.jl ../inputs/$i.mtx "context"
+  julia cosp2.jl ../inputs/$i "context"
   echo "---- END: context"
-  echo
-
-  echo "---- BEGIN: reordering"
-  julia lbfgs-new.jl ../inputs/$i.mtx "reorder"
-  echo "---- END: reordering"
   echo
 done

@@ -42,11 +42,10 @@ module StructureAnalysisConstSize
                 s = MiddleSymbol(Tuple{Symbol, Symbol}((e, :NUM_1)))
             elseif tp <: SparseMatrixCSC
                 s = MiddleSymbol((Symbol(string("R_", e)), Symbol(string("C_", e))))
-            elseif tp <:Int || tp <: Float64
+            elseif tp <:Int || tp <: Float64 || tp <: Complex || tp <: Bool
                 s = MiddleSymbol(Tuple{Symbol, Symbol}((:NUM_1, :NUM_1)))
-            elseif tp <:Bool
-                s = MiddleSymbol(Symbol(e))
             else
+                dump(e)
                 dump(tp)
                 assert(0)
             end

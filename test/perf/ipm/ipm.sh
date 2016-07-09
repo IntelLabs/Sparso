@@ -28,14 +28,21 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
 for i in `cat ipm.lst`; do
-  echo !!!!$i
-  #echo %%%%auto-serial
-  #OMP_NUM_THREADS=1 julia ipm.jl ../../matrices/lp/$i/$i
-  #echo %%%%manual
-  #julia context-test4.jl ~/matrices/lp/$i/$i # run this if you want to compare with manually optimized version
-  #echo
-  #echo %%%%auto
-  julia ipm.jl ../../matrices/lp/$i/$i
+  echo "#### INPUT: $i"
   echo
+
+  echo "---- BEGIN: julia-as-is"
+  julia ipm.jl ../inputs/lp/$i/$i "julia"
+  echo "---- END: julia-as-is"
+  echo
+
+  echo "---- BEGIN: baseline (call-repl)"
+  julia ipm.jl ../inputs/lp/$i/$i "call-repl"
+  echo "---- END: baseline"
+  echo
+
+  echo "---- BEGIN: context"
+  julia ipm.jl ../inputs/lp/$i/$i "context"
+  echo "---- END: context"
   echo
 done

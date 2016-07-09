@@ -28,8 +28,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 include("../../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
-
 include("utils.jl")
 
 # TEMPORARY: this should be removed in future once structure analysis can
@@ -155,34 +153,36 @@ b       = ones(m)
 tol     = 1e-7
 maxiter = 20000
 
-x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
+if length(ARGS) == 2
+  test = ARGS[2]
+else
+  test = "julia"
+end
+
+if test == "call-repl"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_REPLACE_CALLS)
+elseif test == "context"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
+elseif test == "reorder"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+elseif test == "verbose"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+end
+
+A2 = copy(A)
+println("compiler warnup (ignored): ")
+if test == "julia"
+  x, k, rel_err = pcg_symgs_ilu0(x, A2, b, tol, maxiter)
+else
+  @acc x, k, rel_err = pcg_symgs_ilu0(x, A2, b, tol, maxiter)
+end
+
 x = zeros(m)
-println("Original: ")
-x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
-println("\tOriginal k=", k)
-println("\tOriginal rel_err=", rel_err)
+println("\nRUN: ")
+if test == "julia"
+  x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
+else
+  @acc x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
+end
 
-#x, k, rel_err = pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxiter, false)
-#x = zeros(m)
-#println("Opt: ")
-#x, k, rel_err = pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxiter, true)
-#println("\tOriginal k=", k)
-#println("\tOriginal rel_err=", rel_err)
-
-#x, k, rel_err = pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, false)
-#x = zeros(m)
-#println("Opt_with_reordering: ")
-#SparseAccelerator.set_knob_log_level(1)
-#x, k, rel_err = pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, true)
-#SparseAccelerator.set_knob_log_level(0)
-#println("\tOriginal k=", k)
-#println("\tOriginal rel_err=", rel_err)
-
-A2 = copy(A) # workaround that we change A in-place
-@acc x, k, rel_err = pcg_symgs_ilu0(x, A2, b, tol, maxiter)
-println("\nAccelerated: ")
-x = zeros(m)
-#SparseAccelerator.set_knob_log_level(1)
-@acc x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
-println("\tAccelerated k=", k)
-println("\tAccelerated rel_err=", rel_err)
+println("k=", k, " rel_err=", rel_err)

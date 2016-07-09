@@ -28,17 +28,26 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
 for i in `cat pagerank.lst`; do
-  echo !!!!$i
-  #echo %%%%baseline
-  #OMP_NUM_THREADS=1 julia pagerank-without-context.jl ../../matrices/$i.mtx
-  #echo %%%%auto-without-context
-  #julia pagerank-without-context.jl ../../matrices/$i.mtx
-  #echo
-  #echo %%%%auto-without-reordering
-  #julia pagerank-without-reordering.jl ../..//matrices/$i.mtx
-  #echo
-  #echo %%%%auto
-  julia pagerank.jl ../../matrices/$i.mtx
+  echo "#### INPUT: $i"
   echo
+
+  echo "---- BEGIN: julia-as-is"
+  julia pagerank.jl ../inputs/$i.mtx "julia"
+  echo "---- END: julia-as-is"
+  echo
+
+  echo "---- BEGIN: baseline (call-repl)"
+  julia pagerank.jl ../inputs/$i.mtx "call-repl"
+  echo "---- END: baseline"
+  echo
+
+  echo "---- BEGIN: context"
+  julia pagerank.jl ../inputs/$i.mtx "context"
+  echo "---- END: context"
+  echo
+
+  echo "---- BEGIN: reordering"
+  julia pagerank.jl ../inputs/$i.mtx "reorder"
+  echo "---- END: reordering"
   echo
 done

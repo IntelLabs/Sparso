@@ -28,8 +28,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 include("../../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
-
 function abiatic(Hdmat, d, nqbits, T)
   total_time = -time()
 
@@ -437,28 +435,35 @@ end
 Hdmat = SparseMatrixCSC{Float64, Int32}(sparse(Hdmat))
 
 if length(ARGS) == 3
-  tests = ARGS[3]
+  test = ARGS[3]
 else
-  tests = "OS"
+  test = "julia"
 end
 
-if contains(tests, "O")
-  println("\nOriginal: ")
+if test == "julia"
+  println("compiler warnup (ignored): ")
   srand(0)
   println(@time(abiatic(Hdmat, d, nqbits, T)))
-  println("\nEND Oringinal.")
-end
 
-#SparseAccelerator.set_knob_log_level(1)
+  println("\nRUN: ")
+  srand(0)
+  println(@time(abiatic(Hdmat, d, nqbits, T)))
+else
+  if test == "call-repl"
+    set_options(SA_ENABLE, SA_USE_SPMP, SA_REPLACE_CALLS)
+  elseif test == "context"
+    set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
+  elseif test == "reorder"
+    set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+  elseif test == "verbose"
+    set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+  end
 
-if contains(tests, "S")
-#println("\nSparso_call_replacement:")
-#srand(0)
-#println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T, false)))
-#println("\nEND Sparso_call_replacement.")
-
-  println("\nSparso_call_replacement_and_context_opt:")
+  println("compiler warnup (ignored): ")
   srand(0)
   println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
-  println("\nEND Sparso_call_replacement_and_context_opt.")
+
+  println("\nRUN: ")
+  srand(0)
+  println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
 end

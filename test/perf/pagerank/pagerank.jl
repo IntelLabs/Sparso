@@ -28,8 +28,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 include("../../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
-
 function pagerank(A, p, r, d_inv, maxiter) # p: initial rank, r: damping factor
 #  set_matrix_property(Dict(
 #    :A => SA_SYMM_STRUCTURED | SA_SYMM_VALUED | SA_STRUCTURE_ONLY))
@@ -116,28 +114,43 @@ A = scale(A0,1./d)
 maxiter = 100
 bytes = maxiter*(nnz(A)*4 + m*4*8)
 
+if length(ARGS) == 2
+  test = ARGS[2]
+else
+  test = "julia"
+end
+
 d_inv = 1./d
-x = pagerank(A0, p, r, d_inv, maxiter)
-println("\nOriginal: ")
-x = pagerank(A0, p, r, d_inv, maxiter)
-println("End original.")
 
-# copy A since we change A in-place
-#SparseAccelerator.set_knob_log_level(0)
+if test == "call-repl"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_REPLACE_CALLS)
+elseif test == "context"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
+elseif test == "reorder"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+elseif test == "verbose"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+end
+
+println("compiler warnup (ignored): ")
+if test == "julia"
+  x = pagerank(A0, p, r, d_inv, maxiter)
+else
+  @acc x= pagerank_with_init(A0, r, d_inv, maxiter)
+end
+
+println("\nRUN: ")
 A2 = copy(A0)
-#@acc x= pagerank(A2, p, r, d_inv, maxiter)
-@acc x= pagerank_with_init(A2, r, d_inv, maxiter)
-
-println("\nAccelerated: ")
-SparseAccelerator.reset_spmp_spmv_time()
-SparseAccelerator.reset_knob_spmv_time()
-#SparseAccelerator.set_knob_log_level(1)
-# It seems that p has been changed by sparse accelerator
 p = repmat([1/m], m)
-#@acc x = pagerank(A0, p, r, d_inv, maxiter)
-@acc x = pagerank_with_init(A2, r, d_inv, maxiter)
-t = SparseAccelerator.get_spmp_spmv_time()
-println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
-t = SparseAccelerator.get_knob_spmv_time()
-println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")
-println("End accelerated.")
+if test == "julia"
+  x = pagerank(A2, p, r, d_inv, maxiter)
+else
+  #SparseAccelerator.reset_spmp_spmv_time()
+  #SparseAccelerator.reset_knob_spmv_time()
+  @acc x = pagerank_with_init(A2, r, d_inv, maxiter)
+end
+
+  #t = SparseAccelerator.get_spmp_spmv_time()
+  #println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
+  #t = SparseAccelerator.get_knob_spmv_time()
+  #println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")

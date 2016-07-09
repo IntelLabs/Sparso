@@ -30,11 +30,21 @@ LICENSE
 declare -a args=("12 5" "14 3" "16 1")
 
 for arg in "${args[@]}"; do
-  echo "---- adiabatic: qbits=$arg"
-  echo "-------- baseline"
-  OMP_NUM_THREADS=1 julia adiabatic.jl $arg M
+  echo "#### INPUT: qbits=$arg"
   echo
-  echo "-------- auto"
-  julia adiabatic.jl $arg C
+
+  echo "---- BEGIN: julia-as-is"
+  julia adiabatic.jl $arg "julia"
+  echo "---- END: julia-as-is"
+  echo
+
+  echo "---- BEGIN: baseline (call-repl)"
+  julia adiabatic.jl $arg "call-repl"
+  echo "---- END: baseline"
+  echo
+
+  echo "---- BEGIN: context"
+  julia adiabatic.jl $arg "context"
+  echo "---- END: context"
   echo
 done

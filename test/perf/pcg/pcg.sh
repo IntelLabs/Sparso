@@ -28,18 +28,26 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
 for i in `cat pcg.lst`; do
-  echo !!!!$i
-  #echo %%%%auto-without-context-serial
-  #OMP_NUM_THREADS=1 julia pcg-without-context.jl ../../matrices/$i.mtx
-  #echo %%%%auto-without-context
-  #julia pcg-without-context.jl ../../matrices/$i.mtx
-  #echo
-  #echo %%%%auto-without-reordering
-  #julia pcg-without-reordering.jl ../../matrices/$i.mtx
-  #echo
-  #echo %%%%auto
+  echo "#### INPUT: $i"
   echo
-  julia pcg.jl ../../matrices/$i.mtx
+
+  echo "---- BEGIN: julia-as-is"
+  julia pcg.jl ../inputs/$i.mtx "julia"
+  echo "---- END: julia-as-is"
   echo
+
+  echo "---- BEGIN: baseline (call-repl)"
+  julia pcg.jl ../inputs/$i.mtx "call-repl"
+  echo "---- END: baseline"
+  echo
+
+  echo "---- BEGIN: context"
+  julia pcg.jl ../inputs/$i.mtx "context"
+  echo "---- END: context"
+  echo
+
+  echo "---- BEGIN: reordering"
+  julia pcg.jl ../inputs/$i.mtx "reorder"
+  echo "---- END: reordering"
   echo
 done

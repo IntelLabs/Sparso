@@ -38,7 +38,7 @@ module StructureAnalysisMaximalStruct
                 s = MiddleSymbol((e, :NUM_1))
             elseif tp <: SparseMatrixCSC
                 s = MiddleSymbol((e, e))
-            elseif tp <:Int || tp <: Float64
+            elseif tp <:Int || tp <:Float64 || tp <:Complex || tp <:Bool
                 s = MiddleSymbol((:NUM_1, :NUM_1))
             else
                 dump(tp)

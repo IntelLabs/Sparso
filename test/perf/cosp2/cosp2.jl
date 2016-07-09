@@ -25,10 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../../src/SparseAccelerator.jl")
 using SparseAccelerator
-
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
 function spmatmul_witheps_and_flops{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}, eps;
                          sortindices::Symbol = :sortcols)
@@ -336,14 +334,32 @@ assert(issym(X))
 
 flops = count_CoSP2_flop(X)
 
-# currently, something wrong with spmatmul_witheps used in CoSP2_ref.
-# So, ignore the results of CoSP2_ref
-println("\nOriginal:")
-CoSP2_ref(X, flops)
-CoSP2_ref(X, flops)
-println("End original.")
+if length(ARGS) == 2
+  test = ARGS[2]
+else
+  test = "julia"
+end
 
-println("\nAccelerated:")
-@acc CoSP2_ref(X, flops)
-@acc CoSP2_ref(X, flops)
-println("End accelerated.")
+if test == "call-repl"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_REPLACE_CALLS)
+elseif test == "context"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
+elseif test == "reorder"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+elseif test == "verbose"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+end
+
+println("compiler warnup (ignored): ")
+if test == "julia"
+  CoSP2_ref(X, flops)
+else
+  @acc CoSP2_ref(X, flops)
+end
+
+println("\nRUN: ")
+if test == "julia"
+  CoSP2_ref(X, flops)
+else
+  @acc CoSP2_ref(X, flops)
+end

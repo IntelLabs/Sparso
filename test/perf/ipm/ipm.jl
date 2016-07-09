@@ -28,8 +28,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 include("../../../src/SparseAccelerator.jl")
 using SparseAccelerator
 
-set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)#, SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION)
-
 include("./ipm-ref.jl")
 include("utils.jl")
 
@@ -46,37 +44,41 @@ println("Problem size = [$m $n]")
 #println("\tsum of b=", sum(b))
 #println("\tsum of p=", sum(p))
 
-println("Original: ")
-x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-    iter, relResidual, objval = ipm_ref(A, b, p)
-x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-    iter, relResidual, objval = ipm_ref(A, b, p)
-@printf "\nOriginal ref_total_time = %f\n" ref_total_time
-@printf "Original spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
-@printf "Original iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
+if length(ARGS) == 2
+  test = ARGS[2]
+else
+  test = "julia"
+end
 
-println("\n\nWithout context-sensitive optimization: ")
-SparseAccelerator.set_reuse_inspection(false)
-@acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-    iter, relResidual, objval = ipm_ref(A, b, p)
-SparseAccelerator.set_knob_log_level(1)
-@acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
-    iter, relResidual, objval = ipm_ref(A, b, p)
-@printf "\nAccelerated acc_total_time = %f\n" ref_total_time
-@printf "Accelerated spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
-@printf "Accelerated iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
-SparseAccelerator.set_reuse_inspection(true)
+if test == "call-repl"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_REPLACE_CALLS)
+elseif test == "context"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
+elseif test == "reorder"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+elseif test == "verbose"
+  set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
+end
 
-println("\n\nAccelerated: ")
-@acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
+println("compiler warnup (ignored): ")
+if test == "julia"
+  x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
-SparseAccelerator.set_knob_log_level(1)
-@acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
+else
+  @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
-@printf "\nAccelerated acc_total_time = %f\n" ref_total_time
-@printf "Accelerated spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
-@printf "Accelerated iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
+end
 
-#println("\n\nWith manual context-sensitive optimization: ")
-#ipm_ref_simplified_with_context_opt(A, b, p) 
-#println("\tsum of x=", sum(x))
+#SparseAccelerator.set_knob_log_level(1)
+println("\nRUN: ")
+if test == "julia"
+  x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
+    iter, relResidual, objval = ipm_ref(A, b, p)
+else
+  @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
+    iter, relResidual, objval = ipm_ref(A, b, p)
+end
+
+@printf "total_time = %f\n" ref_total_time
+@printf "spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
+@printf "iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval

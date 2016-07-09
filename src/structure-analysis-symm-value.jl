@@ -36,7 +36,7 @@ module StructureAnalysisSymmValue
                 s = MiddleSymbol(:true)
             elseif tp <: SparseMatrixCSC
                 s = MiddleSymbol(:true)
-            elseif tp <:Int || tp <: Float64
+            elseif tp <:Int || tp <: Float64 || tp <: Complex || tp <: Bool
                 s = MiddleSymbol(:true)
             else
                 dump(tp)
