@@ -27,49 +27,78 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *Sparso* is a Julia package for speeding up iterative sparse matrix Julia programs.  
 Sparso is part of the High Performance Scripting (HPS) project at Intel Labs.
 
-1. Environment
+## Installation
 
-We have tested with the following setting:
+### OS
 
-Ubuntu 16.04 x86_64 desktop
+Download and install Ubuntu 16.04 x86_64 desktop  from http://www.ubuntu.com/download/desktop. 
 
-Julia 0.4.6 (julia-2e358ce975)
+### Julia 
 
-Parallel Studio 2016 update 1 (2016.1.056)
+Download Julia 0.4.6 (julia-2e358ce975) from http://julialang.org/downloads/. Choose Generic Linux Binary 64-bit.
 
-pcregrep 8.38 (pcregrep_8.38-3.1_amd64.deb from https://packages.debian.org/sid/amd64/pcregrep/download)
+In a terminal, 
 
-2. Installation
+	cd
+    tar xvzf julia-0.4.6-linux-x86_64.tar.gz
+    export PATH=~/julia-2e358ce975/bin:$PATH
 
-(1) Getting Julia.
+### Parallel Studio
 
-Download a binary from http://julialang.org/downloads/. Untar it and add to PATH.
-For example:
-	tar xvzf julia-0.4.6-linux-x86_64.tar.gz
-	export PATH=path_to_the_julia_directory/bin:$PATH	
+Download Linux Composer version for C++ from https://software.intel.com/en-us/intel-parallel-studio-xe. A free trial version is available. After submit the request, you will receive an email. Follow the download link there. Clik "+ Additional downloads, latest updates and prior versions". Choose 2016 Update 1 Eng/Jpn. Click "Download Now".
+
+In a terminal, 
 	
-(2) cd path_to_Julia_package
+	cd
+	tar xvzf parallel_studio_xe*.tgz
+	cd parallel_studio_xe*
+	./install_GUI.sh
 
-The path can be found in this way:
-	julia   // enter Julia interactive environment
-        Pkg.dir()
-It shows the path, for example, "/home/username/.julia/v0.4".
+Follow the instructions step by step to install everything.
 
-(3) git clone https://github.com/IntelLabs/Sparso.git
+###  pcregrep
 
-(4) cd Sparso/scripts; ./setup.sh; cd -
+Download pcregrep_8.38-3.1_amd64.deb from https://packages.debian.org/sid/amd64/pcregrep/download).
 
-3. Testing correctness
+In a terminal, 
 
-(1) cd Sparso/tests/correctness
-(2) julia regression.jl all
+	sudo dpkg -i pcregrep_8.38-3.1_amd64.deb
+	sudo apt-get update
+	sudo dpkg -i pcregrep_8.38-3.1_amd64.deb	
 
-You can look at some simple tests there to see how easy it is to use Sparso. Basically,
+### Sparso
+
+In a terminal,
+
+	cd
+	git clone https://github.com/IntelLabs/Sparso.git
+	cd Sparso
+	./scripts/setup.sh
+	cp -fs ~/julia-2e358ce975/bin/julia deps/julia
+	
+## Experiment
+
+### Correctness testing
+
+In a terminal,
+	
+	cd ~/Sparso/tests/correctness
+	julia regression.jl all
+
+A set of regression tests is run. All should pass. 
+
+You can look at some simple tests there to see how Sparso works. Basically,
 to accelerate your own iterative sparse matrix applications with Sparso,
 add "using Sparso" to your Julia program and add "@acc" in front of calls to functions
 that contain the iterative sparse matrix code you'd like to accelerate.
 
-4. Testing performance
+
+### Performance testing
+
+In a terminal,
+	
+	cd ~/Sparso/tests/perf
+	./run.sh
 
 Sparso detects sparse matrix operations and redirects where possible to an optimized 
 implementation provided by the SpMP library.  Sparso does static and runtime matrix
@@ -79,9 +108,7 @@ and/or structure of matrices allowing different library calls to share an inspec
 in the inspector/executor paradigm.  Finally, Sparso does analyses in order to 
 determine when to reorder matrices to try to provide higher locality.
 
-(1) cd Sparso/test/perf
-(2) julia perf.jl
 
 ## Resources
 
-- **GitHub Issues:** <https://github.com/IntelLabs/Sparso.jl/issues>
+- **GitHub Issues:** <https://github.com/IntelLabs/Sparso/issues>
