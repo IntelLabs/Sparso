@@ -405,7 +405,7 @@ is needed; in this case, we return a manually made expression
 Expr(:TupleElement, ast, 1).
 """
 function get_array(
-    array_index :: Union{Int, String},
+    array_index :: Union{Int, AbstractString},
     ast         :: Expr,
     args        :: Vector,
 )

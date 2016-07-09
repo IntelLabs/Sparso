@@ -78,9 +78,6 @@ const SA_CONTEXT = 128
 @doc """ Enable context-sensitive optimization for a whole function. """
 const SA_CONTEXT_FUNC = 256
 
-@doc """ Enable context-sensitive optimization for a whole function. """
-const SA_CONTEXT_FUNC = 50
-
 @doc """ Enable reordering of arrays. """
 const SA_REORDER = 512
 

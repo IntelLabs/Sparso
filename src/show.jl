@@ -28,16 +28,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # This file contains all the print parameters and routines for warnings,
 # errors, and debugging.
 
-import Base.show_expr_type, Base.show_linenumber, Base.show_call
-# Re-define the function. Otherwise, the show of an expression may be too verbose
-function show_expr_type(io::IO, ty)
-    return
-end
-
-function show_linenumber(io::IO, file, line) 
-    return
-end
-
 # Buffer the messages so that indentation can be inserted before sending
 # to STDOUT
 io_buffer = IOBuffer()
