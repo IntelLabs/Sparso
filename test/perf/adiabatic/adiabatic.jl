@@ -69,7 +69,7 @@ function abiatic(Hdmat, d, nqbits, T)
 
   # Absolute tolerance
   atol = 1e-13
-  alpha = 0.8
+  alpha_val = 0.8
   k = 0
   # Initial time moment
   i = 1
@@ -137,7 +137,7 @@ function abiatic(Hdmat, d, nqbits, T)
       target_tol = rtol*norm(wi) + atol
       if e <= target_tol # In case the tolerance is met
           t = t + h
-          h = alpha*h*(target_tol/e)^0.2
+          h = alpha_val*h*(target_tol/e)^0.2
           i = i + 1
           push!(Tv, t)
           wi = z
@@ -145,7 +145,7 @@ function abiatic(Hdmat, d, nqbits, T)
           push!(variance, dot(abs(z).^2, (d - meanenergy[end]).^2))
           k = 0
       elseif k == 0 # Tolerance is not met for the first time in this step
-          h = alpha*h*(target_tol/e)^0.2
+          h = alpha_val*h*(target_tol/e)^0.2
           k = k + 1
           lastit = 0
       else # Tolerance is not met more than once in this step
@@ -265,7 +265,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
 
   # Absolute tolerance
   atol = 1e-13
-  alpha = 0.8
+  alpha_val = 0.8
   k = 0
   # Initial time moment
   i = 1
@@ -340,7 +340,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
       target_tol = rtol*norm(wi) + atol
       if e <= target_tol # In case the tolerance is met
           t = t + h
-          h = alpha*h*(target_tol/e)^0.2
+          h = alpha_val*h*(target_tol/e)^0.2
           i = i + 1
           push!(Tv, t)
           wi = z
@@ -348,7 +348,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
           push!(variance, dot(abs(z).^2, (d - meanenergy[end]).^2))
           k = 0
       elseif k == 0 # Tolerance is not met for the first time in this step
-          h = alpha*h*(target_tol/e)^0.2
+          h = alpha_val*h*(target_tol/e)^0.2
           k = k + 1
           lastit = 0
       else # Tolerance is not met more than once in this step
