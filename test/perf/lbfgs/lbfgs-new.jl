@@ -223,7 +223,7 @@ else
 end
 
 if test == "julia"
-  println("compiler warnup (ignored): ")
+  println("compiler warmup (ignored): ")
   w, it = lbfgs_ref(X, y, lambda, zeros(p), 1e-10, 3)
 
   println("\nRUN: ")

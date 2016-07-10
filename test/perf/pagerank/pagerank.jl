@@ -132,7 +132,7 @@ elseif test == "verbose"
   set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 end
 
-println("compiler warnup (ignored): ")
+println("compiler warmup (ignored): ")
 if test == "julia"
   x = pagerank(A0, p, r, d_inv, maxiter)
 else

@@ -29,6 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # Turning on any of the commented statement to repro the bug.
  
 include("../../src/SparseAccelerator.jl")
+include("../../src/simple-show.jl")
 include("./utils.jl")
 using SparseAccelerator
 

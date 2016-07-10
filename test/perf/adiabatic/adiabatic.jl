@@ -441,7 +441,7 @@ else
 end
 
 if test == "julia"
-  println("compiler warnup (ignored): ")
+  println("compiler warmup (ignored): ")
   srand(0)
   println(@time(abiatic(Hdmat, d, nqbits, T)))
 
@@ -459,7 +459,7 @@ else
     set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
   end
 
-  println("compiler warnup (ignored): ")
+  println("compiler warmup (ignored): ")
   srand(0)
   println(@time(@acc abiatic_sa(Hdmat, d, nqbits, T)))
 

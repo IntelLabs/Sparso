@@ -26,6 +26,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 include("../../src/SparseAccelerator.jl")
+include("../../src/simple-show.jl")
 using SparseAccelerator
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)#, SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION)

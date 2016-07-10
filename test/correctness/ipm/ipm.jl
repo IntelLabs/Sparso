@@ -1,4 +1,5 @@
 include("../../../src/SparseAccelerator.jl")
+include("../../../src/simple-show.jl")
 using SparseAccelerator
 using CompilerTools.OptFramework
 using MatrixMarket

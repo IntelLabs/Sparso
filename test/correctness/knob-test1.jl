@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # Aborted (core dumped)
 
 include("../../src/SparseAccelerator.jl")
+include("../../src/simple-show.jl")
 include("./utils.jl")
 using SparseAccelerator
 

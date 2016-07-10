@@ -170,7 +170,7 @@ elseif test == "verbose"
 end
 
 A2 = copy(A)
-println("compiler warnup (ignored): ")
+println("compiler warmup (ignored): ")
 if test == "julia"
   x, k, rel_err = pcg_symgs_ilu0(x, A2, b, tol, maxiter)
 else

@@ -60,7 +60,7 @@ elseif test == "verbose"
   set_options(SA_ENABLE, SA_USE_SPMP, SA_VERBOSE, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 end
 
-println("compiler warnup (ignored): ")
+println("compiler warmup (ignored): ")
 if test == "julia"
   x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
