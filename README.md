@@ -31,13 +31,11 @@ Sparso is part of the High Performance Scripting (HPS) project at Intel Labs.
 
 ### OS
 
-Download and install Ubuntu 16.04 x86_64 desktop  from http://www.ubuntu.com/download/desktop. 
+Download and install Ubuntu 16.04 x86_64 desktop/server from http://www.ubuntu.com/download/desktop. 
 
 ### Julia 
 
 Download Julia 0.4.6 (julia-2e358ce975) from http://julialang.org/downloads/. Choose Generic Linux Binary 64-bit.
-
-In a terminal, 
 
 	cd
     tar xvzf julia-0.4.6-linux-x86_64.tar.gz
@@ -47,8 +45,6 @@ In a terminal,
 
 Download Linux Composer version for C++ from https://software.intel.com/en-us/intel-parallel-studio-xe. A free trial version is available. After submit the request, you will receive an email. Follow the download link there. Clik "+ Additional downloads, latest updates and prior versions". Choose 2016 Update 1 Eng/Jpn. Click "Download Now".
 
-In a terminal, 
-	
 	cd
 	tar xvzf parallel_studio_xe*.tgz
 	cd parallel_studio_xe*
@@ -56,21 +52,12 @@ In a terminal,
 
 Follow the instructions step by step to install everything.
 
-###  pcregrep
+### Install pcregrep
 
-Download pcregrep_8.38-3.1_amd64.deb from https://packages.debian.org/sid/amd64/pcregrep/download).
+	sudo apt-get install pcregrep
 
-In a terminal, 
+### Install Sparso
 
-	sudo dpkg -i pcregrep_8.38-3.1_amd64.deb
-	sudo apt-get update
-	sudo dpkg -i pcregrep_8.38-3.1_amd64.deb	
-
-### Sparso
-
-In a terminal,
-
-	cd
 	git clone https://github.com/IntelLabs/Sparso.git
 	cd Sparso
 	./scripts/setup.sh
@@ -79,10 +66,8 @@ In a terminal,
 ## Experiment
 
 ### Correctness testing
-
-In a terminal,
 	
-	cd ~/Sparso/tests/correctness
+	cd Sparso/tests/correctness
 	julia regression.jl all
 
 A set of regression tests is run. All should pass. 
@@ -94,11 +79,10 @@ that contain the iterative sparse matrix code you'd like to accelerate.
 
 
 ### Performance testing
-
-In a terminal,
 	
-	cd ~/Sparso/tests/perf
-	./run.sh
+	cd Sparso/tests/perf
+	./download_matrices.sh 300M # download matrices smaller than 300M
+	./run_all.sh
 
 Sparso detects sparse matrix operations and redirects where possible to an optimized 
 implementation provided by the SpMP library.  Sparso does static and runtime matrix
