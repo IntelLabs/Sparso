@@ -27,7 +27,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *Sparso* is a Julia package for speeding up iterative sparse matrix Julia programs.  
 Sparso is part of the High Performance Scripting (HPS) project at Intel Labs.
 
+Sparso detects sparse matrix operations and redirects where possible to an optimized 
+implementation provided by the MKL or SpMP library.  Sparso does matrix property discovery in order to select the most performant version of a function on a matrix having certain properties.  It detects constancy of value
+and/or structure of matrices, allowing different library calls to share an inspector
+in the inspector/executor paradigm.  Finally, Sparso does analyses in order to 
+ to reorder matrices for higher locality.
+
 ## Installation
+
+### Hardware
+There is no hard requirement, but a modern many-core machine is preferred for performance testing.
 
 ### OS
 
@@ -52,6 +61,8 @@ Download Linux Composer version for C++ from https://software.intel.com/en-us/in
 
 Follow the instructions step by step to install everything.
 
+	source /opt/intel/parallel_studio_xe_2016.1.056/psxevars.sh intel64
+	
 ### Install pcregrep
 
 	sudo apt-get install pcregrep
@@ -84,14 +95,8 @@ that contain the iterative sparse matrix code you'd like to accelerate.
 	./download_matrices.sh 300M # download matrices smaller than 300M
 	./run_all.sh
 
-Sparso detects sparse matrix operations and redirects where possible to an optimized 
-implementation provided by the SpMP library.  Sparso does static and runtime matrix
-property discovery in order to select the most performant version of a function on
-a matrix having certain properties.  Moreover, Sparso detects constancy of value
-and/or structure of matrices allowing different library calls to share an inspector
-in the inspector/executor paradigm.  Finally, Sparso does analyses in order to 
-determine when to reorder matrices to try to provide higher locality.
-
+Be warned that (1) some matrices are huge, up to 5G. You can change the size option of 
+download_matrices.sh to control which matrices to download. (2) Execution can take many hours, depending on the matrices you choose and the machine you choose. Enjoy!
 
 ## Resources
 
