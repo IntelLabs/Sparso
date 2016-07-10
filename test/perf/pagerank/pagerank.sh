@@ -29,25 +29,32 @@ LICENSE
 
 for i in `cat pagerank.lst`; do
   echo "#### INPUT: $i"
+
+  input=../inputs/${i}.mtx
+  if [[ ! -f $input ]]; then
+    echo "SKIP: file '${input}' does't exist"
+    echo
+    continue
+  fi
   echo
 
   echo "---- BEGIN: julia-as-is"
-  julia pagerank.jl ../inputs/$i.mtx "julia"
+  julia pagerank.jl $input "julia"
   echo "---- END: julia-as-is"
   echo
 
   echo "---- BEGIN: baseline (call-repl)"
-  julia pagerank.jl ../inputs/$i.mtx "call-repl"
+  julia pagerank.jl $input "call-repl"
   echo "---- END: baseline"
   echo
 
   echo "---- BEGIN: context"
-  julia pagerank.jl ../inputs/$i.mtx "context"
+  julia pagerank.jl $input "context"
   echo "---- END: context"
   echo
 
   echo "---- BEGIN: reordering"
-  julia pagerank.jl ../inputs/$i.mtx "reorder"
+  julia pagerank.jl $input "reorder"
   echo "---- END: reordering"
   echo
 done

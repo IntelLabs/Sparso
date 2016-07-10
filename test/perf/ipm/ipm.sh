@@ -29,20 +29,27 @@ LICENSE
 
 for i in `cat ipm.lst`; do
   echo "#### INPUT: $i"
+
+  input=../inputs/${i}
+  if [[ ! -f $input.mtx ]]; then
+    echo "SKIP: file '${input}' does't exist"
+    echo
+    continue
+  fi
   echo
 
   echo "---- BEGIN: julia-as-is"
-  julia ipm.jl ../inputs/lp/$i/$i "julia"
+  julia ipm.jl $input "julia"
   echo "---- END: julia-as-is"
   echo
 
   echo "---- BEGIN: baseline (call-repl)"
-  julia ipm.jl ../inputs/lp/$i/$i "call-repl"
+  julia ipm.jl $input "call-repl"
   echo "---- END: baseline"
   echo
 
   echo "---- BEGIN: context"
-  julia ipm.jl ../inputs/lp/$i/$i "context"
+  julia ipm.jl $input "context"
   echo "---- END: context"
   echo
 done

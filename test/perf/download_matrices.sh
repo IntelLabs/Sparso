@@ -27,23 +27,39 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 LICENSE
 
-#. /opt/intel/compiler/latest/bin/compilervars.sh intel64 # make sure you also did this before compiling libcsr.so
+# maximal file size to download
+max_size=200M
 
-# Use 1 socket, 1 HW thread per core
-if [[ -z ${OMP_NUM_THREADS+x} ]]; then
-    export OMP_NUM_THREADS=14
-fi
-if [[ -z ${KMP_AFFINITY+x} ]]; then
-    export KMP_AFFINITY=granularity=fine,compact,1
+if [[ $# -ge 1 ]]; then
+    max_size=$1
 fi
 
-declare -a benchmarks=("cosp2" "ipm" "lbfgs" "pagerank" "pcg" "adiabatic")
+max_size_byte=$(numfmt --from=iec ${max_size})
 
-echo "==== Config: OMP_NUM_THREADS=${OMP_NUM_THREADS}, KMP_AFFINITY=${KMP_AFFINITY}"
+echo "==== Downlaod matrices < `numfmt --to=iec ${max_size_byte}`."
 
-for b in "${benchmarks[@]}"; do
-    echo -e "\n==== RUNNING $b ====\n"
-    cd $b
-    . ${b}.sh
-    cd ..
+mkdir -p inputs
+
+for url in `cat inputs.list | grep http`; do
+    echo
+    curr_size=$(wget "${url}" --spider --server-response -O - 2>&1 | sed -ne '/Content-Length/{s/.*: //;p}')
+    target_file="inputs/$(basename $url)"
+
+    download=true
+    if ! [[ "$curr_size" =~ ^[0-9]+$ ]]; then
+        echo "!!!! error: ${url}" ; continue
+    elif [[ -f $target_file ]] && [[ $(stat -c%s "$target_file") == $curr_size ]]; then
+        echo "!!!! file exists: ${target_file}"
+        download=false
+    elif [[ $curr_size -gt $max_size_byte ]]; then
+        echo "!!!! skip large file: ${url}, `numfmt --to=iec ${curr_size}`"; continue
+    fi
+
+    if [[ $download = true ]]; then
+        echo "---- Downloading ${url}, `numfmt --to=iec ${curr_size}`"
+        echo
+        wget -O $target_file "$url"
+    fi
+
+    tar -xf $target_file -C ./inputs/ --strip-components 1
 done

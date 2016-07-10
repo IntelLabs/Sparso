@@ -29,25 +29,32 @@ LICENSE
 
 for i in `cat pcg.lst`; do
   echo "#### INPUT: $i"
+
+  input=../inputs/${i}.mtx
+  if [[ ! -f $input ]]; then
+    echo "SKIP: file '${input}' does't exist"
+    echo
+    continue
+  fi
   echo
 
   echo "---- BEGIN: julia-as-is"
-  julia pcg.jl ../inputs/$i.mtx "julia"
+  julia pcg.jl $input "julia"
   echo "---- END: julia-as-is"
   echo
 
   echo "---- BEGIN: baseline (call-repl)"
-  julia pcg.jl ../inputs/$i.mtx "call-repl"
+  julia pcg.jl $input "call-repl"
   echo "---- END: baseline"
   echo
 
   echo "---- BEGIN: context"
-  julia pcg.jl ../inputs/$i.mtx "context"
+  julia pcg.jl $input "context"
   echo "---- END: context"
   echo
 
   echo "---- BEGIN: reordering"
-  julia pcg.jl ../inputs/$i.mtx "reorder"
+  julia pcg.jl $input "reorder"
   echo "---- END: reordering"
   echo
 done

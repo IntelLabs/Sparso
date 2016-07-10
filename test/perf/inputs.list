@@ -1,0 +1,180 @@
+# [217M]  af_shell3.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Schenk_AFE/af_shell3.tar.gz
+
+# [ 67M]  amazon-2008.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/amazon-2008.tar.gz
+
+# [ 61M]  apache2.mtx
+http://www.cise.ufl.edu/research/sparse/MM/GHS_psdef/apache2.tar.gz
+
+# [142M]  as-Skitter.mtx
+http://www.cise.ufl.edu/research/sparse/MM/SNAP/as-Skitter.tar.gz
+
+# [162M]  bmwcra_1.mtx
+http://www.cise.ufl.edu/research/sparse/MM/GHS_psdef/bmwcra_1.tar.gz
+
+# [ 14M]  citationCiteseer.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/citationCiteseer.tar.gz
+
+# [250M]  cit-Patents.mtx
+http://www.cise.ufl.edu/research/sparse/MM/SNAP/cit-Patents.tar.gz
+
+# [ 41M]  cnr-2000.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/cnr-2000.tar.gz
+
+# [9.6M]  coAuthorsCiteseer.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/coAuthorsCiteseer.tar.gz
+
+# [ 12M]  coAuthorsDBLP.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/coAuthorsDBLP.tar.gz
+
+# [2.8M]  cond-mat-2005.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Newman/cond-mat-2005.tar.gz
+
+# [197M]  coPapersCiteseer.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/coPapersCiteseer.tar.gz
+
+# [191M]  coPapersDBLP.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/coPapersDBLP.tar.gz
+
+# [148M]  crankseg_2.mtx
+http://www.cise.ufl.edu/research/sparse/MM/GHS_psdef/crankseg_2.tar.gz
+
+# [ 10M]  dblp-2010.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/dblp-2010.tar.gz
+
+# [ 50M]  ecology2.mtx
+http://www.cise.ufl.edu/research/sparse/MM/McRae/ecology2.tar.gz
+
+# [482M]  Emilia_923.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Janna/Emilia_923.tar.gz
+
+# [253M]  eu-2005.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/eu-2005.tar.gz
+
+# [905M]  europe_osm.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/europe_osm.tar.gz
+
+# [1.5G]  Flan_1565.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Janna/Flan_1565.tar.gz
+
+# [116M]  flickr.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Gleich/flickr.tar.gz
+
+# [101M]  G3_circuit.mtx
+http://www.cise.ufl.edu/research/sparse/MM/AMD/G3_circuit.tar.gz
+
+# [819M]  Geo_1438.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Janna/Geo_1438.tar.gz
+
+# [3.5M]  hmatrix.1024.mtx
+https://github.com/exmatex/CoSP2/raw/master/data/hmatrix.1024.mtx
+
+# [1.7M]  hmatrix.512.mtx
+https://github.com/exmatex/CoSP2/raw/master/data/hmatrix.512.mtx
+
+# [771M]  hollywood-2009.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/hollywood-2009.tar.gz
+
+# [796M]  Hook_1498.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Janna/Hook_1498.tar.gz
+
+# [236M]  in-2004.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/in-2004.tar.gz
+
+# [2.9G]  indochina-2004.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/indochina-2004.tar.gz
+
+# [576M]  inline_1.mtx
+http://www.cise.ufl.edu/research/sparse/MM/GHS_psdef/inline_1.tar.gz
+
+# [1.4M]  kdd2010_b.mtx  ?
+# [232M]  kdd2010.mtx  ?
+
+# [1.4G]  kron_g500-logn21.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/kron_g500-logn21.tar.gz
+
+# [1.1G]  ljournal-2008.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/ljournal-2008.tar.gz
+
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_czprob.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_fit2p.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_maros_r7.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_osa_60.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_pds_02.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_pilot.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_qap15.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_scsd8.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_sctap3.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_stocfor3.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_truss.tar.gz
+http://www.cise.ufl.edu/research/sparse/MM/LPnetlib/lp_wood1p.tar.gz
+
+# [332M]  nd24k.mtx
+http://www.cise.ufl.edu/research/sparse/MM/ND/nd24k.tar.gz
+
+# [ 59K]  news_b.mtx  ?
+# [193M]  news.mtx  ?
+
+# [ 69M]  offshore.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Um/offshore.tar.gz
+
+# [ 67M]  parabolic_fem.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Wissgott/parabolic_fem.tar.gz
+
+# [226M]  patents.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Pajek/patents.tar.gz
+
+# [5.3M]  preferentialAttachment.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/preferentialAttachment.tar.gz
+
+# [1.9M]  rcv1_test_b.mtx ?
+# [1.5G]  rcv1_test.mtx  ?
+
+# [265M]  road_central.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/road_central.tar.gz
+
+# [470M]  road_usa.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/road_usa.tar.gz
+
+# [5.6M]  smallworld.mtx
+http://www.cise.ufl.edu/research/sparse/MM/DIMACS10/smallworld.tar.gz
+
+# [965M]  soc-LiveJournal1.mtx
+http://www.cise.ufl.edu/research/sparse/MM/SNAP/soc-LiveJournal1.tar.gz
+
+# [ 98M]  Stanford_Berkeley.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Kamvar/Stanford_Berkeley.tar.gz
+
+# [292M]  StocF-1465.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Janna/StocF-1465.tar.gz
+
+# [155M]  thermal2.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Schmid/thermal2.tar.gz
+
+# [ 93M]  tmt_sym_amd.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Schmid/thermal2.tar.gz
+
+# [4.7G]  uk-2002.mtx
+http://www.cise.ufl.edu/research/sparse/MM/LAW/uk-2002.tar.gz
+
+# [6.9M]  url_combined_b.mtx  ?
+# [4.3G]  url_combined.mtx  ?
+
+# [861M]  wb-edu.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Gleich/wb-edu.tar.gz
+
+# [ 67M]  webbase-1M.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Williams/webbase-1M.tar.gz
+
+# [ 98M]  web-BerkStan.mtx
+http://www.cise.ufl.edu/research/sparse/MM/SNAP/web-BerkStan.tar.gz
+
+# [ 67M]  web-Google.mtx
+http://www.cise.ufl.edu/research/sparse/MM/SNAP/web-Google.tar.gz
+
+# [613M]  wikipedia-20070206.mtx
+http://www.cise.ufl.edu/research/sparse/MM/Gleich/wikipedia-20070206.tar.gz
+
+# [ 59M]  wiki-Talk.mtx
+http://www.cise.ufl.edu/research/sparse/MM/SNAP/wiki-Talk.tar.gz

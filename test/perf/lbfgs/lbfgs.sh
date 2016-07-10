@@ -29,25 +29,32 @@ LICENSE
 
 for i in `cat lbfgs.lst`; do
   echo "#### INPUT: $i"
+
+  input=../inputs/${i}.mtx
+  if [[ ! -f $input ]]; then
+    echo "SKIP: file '${input}' does't exist"
+    echo
+    continue
+  fi
   echo
 
   echo "---- BEGIN: julia-as-is"
-  julia lbfgs-new.jl ../inputs/$i.mtx "julia"
+  julia lbfgs-new.jl $input "julia"
   echo "---- END: julia-as-is"
   echo
 
   echo "---- BEGIN: baseline (call-repl)"
-  julia lbfgs-new.jl ../inputs/$i.mtx "call-repl"
+  julia lbfgs-new.jl $input "call-repl"
   echo "---- END: baseline"
   echo
 
   echo "---- BEGIN: context"
-  julia lbfgs-new.jl ../inputs/$i.mtx "context"
+  julia lbfgs-new.jl $input "context"
   echo "---- END: context"
   echo
 
   echo "---- BEGIN: reordering"
-  julia lbfgs-new.jl ../inputs/$i.mtx "reorder"
+  julia lbfgs-new.jl $input "reorder"
   echo "---- END: reordering"
   echo
 done

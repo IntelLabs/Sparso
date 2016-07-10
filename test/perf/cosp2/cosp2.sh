@@ -29,21 +29,28 @@ LICENSE
 
 for i in hmatrix.512.mtx hmatrix.1024.mtx; do
   echo "#### INPUT: $i"
+
+  input=../inputs/${i}
+  if [[ ! -f $input ]]; then
+    echo "SKIP: file '${input}' does't exist"
+    echo
+    continue
+  fi
   echo
 
   #OMP_NUM_THREADS=1 julia cosp2.jl ../matrices/$i.mtx
   echo "---- BEGIN: julia-as-is"
-  julia cosp2.jl ../inputs/$i "julia"
+  julia cosp2.jl $input "julia"
   echo "---- END: julia-as-is"
   echo
 
   echo "---- BEGIN: baseline (call-repl)"
-  julia cosp2.jl ../inputs/$i "call-repl"
+  julia cosp2.jl $input "call-repl"
   echo "---- END: baseline"
   echo
 
   echo "---- BEGIN: context"
-  julia cosp2.jl ../inputs/$i "context"
+  julia cosp2.jl $input "context"
   echo "---- END: context"
   echo
 done
