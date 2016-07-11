@@ -1239,7 +1239,7 @@ const all_tests = [
 #    prop_symmetric_value_test4,
 #    symmetric_structure_test1,
 #    prop_structure_only_test1,
-    prop_structure_only_test2,
+#    prop_structure_only_test2,
 #    prop_structure_only_test3,
     prop_lower_upper_test1,
     prop_lower_upper_test2,
