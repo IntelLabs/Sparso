@@ -104,9 +104,13 @@ Note:
 
 (1) Some matrices are huge, up to 5G. You can change the size option of 
 download_matrices.sh to control which matrices to download. 
+
 (2) For better performance, set OMP_NUM_THREADS as the number of physical cores, instead of virtual cores. 
-(3) Execution can take many hours, depending on the matrices and the machine you choose.  
+
+(3) Execution can take many hours, depending on the matrices and the machine you choose.
+
 (4) Ensure enough memory are available to Julia for large problem sizes.
+
 (5) You can also test each benchmark separately by replacing the above ./run_all.sh with the following:
 
 	cd cosp2;     ./cosp2.sh;     cd -
@@ -118,17 +122,13 @@ download_matrices.sh to control which matrices to download.
 
 (6) For each benchmark and input, the output contains testing result for the following configurations:
 
-..*julia-as-is
-...The benchmarks are run in the original Julia.
+...julia-as-is: The benchmarks are run in the original Julia.
 
-..*baseline (call-repl)
-...Auto replace all time-consuming linear algebra operations in Julia with calls to Intel MKL and SpMP library routines.
+...baseline (call-repl): Auto replace all time-consuming linear algebra operations in Julia with calls to Intel MKL and SpMP library routines.
 
-..*+Matrix-properties
-...In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
+...+Matrix-properties: In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
 
-..*+reordering for PCG, L-BFGS and PageRank.
-...+Reordering: In addition to +Matrix-properties, enable collective reordering as well.
+...+Reordering: In addition to +Matrix-properties, enable collective reordering as well. This is enabled in PCG, L-BFGS and PageRank.
 
 For each output, there is a warm-up run and an evaluation run. Ignore the results of warm-up. Look for the evaluation results under "RUN:", which should be taken as the final results.
 
