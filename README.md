@@ -36,7 +36,7 @@ in the inspector/executor paradigm.  Finally, Sparso does analyses in order to
 ## Installation
 
 ### Hardware
-There is no hard requirement, but a modern many-core machine with >=14 cores and >= 64G memory is preferred for performance testing.
+There is no hard requirement, but a modern many-core machine with >=14 cores and >= 64G memory is preferred for performance testing. If you download all the data during performance testing, the hard disk needs >=30G free space.
 
 ### OS
 
@@ -122,13 +122,13 @@ download_matrices.sh to control which matrices to download.
 
 (6) For each benchmark and input, the output contains testing result for the following configurations:
 
-...julia-as-is: The benchmarks are run in the original Julia.
+    julia-as-is: The benchmarks are run in the original Julia.
 
-...baseline (call-repl): Auto replace all time-consuming linear algebra operations in Julia with calls to Intel MKL and SpMP library routines.
+    baseline (call-repl): Auto replace all time-consuming linear algebra operations in Julia with calls to Intel MKL and SpMP library routines.
 
-...+Matrix-properties: In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
+    +Matrix-properties: In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
 
-...+Reordering: In addition to +Matrix-properties, enable collective reordering as well. This is enabled in PCG, L-BFGS and PageRank.
+    +Reordering: In addition to +Matrix-properties, enable collective reordering as well. This is enabled in PCG, L-BFGS and PageRank.
 
 For each output, there is a warm-up run and an evaluation run. Ignore the results of warm-up. Look for the evaluation results under "RUN:", which should be taken as the final results.
 
