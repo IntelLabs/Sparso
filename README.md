@@ -36,7 +36,7 @@ in the inspector/executor paradigm.  Finally, Sparso does analyses in order to
 ## Installation
 
 ### Hardware
-There is no hard requirement, but a modern many-core machine is preferred for performance testing.
+There is no hard requirement, but a modern many-core machine with >=14 cores and >= 64G memory is preferred for performance testing.
 
 ### OS
 
@@ -97,10 +97,42 @@ that contain the iterative sparse matrix code you'd like to accelerate.
 	
 	cd ~/Sparso/test/perf/
 	./download_matrices.sh 300M # download matrices smaller than 300M
+	export OMP_NUM_THREADS=*the number of physical cores of your machine*
 	./run_all.sh
 
-Be warned that (1) some matrices are huge, up to 5G. You can change the size option of 
-download_matrices.sh to control which matrices to download. (2) Execution can take many hours, depending on the matrices you choose and the machine you choose. Enjoy!
+Note:
+
+(1) Some matrices are huge, up to 5G. You can change the size option of 
+download_matrices.sh to control which matrices to download. 
+(2) For better performance, set OMP_NUM_THREADS as the number of physical cores, instead of virtual cores. 
+(3) Execution can take many hours, depending on the matrices and the machine you choose.  
+(4) Ensure enough memory are available to Julia for large problem sizes.
+(5) You can also test each benchmark separately by replacing the above ./run_all.sh with the following:
+
+	cd cosp2;     ./cosp2.sh;     cd -
+	cd ipm;       ./ipm.sh;       cd -
+	cd lbfgs;     ./lbfgs.sh;     cd -
+	cd pagerank;  ./pagerank.sh;  cd -
+	cd pcg;       ./pcg.sh;       cd -
+	cd adiabatic; ./adiabatic.sh; cd - 
+
+(6) For each benchmark and input, the output contains testing result for the following configurations:
+
+..*julia-as-is
+...The benchmarks are run in the original Julia.
+
+..*baseline (call-repl)
+...Auto replace all time-consuming linear algebra operations in Julia with calls to Intel MKL and SpMP library routines.
+
+..*+Matrix-properties
+...In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
+
+..*+reordering for PCG, L-BFGS and PageRank.
+...+Reordering: In addition to +Matrix-properties, enable collective reordering as well.
+
+For each output, there is a warm-up run and an evaluation run. Ignore the results of warm-up. Look for the evaluation results under "RUN:", which should be taken as the final results.
+
+Enjoy!
 
 ## Resources
 
