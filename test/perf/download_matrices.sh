@@ -40,9 +40,13 @@ echo "==== Downlaod matrices < `numfmt --to=iec ${max_size_byte}`."
 
 mkdir -p inputs
 
-for url in `cat inputs.list | grep http`; do
+for line in `cat inputs.list | grep http`; do
     echo
-    curr_size=$(wget "${url}" --spider --server-response -O - 2>&1 | sed -ne '/Content-Length/{s/.*: //;p}')
+    IFS=',' read -a myarray <<< ${line}
+    curr_size_=${myarray[1]}
+    curr_size=$(numfmt --from=iec ${curr_size_})
+    url=${myarray[0]}
+#    curr_size=$(wget "${url}" --spider --server-response -O - 2>&1 | sed -ne '/Content-Length/{s/.*: //;p}')
     target_file="inputs/$(basename $url)"
 
     download=true
