@@ -38,18 +38,18 @@ for i in `cat ipm.lst`; do
   fi
   echo
 
-  echo "---- BEGIN: julia-as-is"
+  echo "---- BEGIN: Julia-as-is"
   julia ipm.jl $input "julia"
-  echo "---- END: julia-as-is"
+  echo "---- END: Julia-as-is"
   echo
 
-  echo "---- BEGIN: baseline (call-repl)"
+  echo "---- BEGIN: Baseline (Call-repl)"
   julia ipm.jl $input "call-repl"
-  echo "---- END: baseline"
+  echo "---- END: Baseline"
   echo
 
-  echo "---- BEGIN: context"
+  echo "---- BEGIN: +Matrix-properties"
   julia ipm.jl $input "context"
-  echo "---- END: context"
+  echo "---- END: +Matrix-properties"
   echo
 done

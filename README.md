@@ -40,22 +40,25 @@ There is no hard requirement, but a modern many-core machine with >=14 cores and
 
 ### OS
 
-Download and install Ubuntu 16.04 x86_64 desktop/server from http://www.ubuntu.com/download/desktop. 
+Download and install Ubuntu 16.04 x86_64 desktop from http://www.ubuntu.com/download/desktop. 
 
 ### Julia 
 
 Download Julia 0.4.6 (julia-2e358ce975) from http://julialang.org/downloads/. Choose Generic Linux Binary 64-bit.
 
-	cd
-    	tar xvzf julia-0.4.6-linux-x86_64.tar.gz
-    	export PATH=~/julia-2e358ce975/bin:$PATH
+
+    cd ~/
+    tar xvzf julia-0.4.6-linux-x86_64.tar.gz
+    export PATH=~/julia-2e358ce975/bin:$PATH
 
 ### Parallel Studio
 
-Download Linux Composer version for C++ from https://software.intel.com/en-us/intel-parallel-studio-xe. Choose "Linux" and "Professional 
-Edition for Fortran and C++". Click "Download Free Trial". After submit the request, you will receive an email. Follow the download link there. Clik "+ Additional downloads, latest updates and prior versions". Choose 2016 Update 1 Eng/Jpn. Scroll down the screen to the bottom and click "Download Now" (NOT the "Download Now" button at the top of the page).
+Download Parallel Studio from https://software.intel.com/en-us/intel-parallel-studio-xe. Choose "Linux" and "Professional 
+Edition for Fortran and C++". Click "Download Free Trial". 
 
-	cd
+After submit the request, you will receive an email. Follow the download link there. Clik "+ Additional downloads, latest updates and prior versions". Choose 2016 Update 1 Eng/Jpn. Scroll down the screen to the bottom and click "Download Now" (NOT the "Download Now" button at the top of the page).
+
+	cd ~/
 	tar xvzf parallel_studio_xe_2016_update1.tgz
  	cd parallel_studio_xe_2016_update1/
 	./install_GUI.sh
@@ -72,7 +75,7 @@ Depending on the path you have installed Parallel Studio, you may need change th
 
 ### Install Sparso
 
-	cd
+	cd ~/
 	git clone https://github.com/IntelLabs/Sparso.git
 	cd Sparso
 	./scripts/setup.sh
@@ -85,29 +88,27 @@ Depending on the path you have installed Parallel Studio, you may need change th
 	cd ~/Sparso/test/correctness/
 	julia regression.jl all
 
-A set of regression tests is run. All should pass. 
-
-You can look at some simple tests there to see how Sparso works. Basically,
-to accelerate your own iterative sparse matrix applications with Sparso,
-add "using Sparso" to your Julia program and add "@acc" in front of calls to functions
-that contain the iterative sparse matrix code you'd like to accelerate.
+A set of regression tests is run. All should pass. Log files are produced in the same directory, showing the Julia Abstract 
+Syntax Tree (AST) before and after Sparso optimizations.
 
 
 ### Performance testing
 	
 	cd ~/Sparso/test/perf/
 	./download_matrices.sh 300M # download matrices smaller than 300M
-	export OMP_NUM_THREADS=*the number of physical cores of your machine*
+	export OMP_NUM_THREADS=the number of physical cores of your machine
 	./run_all.sh
 
 Note:
 
-(1) Some matrices are huge, up to 5G. You can change the size option of 
-download_matrices.sh to control which matrices to download. 
+(1) You can change the size option of 
+download_matrices.sh to control which matrices to download. The biggest matrix available is up to 5G. 
 
-(2) For better performance, set OMP_NUM_THREADS as the number of physical cores, instead of virtual cores. 
+Matrices excluded from downloading by the size option are skipped in testing.
 
-(3) Execution can take many hours, depending on the matrices and the machine you choose.
+(2) For better performance, set OMP_NUM_THREADS as the number of physical cores, NOT virtual cores: sparse matrix applications tend to be memory-bound, and thus hyperthreading may not help or may adversely impact performance.
+
+(3) Execution can take many hours, depending on the matrices and the machine you choose. 
 
 (4) Ensure enough memory are available to Julia for large problem sizes.
 
@@ -122,13 +123,13 @@ download_matrices.sh to control which matrices to download.
 
 (6) For each benchmark and input, the output contains testing result for the following configurations:
 
-    julia-as-is: The benchmarks are run in the original Julia.
+*Julia-as-is*: The benchmarks are run in the original Julia.
 
-    baseline (call-repl): Auto replace all time-consuming linear algebra operations in Julia with calls to Intel MKL and SpMP library routines.
+*Baseline (Call-repl)*: Auto replace all time-consuming linear algebra operations in Julia with calls to MKL and SpMP library routines. This establishes a reasonably high-performance baseline.
 
-    +Matrix-properties: In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
+*+Matrix-properties*: In addition to Call-repl, enable all the context-driven optimizations except collective reordering.
 
-    +Reordering: In addition to +Matrix-properties, enable collective reordering as well. This is enabled in PCG, L-BFGS and PageRank.
+*+Reordering*: In addition to +Matrix-properties, enable collective reordering as well. This is enabled in PCG, L-BFGS and PageRank.
 
 For each output, there is a warm-up run and an evaluation run. Ignore the results of warm-up. Look for the evaluation results under "RUN:", which should be taken as the final results.
 

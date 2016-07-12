@@ -33,18 +33,18 @@ for arg in "${args[@]}"; do
   echo "#### INPUT: qbits=$arg"
   echo
 
-  echo "---- BEGIN: julia-as-is"
+  echo "---- BEGIN: Julia-as-is"
   julia adiabatic.jl $arg "julia"
-  echo "---- END: julia-as-is"
+  echo "---- END: Julia-as-is"
   echo
 
-  echo "---- BEGIN: baseline (call-repl)"
+  echo "---- BEGIN: Baseline (Call-repl)"
   julia adiabatic.jl $arg "call-repl"
-  echo "---- END: baseline"
+  echo "---- END: Baseline"
   echo
 
-  echo "---- BEGIN: context"
+  echo "---- BEGIN: +Matrix-properties"
   julia adiabatic.jl $arg "context"
-  echo "---- END: context"
+  echo "---- END: +Matrix-properties"
   echo
 done

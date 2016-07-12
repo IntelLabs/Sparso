@@ -38,23 +38,23 @@ for i in `cat pcg.lst`; do
   fi
   echo
 
-  echo "---- BEGIN: julia-as-is"
+  echo "---- BEGIN: Julia-as-is"
   julia pcg.jl $input "julia"
   echo "---- END: julia-as-is"
   echo
 
-  echo "---- BEGIN: baseline (call-repl)"
+  echo "---- BEGIN: Baseline (Call-repl)"
   julia pcg.jl $input "call-repl"
-  echo "---- END: baseline"
+  echo "---- END: Baseline"
   echo
 
-  echo "---- BEGIN: context"
+  echo "---- BEGIN: +Matrix-properties"
   julia pcg.jl $input "context"
-  echo "---- END: context"
+  echo "---- END: +Matrix-properties"
   echo
 
-  echo "---- BEGIN: reordering"
+  echo "---- BEGIN: +Reordering"
   julia pcg.jl $input "reorder"
-  echo "---- END: reordering"
+  echo "---- END: +Reordering"
   echo
 done

@@ -38,23 +38,23 @@ for i in `cat lbfgs.lst`; do
   fi
   echo
 
-  echo "---- BEGIN: julia-as-is"
+  echo "---- BEGIN: Julia-as-is"
   julia lbfgs-new.jl $input "julia"
-  echo "---- END: julia-as-is"
+  echo "---- END: Julia-as-is"
   echo
 
-  echo "---- BEGIN: baseline (call-repl)"
+  echo "---- BEGIN: Baseline (Call-repl)"
   julia lbfgs-new.jl $input "call-repl"
-  echo "---- END: baseline"
+  echo "---- END: Baseline"
   echo
 
-  echo "---- BEGIN: context"
+  echo "---- BEGIN: +Matrix-properties"
   julia lbfgs-new.jl $input "context"
-  echo "---- END: context"
+  echo "---- END: +Matrix-properties"
   echo
 
-  echo "---- BEGIN: reordering"
+  echo "---- BEGIN: +Reordering"
   julia lbfgs-new.jl $input "reorder"
-  echo "---- END: reordering"
+  echo "---- END: +Reordering"
   echo
 done

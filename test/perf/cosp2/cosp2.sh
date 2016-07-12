@@ -39,18 +39,18 @@ for i in hmatrix.512.mtx hmatrix.1024.mtx; do
   echo
 
   #OMP_NUM_THREADS=1 julia cosp2.jl ../matrices/$i.mtx
-  echo "---- BEGIN: julia-as-is"
+  echo "---- BEGIN: Julia-as-is"
   julia cosp2.jl $input "julia"
-  echo "---- END: julia-as-is"
+  echo "---- END: Julia-as-is"
   echo
 
-  echo "---- BEGIN: baseline (call-repl)"
+  echo "---- BEGIN: Baseline (Call-repl)"
   julia cosp2.jl $input "call-repl"
-  echo "---- END: baseline"
+  echo "---- END: Baseline"
   echo
 
-  echo "---- BEGIN: context"
+  echo "---- BEGIN: +Matrix-properties"
   julia cosp2.jl $input "context"
-  echo "---- END: context"
+  echo "---- END: +Matrix-properties"
   echo
 done
