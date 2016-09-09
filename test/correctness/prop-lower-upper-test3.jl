@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
@@ -37,7 +37,7 @@ function foo()
     A = generate_symmetric_nonzerodiagonal_sparse_matrix(10)
 
     for i = 1:2
-        L, U = SparseAccelerator.ilu(A)
+        L, U = Sparso.ilu(A)
     end
 end
 

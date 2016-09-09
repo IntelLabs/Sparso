@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 include("./ipm-ref.jl")
 include("utils.jl")
@@ -69,7 +69,7 @@ else
     iter, relResidual, objval = ipm_ref(A, b, p)
 end
 
-#SparseAccelerator.set_knob_log_level(1)
+#Sparso.set_knob_log_level(1)
 println("\nRUN: ")
 if test == "julia"
   x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,

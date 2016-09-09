@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS, SA_USE_SPLITTING_PATTERNS)
 
@@ -181,7 +181,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
 
     # Since Julia code for this is too slow we do this in C to show sufficient speedups by
     # faster SpMV. To be fair, the reference code also uses it.
-    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
+    Sparso.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
 
     # backtracking line search using armijo criterion
     alphaMax = 1 # this is the maximum step length

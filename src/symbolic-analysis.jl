@@ -41,9 +41,9 @@ Each entry in the lattice is a symbol(AbstactSymbol).
 module SymbolicAnalysis
 
 using CompilerTools
-using SparseAccelerator
-using SparseAccelerator: ExprPattern, RegionInfo, AbstractPatternAction, CallSites, expr_skeleton
-using SparseAccelerator: dprintln, dprint
+using Sparso
+using Sparso: ExprPattern, RegionInfo, AbstractPatternAction, CallSites, expr_skeleton
+using Sparso: dprintln, dprint
 import Base.Callable
 
 export TransferRule
@@ -279,7 +279,7 @@ function call_pre_action(
     reordering_FAR    :: Tuple
 ) 
     if typeof(ast) <: Sym || typeof(ast) == SymbolNode 
-        ast = SparseAccelerator.get_symexpr(ast)
+        ast = Sparso.get_symexpr(ast)
     end
 
     stmt_ctx = call_sites.extra.curr_context
@@ -323,7 +323,7 @@ function prepare_pattern_action_env(
         while idx <= length(env.raw_expr.args)
             arg = env.raw_expr.args[idx]
             if typeof(arg) == SymbolNode 
-                arg = SparseAccelerator.get_symexpr(arg)
+                arg = Sparso.get_symexpr(arg)
             end
 
             if !in(arg, keys(stmt_ctx.context_map))
@@ -361,7 +361,7 @@ function call_post_action(
     reordering_FAR    :: Tuple
 ) 
     if typeof(ast) <: Sym || typeof(ast) == SymbolNode 
-        ast = SparseAccelerator.get_symexpr(ast)
+        ast = Sparso.get_symexpr(ast)
     end
 
     # wrap env
@@ -389,9 +389,9 @@ function generate_analysis_patterns(
     analysis_patterns = Vector{ExprPattern}()
     for r in analyzer.transfer_rules
         assert(isa(r.match_pattern, Tuple))
-        pre_action = r.match_func == EmptyMatcher ? SparseAccelerator.do_nothing : generate_pre_action(r.match_func)
+        pre_action = r.match_func == EmptyMatcher ? Sparso.do_nothing : generate_pre_action(r.match_func)
         post_action = generate_post_action(r.action) 
-        #post_action =  SparseAccelerator.do_nothing
+        #post_action =  Sparso.do_nothing
         push!(analysis_patterns, 
             ExprPattern(string(r), # name
                 r.match_pattern,
@@ -497,7 +497,7 @@ function build_expr_contexts(ast, stmt_ctx)
     expr = ast
     ast_type = typeof(ast)
     if ast_type <: Sym || ast_type <: SymbolNode 
-        expr = SparseAccelerator.get_symexpr(ast)        
+        expr = Sparso.get_symexpr(ast)        
         ctx = SymExprContext(expr)
         ctx.svalue = TOP_SYMBOL
         stmt_ctx.context_map[expr] = ctx
@@ -511,7 +511,7 @@ function build_expr_contexts(ast, stmt_ctx)
         #assert(0)
     #elseif isa(expr, GlobalRef)
     elseif in(ast_type, SKIP_TYPES)
-        #expr = SparseAccelerator.get_symexpr(ast)        
+        #expr = Sparso.get_symexpr(ast)        
         #dump(ast)
         ctx = SymExprContext(expr)
         #ctx.svalue = TOP_SYMBOL
@@ -619,12 +619,12 @@ function run_analyzer(
 
     analysis_patterns = generate_analysis_patterns(analyzer)
 
-    call_sites  = SparseAccelerator.CallSites(Set{SparseAccelerator.CallSite}(), 
+    call_sites  = Sparso.CallSites(Set{Sparso.CallSite}(), 
                             region.region, 
                             region.lambda, 
                             region.symbol_info,
                             region.liveness, analysis_patterns,
-                            Vector{SparseAccelerator.Action}(), analysis_context)
+                            Vector{Sparso.Action}(), analysis_context)
 
   
     # All patterns are non-splittable.
@@ -691,7 +691,7 @@ function run_analyzer(
                 end
             end
 
-            CompilerTools.AstWalker.AstWalk(expr, SparseAccelerator.match_replace_an_expr_pattern, call_sites)
+            CompilerTools.AstWalker.AstWalk(expr, Sparso.match_replace_an_expr_pattern, call_sites)
  
             # update out_symbolic_vals
             for (se, se_ctx) in stmt_ctx.context_map

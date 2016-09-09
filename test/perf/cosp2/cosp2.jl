@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 function spmatmul_witheps_and_flops{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}, eps;
                          sortindices::Symbol = :sortcols)

@@ -25,10 +25,10 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
 include("./utils.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
@@ -47,12 +47,12 @@ function pcg_symgs(x, A, b, tol, maxiter)
 
     spmv_time -= time()
     #r = b - A * x
-    r = b - SparseAccelerator.SpMV(A,x)
+    r = b - Sparso.SpMV(A,x)
     spmv_time += time()
 
     blas1_time -= time()
     #normr0 = norm(r)
-    normr0 = SparseAccelerator.norm(r)
+    normr0 = Sparso.norm(r)
     z = copy(r)
     blas1_time += time()
 
@@ -66,7 +66,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
     blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     #rz = dot(r, z)
-    rz = SparseAccelerator.dot(r,z)
+    rz = Sparso.dot(r,z)
     blas1_time += time()
 
     k = 1
@@ -83,18 +83,18 @@ function pcg_symgs(x, A, b, tol, maxiter)
 
         spmv_time -= time()
         #Ap = A*p
-        Ap = SparseAccelerator.SpMV(A,p)
+        Ap = Sparso.SpMV(A,p)
         spmv_time += time()
 
         blas1_time -= time()
         #alpha = old_rz / dot(p, Ap)
-        alpha = old_rz / SparseAccelerator.dot(p, Ap)
+        alpha = old_rz / Sparso.dot(p, Ap)
         #x += alpha * p
-        SparseAccelerator.WAXPBY!(x,1,x,alpha,p)
+        Sparso.WAXPBY!(x,1,x,alpha,p)
         #r -= alpha * Ap
-        SparseAccelerator.WAXPBY!(r,1,r,-alpha,Ap)
+        Sparso.WAXPBY!(r,1,r,-alpha,Ap)
         #rel_err = norm(r)/normr0
-        rel_err = SparseAccelerator.norm(r)/normr0
+        rel_err = Sparso.norm(r)/normr0
         blas1_time += time()
 
         if rel_err < tol 
@@ -103,7 +103,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
 
         blas1_time -= time()
         #z = copy(r)
-        SparseAccelerator.copy!(z, r)
+        Sparso.copy!(z, r)
         blas1_time += time()
 
         trsv_time -= time()
@@ -113,10 +113,10 @@ function pcg_symgs(x, A, b, tol, maxiter)
 
         blas1_time -= time()
         #rz = dot(r, z)
-        rz = SparseAccelerator.dot(r,z)
+        rz = Sparso.dot(r,z)
         beta = rz/old_rz
         #p = z + beta * p
-        SparseAccelerator.WAXPBY!(p,1,z,beta,p)
+        Sparso.WAXPBY!(p,1,z,beta,p)
         blas1_time += time()
 
         k += 1

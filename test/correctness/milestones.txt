@@ -1,6 +1,6 @@
 1. context-test3 passes. Fully automatic. Correct results.
 
-SparseAccelerator:
+Sparso:
     commit fb8327b5a314f9ff251b6172aa0a44be248458ee
     Author: Hongbo Rong <hongbo.rong@intel.com>
     Date:   Mon Sep 21 15:09:01 2015 -0700

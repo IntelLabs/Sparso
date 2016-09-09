@@ -77,8 +77,8 @@ const UPDATED_NONE  = Set()
 const IA_NONE       = Set()
 
 const element_wise_multiply_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_multiply",          # SparseAccelerator.element_wise_multiply(x::Vector, y::Vector)
+    "Sparso", 
+    "element_wise_multiply",          # Sparso.element_wise_multiply(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -101,8 +101,8 @@ const element_wise_multiply1_Desc = FunctionDescription(
 )
 
 const element_wise_multiply!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_multiply!",         # SparseAccelerator.element_wise_multiply!(w::Vector, x::Vector, y::Vector)
+    "Sparso", 
+    "element_wise_multiply!",         # Sparso.element_wise_multiply!(w::Vector, x::Vector, y::Vector)
     (Vector, Vector, Vector),         # The arguments must be vectors
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
@@ -113,8 +113,8 @@ const element_wise_multiply!_Desc = FunctionDescription(
 )
 
 const element_wise_divide_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_divide",            # SparseAccelerator.element_wise_divide(x::Vector, y::Vector)
+    "Sparso", 
+    "element_wise_divide",            # Sparso.element_wise_divide(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -144,8 +144,8 @@ const element_wise_divide2_Desc = FunctionDescription(
 )
 
 const element_wise_divide!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_divide!",           # SparseAccelerator.element_wise_divide!(w::Vector, x::Vector, y::Vector)
+    "Sparso", 
+    "element_wise_divide!",           # Sparso.element_wise_divide!(w::Vector, x::Vector, y::Vector)
     (Vector, Vector, Vector),         # The arguments must be vectors
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
@@ -157,8 +157,8 @@ const element_wise_divide!_Desc = FunctionDescription(
 
 @doc """ A*x """
 const SpMV_2_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "SpMV",                           # SparseAccelerator.SpMV(A::SparseMatrixCSC, x::Vector)
+    "Sparso", 
+    "SpMV",                           # Sparso.SpMV(A::SparseMatrixCSC, x::Vector)
     (SparseMatrixCSC, Vector),        # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -169,7 +169,7 @@ const SpMV_2_parameters_Desc = FunctionDescription(
 
 @doc """ alpha*A*x """
 const SpMV_3_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV",
     (Number, SparseMatrixCSC, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -181,7 +181,7 @@ const SpMV_3_parameters_Desc = FunctionDescription(
 
 @doc """ alpha*A*x + y """
 const SpMV_4_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV",
     (Number, SparseMatrixCSC, Vector, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -195,7 +195,7 @@ const SpMV_4_parameters_Desc = FunctionDescription(
 
 @doc """ alpha*A*x + beta*y """
 const SpMV_5_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV",
     (Number, SparseMatrixCSC, Vector, Number, Vector),
     UPDATED_NONE,                     # No argument is updated
@@ -209,7 +209,7 @@ const SpMV_5_parameters_Desc = FunctionDescription(
 
 @doc """ alpha*A*x + beta*y + gamma """
 const SpMV_6_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV",
     (Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     UPDATED_NONE,                     # No argument is updated
@@ -221,9 +221,9 @@ const SpMV_6_parameters_Desc = FunctionDescription(
     ])
 )
 
-@doc """ SparseAccelerator.SpMV!(A, x) """
+@doc """ Sparso.SpMV!(A, x) """
 const SpMV!_3_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV!",
     (Vector, SparseMatrixCSC, Vector),
     Set(1),                           # Argument 1 (the vector) is updated
@@ -237,7 +237,7 @@ const SpMV!_3_parameters_Desc = FunctionDescription(
 
 @doc """ w = alpha*A*x + beta*y + gamma """
 const SpMV!_7_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV!",
     (Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     Set(1),                           # Argument 1 (the vector) is updated
@@ -254,7 +254,7 @@ const SpMV!_7_parameters_Desc = FunctionDescription(
 
 @doc """ w = (alpha*A*x + beta*y + gamma) .* z """
 const SpMV!_8_parameters_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "SpMV!",
     (Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number, Vector),
     Set(1),                           # Argument 1 (the vector) is updated
@@ -330,8 +330,8 @@ const A_mul_B!_Desc = FunctionDescription(
 )
 
 const Dot_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
+    "Sparso", 
+    "dot",                            # Sparso.Dot(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -340,7 +340,7 @@ const Dot_Desc = FunctionDescription(
 
 const dot_Desc = FunctionDescription(
     "Main", 
-    "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
+    "dot",                            # Sparso.Dot(x::Vector, y::Vector)
     (Vector, Vector),                 # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -375,8 +375,8 @@ const log_Desc = FunctionDescription(
 )
 
 const WAXPBY_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "WAXPBY",                         # SparseAccelerator.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
+    "Sparso", 
+    "WAXPBY",                         # Sparso.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
     (Number, Vector, Number, Vector),
     UPDATED_NONE,                     # No argument is updated
     true,                             # The function is distributive
@@ -386,8 +386,8 @@ const WAXPBY_Desc = FunctionDescription(
 )
 
 const WAXPBY!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "WAXPBY!",                        # SparseAccelerator.WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
+    "Sparso", 
+    "WAXPBY!",                        # Sparso.WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
     (Vector, Number, Vector, Number, Vector),
     Set(1),                           # argument 1 (w) is updated
     true,                             # The function is distributive
@@ -629,7 +629,7 @@ const fwdTriSolve!_Desc = FunctionDescription(
 )
 
 const fwdTriSolve!1_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "fwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -640,7 +640,7 @@ const fwdTriSolve!1_Desc = FunctionDescription(
 )
 
 const fwdTriSolve!2_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "fwdTriSolve!",                              
     (Vector, AbstractSparseMatrix, Vector),
     Set(1),                           # Argument 1 (the vector) is updated
@@ -662,7 +662,7 @@ const bwdTriSolve!_Desc = FunctionDescription(
 )
 
 const bwdTriSolve!1_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "bwdTriSolve!",                              
     (AbstractSparseMatrix, Vector),
     Set(2),                           # Argument 2 (the vector) is updated
@@ -673,7 +673,7 @@ const bwdTriSolve!1_Desc = FunctionDescription(
 )
 
 const bwdTriSolve!2_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "bwdTriSolve!",                              
     (Vector, AbstractSparseMatrix, Vector),
     Set(1),                           # Argument 1 (the vector) is updated
@@ -821,7 +821,7 @@ const Printf_Desc = FunctionDescription(
 
 # The following 3 are specific to LBFGS
 const lbfgs_compute_direction!_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "lbfgs_compute_direction!",
     (Array{Float64,1}, Int64, Int64, Int64, Array{Float64,2}, Array{Float64,2}, Array{Float64,1}),
     UPDATED_NONE,                     # No argument is updated
@@ -833,7 +833,7 @@ const lbfgs_compute_direction!_Desc = FunctionDescription(
 )
 
 const lbfgs_loss_function1_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "lbfgs_loss_function1",
     (Vector, Vector, Number),         # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
     UPDATED_NONE,                     # No argument is updated
@@ -843,7 +843,7 @@ const lbfgs_loss_function1_Desc = FunctionDescription(
 
 
 const lbfgs_loss_function2!_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "lbfgs_loss_function2!",
     (Vector, Vector, Vector),         # If LHS is a GenSym, lamda may or may not have its type info (in Julia 0.4 rc1). So use Any.
     Set(1),
@@ -855,7 +855,7 @@ const lbfgs_loss_function2!_Desc = FunctionDescription(
 )
 
 const ilu_Desc = FunctionDescription(
-    "SparseAccelerator", 
+    "Sparso", 
     "ilu",
     (SparseMatrixCSC,),
     UPDATED_NONE,                     # No argument is updated

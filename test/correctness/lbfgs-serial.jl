@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS, SA_USE_SPLITTING_PATTERNS)
 
@@ -51,8 +51,8 @@ end
 function lbfgs_ref(X, y, lambda, xinit, tol, k)
   #@printf("%5s%10s%10s%10s\n", "Iter", "alpha", "|dfk|", "fk")
 
-  SparseAccelerator.reset_spmp_spmv_time()
-  SparseAccelerator.reset_knob_spmv_time()
+  Sparso.reset_spmp_spmv_time()
+  Sparso.reset_knob_spmv_time()
 
   bytes = (nnz(X)*12. + (size(X,1) + size(X,2))*8)
 
@@ -104,9 +104,9 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
     log_time -= time()
     #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
     #fk0 = s/m+(lambda/2)*norm(x)^2
-    fk0 = SparseAccelerator.lbfgs_loss_function1(yXw, x, lambda)
+    fk0 = Sparso.lbfgs_loss_function1(yXw, x, lambda)
     #temp = y./(1+exp(yXw))
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
@@ -121,7 +121,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
     # Since Julia code for this is too slow we do this in C to show sufficient speedups by
     # faster SpMV. To be fair, the reference code also uses it.
     direction_time -= time()
-    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
+    Sparso.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -143,7 +143,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
       log_time -= time()
       #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
       #fk = s/m+(lambda/2)*norm(w)^2
-      fk = SparseAccelerator.lbfgs_loss_function1(yXw, w, lambda)
+      fk = Sparso.lbfgs_loss_function1(yXw, w, lambda)
       log_time += time()
       # end objective function
 
@@ -172,7 +172,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
     yXw = y.*Xw
 
     log_time -= time()
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
@@ -187,10 +187,10 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
   bytes *= spmv_count
   println("\nSpMV takes $spmv_time sec ($(bytes/spmv_time/1e9) gbps).")
 
-  spmv_time = SparseAccelerator.get_spmp_spmv_time()
+  spmv_time = Sparso.get_spmp_spmv_time()
   if spmv_time > 0
     println("time spent on spmp spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
-    spmv_time = SparseAccelerator.get_knob_spmv_time()
+    spmv_time = Sparso.get_knob_spmv_time()
     println("time spent on knob spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
   end
 
@@ -204,8 +204,8 @@ end
 function lbfgs_opt(X, y, lambda, xinit, tol, k, do_print, with_context_opt)
   #@printf("%5s%10s%10s%10s\n", "Iter", "alpha", "|dfk|", "fk")
 
-  SparseAccelerator.reset_spmp_spmv_time()
-  SparseAccelerator.reset_knob_spmv_time()
+  Sparso.reset_spmp_spmv_time()
+  Sparso.reset_knob_spmv_time()
 
   spmv_time = 0
   log_time = 0
@@ -218,21 +218,21 @@ function lbfgs_opt(X, y, lambda, xinit, tol, k, do_print, with_context_opt)
   spmv_count = 0
 
 if with_context_opt
-  mknobX = (SparseAccelerator.new_matrix_knob)(:X, true, true, false, false, false, false)
-  mknobXT = (SparseAccelerator.new_matrix_knob)(:Xt, true, true, false, false, false, false)
+  mknobX = (Sparso.new_matrix_knob)(:X, true, true, false, false, false, false)
+  mknobXT = (Sparso.new_matrix_knob)(:Xt, true, true, false, false, false, false)
 
-  (SparseAccelerator.set_derivative)(mknobX, SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE, mknobXT)
+  (Sparso.set_derivative)(mknobX, Sparso.DERIVATIVE_TYPE_TRANSPOSE, mknobXT)
 
-  fknob_spmv1 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv1)
-  fknob_spmv2 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobXT, fknob_spmv2)
-  fknob_spmv3 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv3)
-  fknob_spmv4 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv4)
-  fknob_spmv5 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobXT, fknob_spmv5)
+  fknob_spmv1 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spmv1)
+  fknob_spmv2 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobXT, fknob_spmv2)
+  fknob_spmv3 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spmv3)
+  fknob_spmv4 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spmv4)
+  fknob_spmv5 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobXT, fknob_spmv5)
 else
   fknob_spmv1 = C_NULL
   fknob_spmv2 = C_NULL
@@ -259,34 +259,34 @@ end
   for it=1:100
     spmv_time -= time()
     #Xw = X*x
-    SparseAccelerator.SpMV!(Xw, X, x, fknob_spmv1)
+    Sparso.SpMV!(Xw, X, x, fknob_spmv1)
     spmv_count += 1
     spmv_time += time()
 
     #yXw = y.*Xw
-    SparseAccelerator.element_wise_multiply!(yXw, y, Xw)
+    Sparso.element_wise_multiply!(yXw, y, Xw)
 
     log_time -= time()
     #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
     #fk0 = s/m+(lambda/2)*norm(x)^2
-    fk0 = SparseAccelerator.lbfgs_loss_function1(yXw, x, lambda)
+    fk0 = Sparso.lbfgs_loss_function1(yXw, x, lambda)
     #temp = y./(1+exp(yXw))
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
 
     log_time += time()
 
     spmv_time -= time()
     #dfk = -(Xt*temp)/m + lambda*x
-    SparseAccelerator.SpMV!(dfk, -1/m, Xt, temp, lambda, x, 0, fknob_spmv2)
+    Sparso.SpMV!(dfk, -1/m, Xt, temp, lambda, x, 0, fknob_spmv2)
     spmv_count += 1
     spmv_time += time()
 
-    if (SparseAccelerator.norm(dfk) < tol)
+    if (Sparso.norm(dfk) < tol)
       break;
     end
 
     direction_time -= time()
-    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
+    Sparso.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -298,23 +298,23 @@ end
     while true
       # logistic loss objective funcion
       #w = x - alpha*dfk
-      SparseAccelerator.WAXPBY!(w, 1, x, -alpha, dfk)
+      Sparso.WAXPBY!(w, 1, x, -alpha, dfk)
 
       spmv_time -= time()
       #Xw = X*w
-      SparseAccelerator.SpMV!(Xw, X, w, fknob_spmv3)
+      Sparso.SpMV!(Xw, X, w, fknob_spmv3)
       spmv_count += 1
       spmv_time += time()
-      SparseAccelerator.element_wise_multiply!(yXw, y, Xw)
+      Sparso.element_wise_multiply!(yXw, y, Xw)
 
       log_time -= time()
       #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
       #fk = s/m+(lambda/2)*norm(w)^2
-      fk = SparseAccelerator.lbfgs_loss_function1(yXw, w, lambda)
+      fk = Sparso.lbfgs_loss_function1(yXw, w, lambda)
       log_time += time()
       # end objective function
 
-      if (fk <= fk0 - c_1*alpha*SparseAccelerator.dot(dfk, dfk))
+      if (fk <= fk0 - c_1*alpha*Sparso.dot(dfk, dfk))
         break
       end
 
@@ -330,30 +330,30 @@ end
     #@printf("[%5d]%10.3e%10.3e%10.7f\n", it, alpha, norm(dfk), fk0)
 
     #x = x + alpha*dx
-    SparseAccelerator.WAXPBY!(x, 1, x, alpha, dx)
+    Sparso.WAXPBY!(x, 1, x, alpha, dx)
 
     spmv_time -= time()
-    SparseAccelerator.SpMV!(Xw, X, x, fknob_spmv4)
+    Sparso.SpMV!(Xw, X, x, fknob_spmv4)
     spmv_count += 1
     spmv_time += time()
 
-    SparseAccelerator.element_wise_multiply!(yXw, y, Xw)
+    Sparso.element_wise_multiply!(yXw, y, Xw)
 
     log_time -= time()
     #temp = y./(1+exp(yXw))
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
     #dfkp1 = -(Xt*temp)/m + lambda*x
-    SparseAccelerator.SpMV!(dfkp1, -1/m, Xt, temp, lambda, x, 0, fknob_spmv5)
+    Sparso.SpMV!(dfkp1, -1/m, Xt, temp, lambda, x, 0, fknob_spmv5)
     spmv_count += 1
     spmv_time += time()
 
     #S[:,(it - 1)%k + 1] = alpha*dx
-    S[:, (it - 1)%k + 1] = SparseAccelerator.WAXPBY(alpha, dx, 0, dx)
+    S[:, (it - 1)%k + 1] = Sparso.WAXPBY(alpha, dx, 0, dx)
     #Y[:,(it - 1)%k + 1] = dfkp1 - dfk
-    Y[:, (it - 1)%k + 1] = SparseAccelerator.WAXPBY(1, dfkp1, -1, dfk)
+    Y[:, (it - 1)%k + 1] = Sparso.WAXPBY(1, dfkp1, -1, dfk)
   end
 
   if do_print
@@ -361,9 +361,9 @@ end
 
     println("\nSpMV takes $spmv_time sec ($(bytes/spmv_time/1e9) gbps).")
 
-    spmv_time = SparseAccelerator.get_spmp_spmv_time()
+    spmv_time = Sparso.get_spmp_spmv_time()
     println("time spent on spmp spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
-    spmv_time = SparseAccelerator.get_knob_spmv_time()
+    spmv_time = Sparso.get_knob_spmv_time()
     println("time spent on knob spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
 
     println("log takes $log_time sec.")
@@ -376,8 +376,8 @@ end
 function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k, do_print)
   #@printf("%5s%10s%10s%10s\n", "Iter", "alpha", "|dfk|", "fk")
 
-  SparseAccelerator.reset_spmp_spmv_time()
-  SparseAccelerator.reset_knob_spmv_time()
+  Sparso.reset_spmp_spmv_time()
+  Sparso.reset_knob_spmv_time()
 
   spmv_time = 0
   log_time = 0
@@ -388,23 +388,23 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k, do_print)
   x = xinit
   Xt = X'
 
-  mknobX = (SparseAccelerator.new_matrix_knob)(:X, true, true, false, false, false, false)
-  mknobXT = (SparseAccelerator.new_matrix_knob)(:Xt, true, true, false, false, false, false)
+  mknobX = (Sparso.new_matrix_knob)(:X, true, true, false, false, false, false)
+  mknobXT = (Sparso.new_matrix_knob)(:Xt, true, true, false, false, false, false)
 
-  (SparseAccelerator.set_derivative)(mknobX, SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE, mknobXT)
+  (Sparso.set_derivative)(mknobX, Sparso.DERIVATIVE_TYPE_TRANSPOSE, mknobXT)
 
-  fknob_spmv1 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv1)
-  fknob_spmv2 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobXT, fknob_spmv2)
-  fknob_spmv3 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv3)
-  fknob_spmv4 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spmv4)
-  fknob_spmv5 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobXT, fknob_spmv5)
+  fknob_spmv1 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spmv1)
+  fknob_spmv2 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobXT, fknob_spmv2)
+  fknob_spmv3 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spmv3)
+  fknob_spmv4 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spmv4)
+  fknob_spmv5 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobXT, fknob_spmv5)
 
-  (SparseAccelerator.set_reordering_decision_maker)(fknob_spmv1)
+  (Sparso.set_reordering_decision_maker)(fknob_spmv1)
 
   spmv_count = 0
 
@@ -428,41 +428,41 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k, do_print)
   for it=1:100
     spmv_time -= time()
     #Xw = X*x
-    SparseAccelerator.SpMV!(Xw, X, x, fknob_spmv1)
+    Sparso.SpMV!(Xw, X, x, fknob_spmv1)
     spmv_count += 1
     spmv_time += time()
 
-    SparseAccelerator.reordering(
+    Sparso.reordering(
       fknob_spmv1,
       reordering_status,
-      Xt, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, mknobXT,
+      Xt, Sparso.COL_PERM, Sparso.ROW_INV_PERM, mknobXT,
       :__delimitor__,
-      y, SparseAccelerator.ROW_PERM
+      y, Sparso.ROW_PERM
     )
 
     #yXw = y.*Xw
-    SparseAccelerator.element_wise_multiply!(yXw, y, Xw)
+    Sparso.element_wise_multiply!(yXw, y, Xw)
 
     log_time -= time()
     #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
     #fk0 = s/m+(lambda/2)*norm(x)^2
-    fk0 = SparseAccelerator.lbfgs_loss_function1(yXw, x, lambda)
+    fk0 = Sparso.lbfgs_loss_function1(yXw, x, lambda)
     #temp = y./(1+exp(yXw))
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
     #dfk = -(Xt*temp)/m + lambda*x
-    SparseAccelerator.SpMV!(dfk, -1/m, Xt, temp, lambda, x, 0, fknob_spmv2)
+    Sparso.SpMV!(dfk, -1/m, Xt, temp, lambda, x, 0, fknob_spmv2)
     spmv_count += 1
     spmv_time += time()
 
-    if (SparseAccelerator.norm(dfk) < tol)
+    if (Sparso.norm(dfk) < tol)
       break;
     end
 
     direction_time -= time()
-    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
+    Sparso.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -474,23 +474,23 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k, do_print)
     while true
       # logistic loss objective funcion
       #w = x - alpha*dfk
-      SparseAccelerator.WAXPBY!(w, 1, x, -alpha, dfk)
+      Sparso.WAXPBY!(w, 1, x, -alpha, dfk)
 
       spmv_time -= time()
       #Xw = X*w
-      SparseAccelerator.SpMV!(Xw, X, w, fknob_spmv3)
+      Sparso.SpMV!(Xw, X, w, fknob_spmv3)
       spmv_count += 1
       spmv_time += time()
-      SparseAccelerator.element_wise_multiply!(yXw, y, Xw)
+      Sparso.element_wise_multiply!(yXw, y, Xw)
 
       log_time -= time()
       #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
       #fk = s/m+(lambda/2)*norm(w)^2
-      fk = SparseAccelerator.lbfgs_loss_function1(yXw, w, lambda)
+      fk = Sparso.lbfgs_loss_function1(yXw, w, lambda)
       log_time += time()
       # end objective function
 
-      if (fk <= fk0 - c_1*alpha*SparseAccelerator.dot(dfk, dfk))
+      if (fk <= fk0 - c_1*alpha*Sparso.dot(dfk, dfk))
         break
       end
 
@@ -506,45 +506,45 @@ function lbfgs_opt_with_reordering(X, y, lambda, xinit, tol, k, do_print)
     #@printf("[%5d]%10.3e%10.3e%10.7f\n", it, alpha, norm(dfk), fk0)
 
     #x = x + alpha*dx
-    SparseAccelerator.WAXPBY!(x, 1, x, alpha, dx)
+    Sparso.WAXPBY!(x, 1, x, alpha, dx)
 
     spmv_time -= time()
-    SparseAccelerator.SpMV!(Xw, X, x, fknob_spmv4)
+    Sparso.SpMV!(Xw, X, x, fknob_spmv4)
     spmv_count += 1
     spmv_time += time()
 
-    SparseAccelerator.element_wise_multiply!(yXw, y, Xw)
+    Sparso.element_wise_multiply!(yXw, y, Xw)
 
     log_time -= time()
     #temp = y./(1+exp(yXw))
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
     #dfkp1 = -(Xt*temp)/m + lambda*x
-    SparseAccelerator.SpMV!(dfkp1, -1/m, Xt, temp, lambda, x, 0, fknob_spmv5)
+    Sparso.SpMV!(dfkp1, -1/m, Xt, temp, lambda, x, 0, fknob_spmv5)
     spmv_count += 1
     spmv_time += time()
 
     #S[:,(it - 1)%k + 1] = alpha*dx
-    S[:, (it - 1)%k + 1] = SparseAccelerator.WAXPBY(alpha, dx, 0, dx)
+    S[:, (it - 1)%k + 1] = Sparso.WAXPBY(alpha, dx, 0, dx)
     #Y[:,(it - 1)%k + 1] = dfkp1 - dfk
-    Y[:, (it - 1)%k + 1] = SparseAccelerator.WAXPBY(1, dfkp1, -1, dfk)
+    Y[:, (it - 1)%k + 1] = Sparso.WAXPBY(1, dfkp1, -1, dfk)
   end
 
-  SparseAccelerator.reverse_reordering(
+  Sparso.reverse_reordering(
     reordering_status,
     :__delimitor__,
-    x, SparseAccelerator.COL_PERM)
+    x, Sparso.COL_PERM)
 
   if do_print
     bytes = (nnz(X)*12. + (size(X,1) + size(X,2))*8)*spmv_count
 
     println("\nSpMV takes $spmv_time sec ($(bytes/spmv_time/1e9) gbps).")
 
-    spmv_time = SparseAccelerator.get_spmp_spmv_time()
+    spmv_time = Sparso.get_spmp_spmv_time()
     println("time spent on spmp spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
-    spmv_time = SparseAccelerator.get_knob_spmv_time()
+    spmv_time = Sparso.get_knob_spmv_time()
     println("time spent on knob spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
 
     println("log takes $log_time sec.")

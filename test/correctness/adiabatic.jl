@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
@@ -398,7 +398,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
 
       q0 = q1
       #q1 = uk/beta[k + 1]
-      q1 = SparseAccelerator.WAXPB(1/beta[k+1], uk, 0) 
+      q1 = Sparso.WAXPB(1/beta[k+1], uk, 0) 
     end
 
     TT = SymTridiagonal(alpha, beta[2:nit])
@@ -424,23 +424,23 @@ function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
   total_time = -time()
 
   if with_context_opt
-    __mknobHdmat = (SparseAccelerator.new_matrix_knob)(:Hdmat, true, true, true, true, true, false)
+    __mknobHdmat = (Sparso.new_matrix_knob)(:Hdmat, true, true, true, true, true, false)
 
-    fknob_spmv1 = (SparseAccelerator.new_function_knob)()
-    fknob_spmv2 = (SparseAccelerator.new_function_knob)()
-    fknob_spmv3 = (SparseAccelerator.new_function_knob)()
-    fknob_spmv4 = (SparseAccelerator.new_function_knob)()
-    fknob_spmv5 = (SparseAccelerator.new_function_knob)()
-    fknob_spmv6 = (SparseAccelerator.new_function_knob)()
-    fknob_spmv7 = (SparseAccelerator.new_function_knob)()
+    fknob_spmv1 = (Sparso.new_function_knob)()
+    fknob_spmv2 = (Sparso.new_function_knob)()
+    fknob_spmv3 = (Sparso.new_function_knob)()
+    fknob_spmv4 = (Sparso.new_function_knob)()
+    fknob_spmv5 = (Sparso.new_function_knob)()
+    fknob_spmv6 = (Sparso.new_function_knob)()
+    fknob_spmv7 = (Sparso.new_function_knob)()
 
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
   else
     fknob_spmv1 = C_NULL 
     fknob_spmv2 = C_NULL
@@ -526,91 +526,91 @@ function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
       # Compute the step
       s = t/T # real
       #w = copy(wi)
-      SparseAccelerator.copy!(w, wi)
+      Sparso.copy!(w, wi)
       spmv_time -= time()
       #s1 = -(1 - s)*Hdmat*w + s*d.*w
-      SparseAccelerator.element_wise_multiply!(temp, d, w)
-      SparseAccelerator.SpMV!(s1, s - 1, Hdmat, w, s, temp, fknob_spmv1)
+      Sparso.element_wise_multiply!(temp, d, w)
+      Sparso.SpMV!(s1, s - 1, Hdmat, w, s, temp, fknob_spmv1)
       spmv_time += time()
 
       s = (t + 0.25*h)/T
       #w = wi + -im*0.25*h*s1
-      SparseAccelerator.WAXPBY!(w, 1, wi, -im*0.25*h, s1)
+      Sparso.WAXPBY!(w, 1, wi, -im*0.25*h, s1)
       spmv_time -= time()
       #s2 = -(1 - s)*Hdmat*w + s*d.*w
-      SparseAccelerator.element_wise_multiply!(temp, d, w)
-      SparseAccelerator.SpMV!(s2, s - 1, Hdmat, w, s, temp, fknob_spmv2)
+      Sparso.element_wise_multiply!(temp, d, w)
+      Sparso.SpMV!(s2, s - 1, Hdmat, w, s, temp, fknob_spmv2)
       spmv_time += time()
 
       s = (t + c30*h)/T
       #w = wi + c31*h*s1 + c32*h*s2
-      SparseAccelerator.WAXPBY!(w, 1, wi, c31*h, s1)
-      SparseAccelerator.WAXPBY!(w, 1, w, c32*h, s2)
+      Sparso.WAXPBY!(w, 1, wi, c31*h, s1)
+      Sparso.WAXPBY!(w, 1, w, c32*h, s2)
       spmv_time -= time()
       #s3 = -(1 - s)*Hdmat*w + s*d.*w
-      SparseAccelerator.element_wise_multiply!(temp, d, w)
-      SparseAccelerator.SpMV!(s3, s - 1, Hdmat, w, s, temp, fknob_spmv3)
+      Sparso.element_wise_multiply!(temp, d, w)
+      Sparso.SpMV!(s3, s - 1, Hdmat, w, s, temp, fknob_spmv3)
       spmv_time += time()
 
       s = (t + c40*h)/T
       #w = wi + c41*h*s1 + c42*h*s2 + c43*h*s3
-      SparseAccelerator.WAXPBY!(w, 1, wi, c41*h, s1)
-      SparseAccelerator.WAXPBY!(w, 1, w, c42*h, s2)
-      SparseAccelerator.WAXPBY!(w, 1, w, c43*h, s3)
+      Sparso.WAXPBY!(w, 1, wi, c41*h, s1)
+      Sparso.WAXPBY!(w, 1, w, c42*h, s2)
+      Sparso.WAXPBY!(w, 1, w, c43*h, s3)
       spmv_time -= time()
       #s4 = -(1 - s)*Hdmat*w + s*d.*w
-      SparseAccelerator.element_wise_multiply!(temp, d, w)
-      SparseAccelerator.SpMV!(s4, s - 1, Hdmat, w, s, temp, fknob_spmv4)
+      Sparso.element_wise_multiply!(temp, d, w)
+      Sparso.SpMV!(s4, s - 1, Hdmat, w, s, temp, fknob_spmv4)
       spmv_time += time()
 
       s = (t + h)/T
       #w = wi + c51*h*s1 + c52*h*s2 + c53*h*s3 + c54*h*s4
-      SparseAccelerator.WAXPBY!(w, 1, wi, c51*h, s1)
-      SparseAccelerator.WAXPBY!(w, 1, w, c52*h, s2)
-      SparseAccelerator.WAXPBY!(w, 1, w, c53*h, s3)
-      SparseAccelerator.WAXPBY!(w, 1, w, c54*h, s4)
+      Sparso.WAXPBY!(w, 1, wi, c51*h, s1)
+      Sparso.WAXPBY!(w, 1, w, c52*h, s2)
+      Sparso.WAXPBY!(w, 1, w, c53*h, s3)
+      Sparso.WAXPBY!(w, 1, w, c54*h, s4)
       spmv_time -= time()
       #s5 = -(1 - s)*Hdmat*w + s*d.*w
-      SparseAccelerator.element_wise_multiply!(temp, d, w)
-      SparseAccelerator.SpMV!(s5, s - 1, Hdmat, w, s, temp, fknob_spmv5)
+      Sparso.element_wise_multiply!(temp, d, w)
+      Sparso.SpMV!(s5, s - 1, Hdmat, w, s, temp, fknob_spmv5)
       spmv_time += time()
 
       s = (t + 0.5*h)/T
       #w = wi + c61*h*s1 + c62*h*s2 + c63*h*s3 + c64*h*s4 + c65*h*s5
-      SparseAccelerator.WAXPBY!(w, 1, wi, c61*h, s1)
-      SparseAccelerator.WAXPBY!(w, 1, w, c62*h, s2)
-      SparseAccelerator.WAXPBY!(w, 1, w, c63*h, s3)
-      SparseAccelerator.WAXPBY!(w, 1, w, c64*h, s4)
-      SparseAccelerator.WAXPBY!(w, 1, w, c65*h, s5)
+      Sparso.WAXPBY!(w, 1, wi, c61*h, s1)
+      Sparso.WAXPBY!(w, 1, w, c62*h, s2)
+      Sparso.WAXPBY!(w, 1, w, c63*h, s3)
+      Sparso.WAXPBY!(w, 1, w, c64*h, s4)
+      Sparso.WAXPBY!(w, 1, w, c65*h, s5)
       spmv_time -= time()
       #s6 = -(1 - s)*Hdmat*w + s*d.*w
-      SparseAccelerator.element_wise_multiply!(temp, d, w)
-      SparseAccelerator.SpMV!(s6, s - 1, Hdmat, w, s, temp, fknob_spmv6)
+      Sparso.element_wise_multiply!(temp, d, w)
+      Sparso.SpMV!(s6, s - 1, Hdmat, w, s, temp, fknob_spmv6)
       spmv_time += time()
 
       #z = wi + h*(cz1*s1 + cz3*s3 + cz4*s4 + cz5*s5 + cz6*s6)
-      SparseAccelerator.WAXPBY!(w, cz1, s1, cz3, s3)
-      SparseAccelerator.WAXPBY!(w, 1, w, cz4, s4)
-      SparseAccelerator.WAXPBY!(w, 1, w, cz5, s5)
-      SparseAccelerator.WAXPBY!(w, 1, w, cz6, s6)
-      SparseAccelerator.WAXPBY!(z, 1, wi, h, w)
+      Sparso.WAXPBY!(w, cz1, s1, cz3, s3)
+      Sparso.WAXPBY!(w, 1, w, cz4, s4)
+      Sparso.WAXPBY!(w, 1, w, cz5, s5)
+      Sparso.WAXPBY!(w, 1, w, cz6, s6)
+      Sparso.WAXPBY!(z, 1, wi, h, w)
       #e = h * norm(ce1*s1 + ce3*s3 + ce4*s4 + ce5*s5 + ce6*s6) # real
-      SparseAccelerator.WAXPBY!(w, ce1, s1, ce3, s3)
-      SparseAccelerator.WAXPBY!(w, 1, w, ce4, s4)
-      SparseAccelerator.WAXPBY!(w, 1, w, ce5, s5)
-      SparseAccelerator.WAXPBY!(w, 1, w, ce6, s6)
-      e = h*SparseAccelerator.norm(w)
+      Sparso.WAXPBY!(w, ce1, s1, ce3, s3)
+      Sparso.WAXPBY!(w, 1, w, ce4, s4)
+      Sparso.WAXPBY!(w, 1, w, ce5, s5)
+      Sparso.WAXPBY!(w, 1, w, ce6, s6)
+      e = h*Sparso.norm(w)
       
       # Target tolerance for this step
-      target_tol = rtol*SparseAccelerator.norm(wi) + atol
+      target_tol = rtol*Sparso.norm(wi) + atol
       if e <= target_tol # In case the tolerance is met
           t = t + h
           h = alpha*h*(target_tol/e)^0.2
           i = i + 1
           push!(Tv, t)
-          SparseAccelerator.copy!(wi, z)
-          push!(meanenergy, SparseAccelerator.dot(SparseAccelerator.abs(z).^2, d))
-          push!(variance, SparseAccelerator.dot(SparseAccelerator.abs(z).^2, (d - meanenergy[end]).^2))
+          Sparso.copy!(wi, z)
+          push!(meanenergy, Sparso.dot(Sparso.abs(z).^2, d))
+          push!(variance, Sparso.dot(Sparso.abs(z).^2, (d - meanenergy[end]).^2))
           k = 0
       elseif k == 0 # Tolerance is not met for the first time in this step
           h = alpha*h*(target_tol/e)^0.2
@@ -647,28 +647,28 @@ function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
     s = Tv[i]/T
 
     q0 = zeros(nsets)
-    #q1 = x0/SparseAccelerator.norm(x0)
-    SparseAccelerator.WAXPB!(temp5, 1/SparseAccelerator.norm(x0), x0, 0) 
+    #q1 = x0/Sparso.norm(x0)
+    Sparso.WAXPB!(temp5, 1/Sparso.norm(x0), x0, 0) 
     q1 = temp5
 
     for k = 1:nit
       spmv_time -= time()
       #uk = -(1 - s)*Hdmat*q1 + s*d.*q1
-      SparseAccelerator.element_wise_multiply!(temp2, d, q1)
-      SparseAccelerator.SpMV!(uk, s - 1, Hdmat, q1, s, temp2, 0, fknob_spmv7)
+      Sparso.element_wise_multiply!(temp2, d, q1)
+      Sparso.SpMV!(uk, s - 1, Hdmat, q1, s, temp2, 0, fknob_spmv7)
       spmv_time += time()
 
       #alpha[k] = dot(q1, uk)
-      alpha[k] = SparseAccelerator.dot(q1, uk)
+      alpha[k] = Sparso.dot(q1, uk)
 
       #uk -= beta[k]*q0 + alpha[k]*q1
-      #SparseAccelerator.WAXPBY!(uk, 1, uk, -beta[k], q0)
-      #SparseAccelerator.WAXPBY!(uk, 1, uk, -alpha[k], q1)
-      SparseAccelerator.WAXPBY!(temp3, beta[k], q0, alpha[k], q1)
-      SparseAccelerator.WAXPBY!(uk, 1, uk, -1, temp3)
+      #Sparso.WAXPBY!(uk, 1, uk, -beta[k], q0)
+      #Sparso.WAXPBY!(uk, 1, uk, -alpha[k], q1)
+      Sparso.WAXPBY!(temp3, beta[k], q0, alpha[k], q1)
+      Sparso.WAXPBY!(uk, 1, uk, -1, temp3)
 
       #beta[k + 1] = norm(uk)
-      beta[k + 1] = SparseAccelerator.norm(uk)
+      beta[k + 1] = Sparso.norm(uk)
 
       if beta[k + 1] == 0
         println("Error")
@@ -677,7 +677,7 @@ function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
 
       q0 = q1
       #q1 = uk/beta[k + 1]
-      SparseAccelerator.WAXPB!(temp5, 1/beta[k+1], uk, 0) 
+      Sparso.WAXPB!(temp5, 1/beta[k+1], uk, 0) 
       q1 = temp5
     end
 
@@ -693,15 +693,15 @@ function abiatic_opt(Hdmat, d, nqbits, T, with_context_opt)
   optimalenergy = minimum(d)
 
   if with_context_opt
-    (SparseAccelerator.delete_matrix_knob)(__mknobHdmat)
+    (Sparso.delete_matrix_knob)(__mknobHdmat)
 
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv1)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv2)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv3)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv4)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv5)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv6)
+    (Sparso.add_mknob_to_fknob)(__mknobHdmat, fknob_spmv7)
   end
 
   total_time += time()
@@ -745,7 +745,7 @@ if contains(tests, "O")
   println("\nEND Oringinal.")
 end
 
-#SparseAccelerator.set_knob_log_level(1)
+#Sparso.set_knob_log_level(1)
 
 if contains(tests, "M")
   println("\nManual_call_replacement:")

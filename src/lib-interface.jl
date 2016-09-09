@@ -124,10 +124,10 @@ const DERIVATIVE_TYPE_LOWER_TRIANGULAR = 2
 const DERIVATIVE_TYPE_UPPER_TRIANGULAR = 3
 
 const int2derivative_map = Dict(
-    0 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_TRANSPOSE),
-    1 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_SYMMETRIC),
-    2 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_LOWER_TRIANGULAR),
-    3 => GlobalRef(SparseAccelerator, :DERIVATIVE_TYPE_UPPER_TRIANGULAR)
+    0 => GlobalRef(Sparso, :DERIVATIVE_TYPE_TRANSPOSE),
+    1 => GlobalRef(Sparso, :DERIVATIVE_TYPE_SYMMETRIC),
+    2 => GlobalRef(Sparso, :DERIVATIVE_TYPE_LOWER_TRIANGULAR),
+    3 => GlobalRef(Sparso, :DERIVATIVE_TYPE_UPPER_TRIANGULAR)
 )
 
 @doc """ Delete a matrix knob. """

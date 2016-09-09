@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
 
@@ -87,10 +87,10 @@ p2 = copy(p)
 @acc x= pagerank(A, p2, r, maxiter)
 
 println("\nAccelerated without reordering: ")
-SparseAccelerator.reset_spmp_spmv_time()
-SparseAccelerator.reset_knob_spmv_time()
+Sparso.reset_spmp_spmv_time()
+Sparso.reset_knob_spmv_time()
 @acc x= pagerank(A, p, r, maxiter)
-t = SparseAccelerator.get_spmp_spmv_time()
+t = Sparso.get_spmp_spmv_time()
 println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
-t = SparseAccelerator.get_knob_spmv_time()
+t = Sparso.get_knob_spmv_time()
 println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")

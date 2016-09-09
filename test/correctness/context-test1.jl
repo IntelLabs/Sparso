@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
@@ -94,7 +94,7 @@ function pcg_symgs(x, A, b, tol, maxiter)
         old_rz = rz
 
         spmv_time -= time()
-        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        Ap = A*p # Ap = Sparso.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
         spmv_time += time()
 
         blas1_time -= time()

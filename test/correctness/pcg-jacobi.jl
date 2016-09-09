@@ -36,18 +36,18 @@ function pcg_jacobi(x, A, b, tol, maxiter)
     k = 1
     while k <= maxiter
         old_rz = rz
-        Ap = A*p #Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
-        alpha = old_rz / dot(p, Ap) #alpha = old_rz / SparseAccelerator.dot(p, Ap) # manual
-        x += alpha * p #SparseAccelerator.WAXPBY!(x, alpha, p, 1, x) # manual
-        r -= alpha * Ap #SparseAccelerator.WAXPBY!(r, -alpha, Ap, 1, r) # manual
-        rel_err = sqrt(dot(r, r))/normr0 #rel_err = sqrt(SparseAccelerator.dot(r, r))/normr0 # manual
+        Ap = A*p #Ap = Sparso.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
+        alpha = old_rz / dot(p, Ap) #alpha = old_rz / Sparso.dot(p, Ap) # manual
+        x += alpha * p #Sparso.WAXPBY!(x, alpha, p, 1, x) # manual
+        r -= alpha * Ap #Sparso.WAXPBY!(r, -alpha, Ap, 1, r) # manual
+        rel_err = sqrt(dot(r, r))/normr0 #rel_err = sqrt(Sparso.dot(r, r))/normr0 # manual
         if rel_err < tol 
             break
         end
-        z = inv_d .* r #z = SparseAccelerator.element_wise_multiply(inv_d, r)
-        rz = dot(r, z) #rz = SparseAccelerator.dot(r, z) # manual
+        z = inv_d .* r #z = Sparso.element_wise_multiply(inv_d, r)
+        rz = dot(r, z) #rz = Sparso.dot(r, z) # manual
         beta = rz/old_rz
-        p = z + beta * p #SparseAccelerator.WAXPBY!(p, 1, z, beta, p) # manual
+        p = z + beta * p #Sparso.WAXPBY!(p, 1, z, beta, p) # manual
         k += 1
     end
     return x, k, rel_err

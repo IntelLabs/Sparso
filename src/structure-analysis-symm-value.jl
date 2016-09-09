@@ -27,7 +27,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 module StructureAnalysisSymmValue
 
-    using SparseAccelerator: Sym, Symexpr, TypedExprNode
+    using Sparso: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
 
     function symbolize(e :: Symexpr, tp :: Type)

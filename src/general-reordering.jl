@@ -692,11 +692,11 @@ function add_permutation_vector(
     assert(perm == NOT_PERM_YET || perm == ROW_PERM || perm == ROW_INV_PERM || 
            perm == COL_PERM || perm == COL_INV_PERM)
     push!(new_expr.args, 
-          perm == NOT_PERM_YET ? GlobalRef(SparseAccelerator, :NOT_PERM_YET) : 
-          perm == ROW_PERM ? GlobalRef(SparseAccelerator, :ROW_PERM) :
-          perm == ROW_INV_PERM ? GlobalRef(SparseAccelerator, :ROW_INV_PERM) :
-          perm == COL_PERM ? GlobalRef(SparseAccelerator, :COL_PERM) :
-          GlobalRef(SparseAccelerator, :COL_INV_PERM))
+          perm == NOT_PERM_YET ? GlobalRef(Sparso, :NOT_PERM_YET) : 
+          perm == ROW_PERM ? GlobalRef(Sparso, :ROW_PERM) :
+          perm == ROW_INV_PERM ? GlobalRef(Sparso, :ROW_INV_PERM) :
+          perm == COL_PERM ? GlobalRef(Sparso, :COL_PERM) :
+          GlobalRef(Sparso, :COL_INV_PERM))
 end
 
 @doc """
@@ -850,7 +850,7 @@ function create_reorder_actions(
     push!(actions, action_before_region)
 
     restriction = graph.perm_restriction
-    stmt        = Expr(:call, GlobalRef(SparseAccelerator, :set_reordering_decision_maker), fknob, restriction)
+    stmt        = Expr(:call, GlobalRef(Sparso, :set_reordering_decision_maker), fknob, restriction)
     push!(action_before_region.new_stmts,  Statement(0, stmt))
 
     reordering_status = new_symbol("reordering_status")
@@ -869,7 +869,7 @@ function create_reorder_actions(
                             false, decider_bb, decider_stmt_idx)
     push!(actions, inside_region_action)
     
-    stmt = Expr(:call, GlobalRef(SparseAccelerator, :reordering),
+    stmt = Expr(:call, GlobalRef(Sparso, :reordering),
                  fknob, reordering_status)
     push!(inside_region_action.new_stmts,  Statement(0, stmt))
 
@@ -891,7 +891,7 @@ function create_reorder_actions(
             action  = InsertBeforeOrAfterStatement(Vector{Statement}(), true, pred_bb, len)
             push!(actions, action)
 
-            stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
+            stmt = Expr(:call, GlobalRef(Sparso, :reverse_reordering),
                          reordering_status)
             push!(action.new_stmts,  Statement(0, stmt))
             
@@ -904,7 +904,7 @@ function create_reorder_actions(
             action = InsertOnEdge(Vector{Statement}(), exit.from_bb, exit.to_bb)
             push!(actions, action)
     
-            stmt = Expr(:call, GlobalRef(SparseAccelerator, :reverse_reordering),
+            stmt = Expr(:call, GlobalRef(Sparso, :reverse_reordering),
                          reordering_status)
             push!(action.new_stmts,  Statement(0, stmt))
         

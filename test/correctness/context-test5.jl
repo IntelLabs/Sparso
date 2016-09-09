@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
@@ -52,7 +52,7 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     spmv_time = 0.
     blas1_time = 0.
 
-    L, U = SparseAccelerator.ilu(A)
+    L, U = Sparso.ilu(A)
 
     spmv_time -= time()
     r = b - A * x
@@ -97,8 +97,8 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
         old_rz = rz
 
         spmv_time -= time()
-        #Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
-        #SparseAccelerator.SpMV!(Ap, A, p)
+        #Ap = A*p # Ap = Sparso.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        #Sparso.SpMV!(Ap, A, p)
         # TODO: remove A_mul_B!. Use A*p once object removal works
         A_mul_B!(Ap, A, p)
         spmv_time += time()
@@ -156,16 +156,16 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
     dot_time = 0.
     blas1_time = 0.
 
-    L, U = SparseAccelerator.ilu(A)
+    L, U = Sparso.ilu(A)
 
     spmv_time -= time()
     #r = b - A * x
-    r = b - SparseAccelerator.SpMV(A,x)
+    r = b - Sparso.SpMV(A,x)
     spmv_time += time()
 
     blas1_time -= time()
     #normr0 = norm(r)
-    normr0 = SparseAccelerator.norm(r)
+    normr0 = Sparso.norm(r)
     z = copy(r)
     blas1_time += time()
 
@@ -179,42 +179,42 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
     blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     #rz = dot(r, z)
-    rz = SparseAccelerator.dot(r,z)
+    rz = Sparso.dot(r,z)
     blas1_time += time()
 
     k = 1
 
-    __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, false, false)
-    __mknobL = (SparseAccelerator.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
-    __mknobU = (SparseAccelerator.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
+    __mknobA = (Sparso.new_matrix_knob)(:A, true, true, true, true, false, false)
+    __mknobL = (Sparso.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
+    __mknobU = (Sparso.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
 
-    (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
-    (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
+    (Sparso.set_derivative)(__mknobL, Sparso.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
+    (Sparso.set_derivative)(__mknobU, Sparso.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
 
-    fknob_spmv = (SparseAccelerator.new_function_knob)()
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobA,fknob_spmv)
-    __fknob_8201 = (SparseAccelerator.new_function_knob)()
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
-    __fknob_8221 = (SparseAccelerator.new_function_knob)()
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
+    fknob_spmv = (Sparso.new_function_knob)()
+    (Sparso.add_mknob_to_fknob)(__mknobA,fknob_spmv)
+    __fknob_8201 = (Sparso.new_function_knob)()
+    (Sparso.add_mknob_to_fknob)(__mknobL,__fknob_8201)
+    __fknob_8221 = (Sparso.new_function_knob)()
+    (Sparso.add_mknob_to_fknob)(__mknobU,__fknob_8221)
 
     while k <= maxiter
         old_rz = rz
 
         spmv_time -= time()
         #Ap = A*p
-        SparseAccelerator.SpMV!(Ap, A,p,fknob_spmv)
+        Sparso.SpMV!(Ap, A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
         #alpha = old_rz / dot(p, Ap)
-        alpha = old_rz / SparseAccelerator.dot(p, Ap)
+        alpha = old_rz / Sparso.dot(p, Ap)
         #x += alpha * p
-        SparseAccelerator.WAXPBY!(x,1,x,alpha,p)
+        Sparso.WAXPBY!(x,1,x,alpha,p)
         #r -= alpha * Ap
-        SparseAccelerator.WAXPBY!(r,1,r,-alpha,Ap)
+        Sparso.WAXPBY!(r,1,r,-alpha,Ap)
         #rel_err = norm(r)/normr0
-        rel_err = SparseAccelerator.norm(r)/normr0
+        rel_err = Sparso.norm(r)/normr0
         blas1_time += time()
 
         if rel_err < tol 
@@ -223,30 +223,30 @@ function pcg_symgs_ilu0_with_context_opt_without_reordering(x, A, b, tol, maxite
 
         blas1_time -= time()
         #z = copy(r)
-        SparseAccelerator.copy!(z, r)
+        Sparso.copy!(z, r)
         blas1_time += time()
 
         trsv_time -= time()
         #Base.SparseMatrix.fwdTriSolve!(L, z)
-        SparseAccelerator.fwdTriSolve!(L, z, __fknob_8201)
+        Sparso.fwdTriSolve!(L, z, __fknob_8201)
         #Base.SparseMatrix.bwdTriSolve!(U, z)
-        SparseAccelerator.bwdTriSolve!(U, z, __fknob_8221)
+        Sparso.bwdTriSolve!(U, z, __fknob_8221)
         trsv_time += time()
 
         blas1_time -= time()
         #rz = dot(r, z)
-        rz = SparseAccelerator.dot(r,z)
+        rz = Sparso.dot(r,z)
         beta = rz/old_rz
         #p = z + beta * p
-        SparseAccelerator.WAXPBY!(p,1,z,beta,p)
+        Sparso.WAXPBY!(p,1,z,beta,p)
         blas1_time += time()
 
         k += 1
     end
 
-    (SparseAccelerator.delete_function_knob)(__fknob_8221)
-    (SparseAccelerator.delete_function_knob)(__fknob_8201)
-    (SparseAccelerator.delete_matrix_knob)(__mknobL)
+    (Sparso.delete_function_knob)(__fknob_8221)
+    (Sparso.delete_function_knob)(__fknob_8201)
+    (Sparso.delete_matrix_knob)(__mknobL)
     
     if do_print
       total_time = time() - total_time
@@ -270,16 +270,16 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
     blas1_time = 0.
     reorder_time = 0.
 
-    L, U = SparseAccelerator.ilu(A)
+    L, U = Sparso.ilu(A)
 
     spmv_time -= time()
     #r = b - A * x
-    r = b - SparseAccelerator.SpMV(A,x)
+    r = b - Sparso.SpMV(A,x)
     spmv_time += time()
 
     blas1_time -= time()
     #normr0 = norm(r)
-    normr0 = SparseAccelerator.norm(r)
+    normr0 = Sparso.norm(r)
     z = copy(r)
     blas1_time += time()
 
@@ -293,31 +293,31 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
     blas1_time -= time()
     p = copy(z) #NOTE: do not write "p=z"! That would make p and z aliased (the same variable)
     #rz = dot(r, z)
-    rz = SparseAccelerator.dot(r,z)
+    rz = Sparso.dot(r,z)
     blas1_time += time()
 
     k = 1
 
-    __mknobA = (SparseAccelerator.new_matrix_knob)(:A, true, true, true, true, false, false)
-    __mknobL = (SparseAccelerator.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
-    __mknobU = (SparseAccelerator.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
+    __mknobA = (Sparso.new_matrix_knob)(:A, true, true, true, true, false, false)
+    __mknobL = (Sparso.new_matrix_knob)(:L, true, true, false, false, false, false) # matrix knob for L
+    __mknobU = (Sparso.new_matrix_knob)(:U, true, true, false, false, false, false) # matrix knob for L
 
-    (SparseAccelerator.set_derivative)(__mknobL, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
-    (SparseAccelerator.set_derivative)(__mknobU, SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
+    (Sparso.set_derivative)(__mknobL, Sparso.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
+    (Sparso.set_derivative)(__mknobU, Sparso.DERIVATIVE_TYPE_SYMMETRIC, __mknobA)
 
-    fknob_spmv = (SparseAccelerator.new_function_knob)()
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobA,fknob_spmv)
-    __fknob_8201 = (SparseAccelerator.new_function_knob)()
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobL,__fknob_8201)
-    __fknob_8221 = (SparseAccelerator.new_function_knob)()
-    (SparseAccelerator.add_mknob_to_fknob)(__mknobU,__fknob_8221)
+    fknob_spmv = (Sparso.new_function_knob)()
+    (Sparso.add_mknob_to_fknob)(__mknobA,fknob_spmv)
+    __fknob_8201 = (Sparso.new_function_knob)()
+    (Sparso.add_mknob_to_fknob)(__mknobL,__fknob_8201)
+    __fknob_8221 = (Sparso.new_function_knob)()
+    (Sparso.add_mknob_to_fknob)(__mknobU,__fknob_8221)
 
     # Set up reordering:
-    # Let SparseAccelerator.fwdTriSolve! decides what permutation/inverse
+    # Let Sparso.fwdTriSolve! decides what permutation/inverse
     # permutation vector should be, and reorders its inputs andoutputs accordingly.
     # Other functions just respect the decision, makes no decision, nor does any
     # reordering.
-    (SparseAccelerator.set_reordering_decision_maker)(__fknob_8201)
+    (Sparso.set_reordering_decision_maker)(__fknob_8201)
 
     # Reordering_status is a vector. See the comments in lib-interface.jl:
     # reordering() for the meaning of the elements
@@ -327,18 +327,18 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
 
         spmv_time -= time()
         #Ap = A*p
-        SparseAccelerator.SpMV!(Ap,A,p,fknob_spmv)
+        Sparso.SpMV!(Ap,A,p,fknob_spmv)
         spmv_time += time()
 
         blas1_time -= time()
         #alpha = old_rz / dot(p, Ap)
-        alpha = old_rz / SparseAccelerator.dot(p, Ap)
+        alpha = old_rz / Sparso.dot(p, Ap)
         #x += alpha * p
-        SparseAccelerator.WAXPBY!(x,1,x,alpha,p)
+        Sparso.WAXPBY!(x,1,x,alpha,p)
         #r -= alpha * Ap
-        SparseAccelerator.WAXPBY!(r,1,r,-alpha,Ap)
+        Sparso.WAXPBY!(r,1,r,-alpha,Ap)
         #rel_err = norm(r)/normr0
-        rel_err = SparseAccelerator.norm(r)/normr0
+        rel_err = Sparso.norm(r)/normr0
         blas1_time += time()
 
         if rel_err < tol 
@@ -347,50 +347,50 @@ function pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, do_print)
 
         blas1_time -= time()
         #z = copy(r)
-        SparseAccelerator.copy!(z, r)
+        Sparso.copy!(z, r)
         blas1_time += time()
 
         trsv_time -= time()
         #Base.SparseMatrix.fwdTriSolve!(L, z)
-        SparseAccelerator.fwdTriSolve!(L, z, __fknob_8201)
+        Sparso.fwdTriSolve!(L, z, __fknob_8201)
         trsv_time += time()
 
-        SparseAccelerator.reordering(
+        Sparso.reordering(
             __fknob_8201, 
             reordering_status, 
-            A, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, __mknobA,
-            U, SparseAccelerator.COL_PERM, SparseAccelerator.ROW_INV_PERM, __mknobU,
+            A, Sparso.COL_PERM, Sparso.ROW_INV_PERM, __mknobA,
+            U, Sparso.COL_PERM, Sparso.ROW_INV_PERM, __mknobU,
             :__delimitor__,
-            r, SparseAccelerator.ROW_PERM,
-            x, SparseAccelerator.COL_PERM,
-            p, SparseAccelerator.COL_PERM
+            r, Sparso.ROW_PERM,
+            x, Sparso.COL_PERM,
+            p, Sparso.COL_PERM
         )
 
         trsv_time -= time()
         #Base.SparseMatrix.bwdTriSolve!(U, z)
-        SparseAccelerator.bwdTriSolve!(U, z, __fknob_8221)
+        Sparso.bwdTriSolve!(U, z, __fknob_8221)
         trsv_time += time()
 
         blas1_time -= time()
         #rz = dot(r, z)
-        rz = SparseAccelerator.dot(r,z)
+        rz = Sparso.dot(r,z)
         beta = rz/old_rz
         #p = z + beta * p
-        SparseAccelerator.WAXPBY!(p,1,z,beta,p)
+        Sparso.WAXPBY!(p,1,z,beta,p)
         blas1_time += time()
 
         k += 1
     end
 
-    SparseAccelerator.reverse_reordering(
+    Sparso.reverse_reordering(
         reordering_status, 
         :__delimitor__, 
-        x, SparseAccelerator.COL_PERM
+        x, Sparso.COL_PERM
     )
 
-    (SparseAccelerator.delete_function_knob)(__fknob_8221)
-    (SparseAccelerator.delete_function_knob)(__fknob_8201)
-    (SparseAccelerator.delete_matrix_knob)(__mknobL)
+    (Sparso.delete_function_knob)(__fknob_8221)
+    (Sparso.delete_function_knob)(__fknob_8201)
+    (Sparso.delete_matrix_knob)(__mknobL)
 
     if do_print
       total_time = time() - total_time
@@ -429,9 +429,9 @@ println("\tOriginal rel_err=", rel_err)
 x, k, rel_err = pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, false)
 x = zeros(m)
 println("Opt_with_reordering: ")
-#SparseAccelerator.set_knob_log_level(1)
+#Sparso.set_knob_log_level(1)
 x, k, rel_err = pcg_symgs_ilu0_with_context_opt(x, A, b, tol, maxiter, true)
-#SparseAccelerator.set_knob_log_level(0)
+#Sparso.set_knob_log_level(0)
 println("\tOriginal k=", k)
 println("\tOriginal rel_err=", rel_err)
 
@@ -439,7 +439,7 @@ A2 = copy(A) # workaround that we change A in-place
 @acc x, k, rel_err = pcg_symgs_ilu0(x, A2, b, tol, maxiter)
 println("\nAccelerated: ")
 x = zeros(m)
-#SparseAccelerator.set_knob_log_level(1)
+#Sparso.set_knob_log_level(1)
 @acc x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
 println("\tAccelerated k=", k)
 println("\tAccelerated rel_err=", rel_err)

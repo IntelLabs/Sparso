@@ -26,8 +26,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 module StructureAnalysisLower
-    import SparseAccelerator
-    using SparseAccelerator: Sym, Symexpr, TypedExprNode, new_symbol
+    import Sparso
+    using Sparso: Sym, Symexpr, TypedExprNode, new_symbol
     using ..SymbolicAnalysis
 
     function symbolize(e :: Symexpr, tp :: Type, unique)
@@ -115,7 +115,7 @@ module StructureAnalysisLower
         ((:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC), A_mul_B_action),
 
         # ilu
-        ((:call, GlobalRef(SparseAccelerator, :ilu), SparseMatrixCSC), ilu_action),
+        ((:call, GlobalRef(Sparso, :ilu), SparseMatrixCSC), ilu_action),
         ((:call, TopNode(:indexed_next), Tuple{SparseMatrixCSC, SparseMatrixCSC}, 1, Int), index1_action),
         ((:call, TopNode(:getfield), Any, 1), getfield1_action),
 

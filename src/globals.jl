@@ -102,7 +102,7 @@ collective_structure_prediction_enabled = true
 trace_call_replacement        = false
 
 @doc """ 
-Set options for SparseAccelerator. The arguments can be any one or more 
+Set options for Sparso. The arguments can be any one or more 
 of the following: SA_VERBOSE, SA_USE_JULIA, SA_USE_MKL, SA_USE_SPMP. 
 They can appear in any order, except that 
 SA_USE_JULIA, SA_USE_MKL and SA_USE_SPMP are exclusive with each other, and the
@@ -113,7 +113,7 @@ function set_options(args...)
         if arg == SA_ENABLE
             if !sparse_acc_enabled
                 # Insert sparse accelerator as 1 pass into the optimization framework
-                sparse_accelerator_pass = OptFramework.optPass(SparseAccelerator.entry, true)
+                sparse_accelerator_pass = OptFramework.optPass(Sparso.entry, true)
                 #OptFramework.setOptPasses([sparse_accelerator_pass])
                 CompilerTools.OptFramework.addOptPass(sparse_accelerator_pass)
             end
@@ -263,7 +263,7 @@ function resolve_call_names(call_args :: Vector)
         # Example: :*
         function_name = string(call_args[1])
     elseif isa(call_args[1], TopNode) && length(call_args) == 3
-        # Example: top(getfield), SparseAccelerator,:SpMV
+        # Example: top(getfield), Sparso,:SpMV
         # special case: top(getfield), GenSym, ...
         if call_args[1] == TopNode(:getfield) && !isa(call_args[2], GenSym)
             module_name   = module_or_function_name(call_args[2])
@@ -290,7 +290,7 @@ function resolve_call_names(call_args :: Vector)
         #                    Main.Cdouble [GlobalRef]
         #                    Main.Cint [GlobalRef]
         # In this apply_type case, the function can be treated as an assignment.
-        # Example 2: (:call, top(getfield), SparseAccelerator,:SpMV)
+        # Example 2: (:call, top(getfield), Sparso,:SpMV)
         return resolve_call_names(call_args[1].args)
     end
     module_name, function_name
@@ -441,13 +441,13 @@ function new_symbol(s::ASCIIString)
 end
 
 @doc """ 
-Entry of SparseAccelerator. 
+Entry of Sparso. 
 """
 function entry(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     old_ast = copy(func_ast)
     new_ast = nothing
     try
-        dprintln(1, 0, "******************************* SparseAccelerator ******************************")
+        dprintln(1, 0, "******************************* Sparso ******************************")
         dprintln(1, 0, "Signature:")
         for i = 1 : length(func_args)
             if i == 1

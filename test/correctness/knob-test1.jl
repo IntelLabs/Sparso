@@ -30,16 +30,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # julia: SymGS.cpp:305: bool SpMP::getSymmetricNnzPattern(const SpMP::CSR *, int **, int **, int **, int **): Assertion `sym.isSymmetric(false, true)' failed.
 # Aborted (core dumped)
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
 include("./utils.jl")
-using SparseAccelerator
+using Sparso
 
 function pcg_symgs(x, A, b)
-    L, U = SparseAccelerator.ilu(A)
-    r = b - SparseAccelerator.SpMV(1,A,x)
+    L, U = Sparso.ilu(A)
+    r = b - Sparso.SpMV(1,A,x)
     z = copy(r)
-    SparseAccelerator.fwdTriSolve!(z,L,r, C_NULL)
+    Sparso.fwdTriSolve!(z,L,r, C_NULL)
 end
 
 A = matrix_market_read(ARGS[1], true, true)

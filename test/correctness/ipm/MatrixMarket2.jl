@@ -1,6 +1,6 @@
 module MatrixMarket2
 
-using SparseAccelerator
+using Sparso
 
 # Separate "infoonly" feature out of mmread() so that mmread() returns only a
 # single type: SparseMatrixCSC, instead of a union type
@@ -47,7 +47,7 @@ function mmread(filename, symmetric_only = false, force_symmetric = false)
 
     # Read into a COO array (stored statically insded mm_read)
     sizes::Vector{Cint} = [0, 0, 0, 0]
-    ccall((:load_matrix_market_step1, SparseAccelerator.libcsr), Void, 
+    ccall((:load_matrix_market_step1, Sparso.libcsr), Void, 
         (Ptr{Uint8}, Ptr{Cint}, Bool, Bool), filename, pointer(sizes), force_symmetric, false)
 
     is_symmetric::Cint = sizes[1] # 0/1: true/false    
@@ -66,12 +66,12 @@ function mmread(filename, symmetric_only = false, force_symmetric = false)
     A = SparseMatrixCSC{Cdouble, Cint}(m, n, j, i, v)
     
     # Convert the COO array to CSR array.
-    ccall((:load_matrix_market_step2, SparseAccelerator.libcsr), Void, 
+    ccall((:load_matrix_market_step2, Sparso.libcsr), Void, 
         (Ptr{Uint8}, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Bool),
         filename, pointer(j), pointer(i), pointer(v), pointer(sizes), true)
 
     #distance = div(nnz, 100); # print about 100 elements to check manually
-    #ccall((:CSR_PrintSomeValues, SparseAccelerator.libcsr), Void, 
+    #ccall((:CSR_PrintSomeValues, Sparso.libcsr), Void, 
         #(Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Bool),
         #m, n, pointer(j), pointer(i), pointer(v), convert(Cint, distance), true)
 
@@ -135,7 +135,7 @@ function mmread_reorder(filename)
     P          = Array(Cint, n)
     Pprime     = Array(Cint, n)
     
-    ccall((:CSR_ReorderMatrix, SparseAccelerator.libcsr), Void,
+    ccall((:CSR_ReorderMatrix, Sparso.libcsr), Void,
               (Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble},
                Ptr{Cint}, Ptr{Cint}, Bool, Bool, Bool),

@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)#, SA_DISABLE_COLLECTIVE_STRUCTURE_PREDICTION)
 
@@ -57,21 +57,21 @@ x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
 @printf "Original iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
 
 println("\n\nWithout context-sensitive optimization: ")
-SparseAccelerator.set_reuse_inspection(false)
+Sparso.set_reuse_inspection(false)
 @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
-SparseAccelerator.set_knob_log_level(1)
+Sparso.set_knob_log_level(1)
 @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
 @printf "\nAccelerated acc_total_time = %f\n" ref_total_time
 @printf "Accelerated spgemm = %f fact = %f blas1 = %f trslv = %f spmv = %f\n" spgemm_time fact_time blas1_time trslv_time spmv_time
 @printf "Accelerated iter %2i, resid = %9.2e, objval = %e\n" iter relResidual objval
-SparseAccelerator.set_reuse_inspection(true)
+Sparso.set_reuse_inspection(true)
 
 println("\n\nAccelerated: ")
 @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
-SparseAccelerator.set_knob_log_level(1)
+Sparso.set_knob_log_level(1)
 @acc x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_ref(A, b, p)
 @printf "\nAccelerated acc_total_time = %f\n" ref_total_time

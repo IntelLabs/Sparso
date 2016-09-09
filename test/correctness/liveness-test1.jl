@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 using CompilerTools
 using CompilerTools.CFGs
 using CompilerTools.OptFramework
@@ -38,7 +38,7 @@ function dump_liveness(func_ast :: Expr, func_arg_types :: Tuple, func_args)
     assert(func_ast.head == :lambda)
 
     LivenessAnalysis.set_use_inplace_naming_convention()
-    liveness = LivenessAnalysis.from_expr(func_ast)#, no_mod = SparseAccelerator.create_unmodified_args_dict())
+    liveness = LivenessAnalysis.from_expr(func_ast)#, no_mod = Sparso.create_unmodified_args_dict())
     println("Liveness:\n", liveness)
 
     func_ast
@@ -46,7 +46,7 @@ end
 
 sparse_pass = OptFramework.optPass(dump_liveness, true)
 OptFramework.setOptPasses([sparse_pass])
-#SparseAccelerator.set_debug_level(2)
+#Sparso.set_debug_level(2)
 
 include("./cg.jl")
 

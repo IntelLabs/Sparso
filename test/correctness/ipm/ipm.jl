@@ -1,6 +1,6 @@
-include("../../../src/SparseAccelerator.jl")
+include("../../../src/Sparso.jl")
 include("../../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 using CompilerTools.OptFramework
 using MatrixMarket
 using MatrixMarket2
@@ -20,8 +20,8 @@ end
 # Since it's implemented in CSR, we pass tranposes of A and B
 # in CSC
 function adb_inspect(AT::SparseMatrixCSC, BT::SparseMatrixCSC)
-  csrA = SparseAccelerator.create_CSR(AT)
-  csrB = SparseAccelerator.create_CSR(BT)
+  csrA = Sparso.create_CSR(AT)
+  csrB = Sparso.create_CSR(BT)
 
   # A*D*A' inspection
   csrADAT = ccall((:CSR_ADBInspect, LIB_CSR_PATH), Ptr{Void},
@@ -46,8 +46,8 @@ function adb_inspect(AT::SparseMatrixCSC, BT::SparseMatrixCSC)
           csrADAT),
     (nnz,))
 
-  SparseAccelerator.destroy_CSR(csrA)
-  SparseAccelerator.destroy_CSR(csrB)
+  Sparso.destroy_CSR(csrA)
+  Sparso.destroy_CSR(csrB)
 
   ADB = SparseMatrixCSC{Cdouble, Cint}(
     m, m, rowptr, colidx, values)
@@ -55,17 +55,17 @@ end
 
 # A*D*B, where D is a diagonal matrix
 function adb_execute!(ADB::SparseMatrixCSC, AT::SparseMatrixCSC, BT::SparseMatrixCSC, d::Vector)
-  csrA = SparseAccelerator.create_CSR(AT)
-  csrB = SparseAccelerator.create_CSR(BT)
-  csrADB = SparseAccelerator.create_CSR(ADB)
+  csrA = Sparso.create_CSR(AT)
+  csrB = Sparso.create_CSR(BT)
+  csrADB = Sparso.create_CSR(ADB)
 
   ccall((:CSR_ADB, LIB_CSR_PATH), Void,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Cdouble}),
         csrADB, csrA, csrB, d)
 
-  SparseAccelerator.destroy_CSR(csrA)
-  SparseAccelerator.destroy_CSR(csrB)
-  SparseAccelerator.destroy_CSR(csrADB)
+  Sparso.destroy_CSR(csrA)
+  Sparso.destroy_CSR(csrB)
+  Sparso.destroy_CSR(csrADB)
 end
 
 # optimized implementation of interior-point method with inspector hoisted

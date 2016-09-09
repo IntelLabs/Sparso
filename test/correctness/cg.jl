@@ -34,17 +34,17 @@ function cg(x, A, b, tol, maxiter)
     k = 1
     while k <= maxiter
         old_rz = rz
-        Ap = A*p #Ap = SparseAccelerator.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
-        alpha = old_rz / dot(p, Ap) #alpha = old_rz / SparseAccelerator.dot(p, Ap) # manual
-        x += alpha * p #SparseAccelerator.WAXPBY!(x, alpha, p, 1, x) # manual
-        r -= alpha * Ap #SparseAccelerator.WAXPBY!(r, -alpha, Ap, 1, r) # manual
-        rz = dot(r, r) #rz = SparseAccelerator.dot(r, r) # manual
+        Ap = A*p #Ap = Sparso.SpMV(A, p) # manual # This takes most time. Compiler can reorder A to make faster
+        alpha = old_rz / dot(p, Ap) #alpha = old_rz / Sparso.dot(p, Ap) # manual
+        x += alpha * p #Sparso.WAXPBY!(x, alpha, p, 1, x) # manual
+        r -= alpha * Ap #Sparso.WAXPBY!(r, -alpha, Ap, 1, r) # manual
+        rz = dot(r, r) #rz = Sparso.dot(r, r) # manual
         rel_err = sqrt(rz)/normr0
         if rel_err < tol 
             break
         end
         beta = rz/old_rz
-        p = r + beta * p #SparseAccelerator.WAXPBY!(p, 1, r, beta, p) # manual
+        p = r + beta * p #Sparso.WAXPBY!(p, 1, r, beta, p) # manual
         k += 1
     end
     return x, k, rel_err

@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 function pagerank(A, p, r, d_inv, maxiter) # p: initial rank, r: damping factor
 #  set_matrix_property(Dict(
@@ -145,12 +145,12 @@ p = repmat([1/m], m)
 if test == "julia"
   x = pagerank(A2, p, r, d_inv, maxiter)
 else
-  #SparseAccelerator.reset_spmp_spmv_time()
-  #SparseAccelerator.reset_knob_spmv_time()
+  #Sparso.reset_spmp_spmv_time()
+  #Sparso.reset_knob_spmv_time()
   @acc x = pagerank_with_init(A2, r, d_inv, maxiter)
 end
 
-  #t = SparseAccelerator.get_spmp_spmv_time()
+  #t = Sparso.get_spmp_spmv_time()
   #println("time spent on spmp spmv $t sec ($(bytes/t/1e9) gbps)")
-  #t = SparseAccelerator.get_knob_spmv_time()
+  #t = Sparso.get_knob_spmv_time()
   #println("time spent on knob spmv $t sec ($(bytes/t/1e9) gbps)")

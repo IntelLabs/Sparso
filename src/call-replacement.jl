@@ -246,7 +246,7 @@ end
 @doc """ SpMV(a, A, x) """
 const SpMV_3_parameters_pattern = ExprPattern(
     "SpMV_3_parameters_pattern",
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
       Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -261,7 +261,7 @@ const SpMV_3_parameters_pattern = ExprPattern(
 
 const SpMV_4_parameters_pattern = ExprPattern(
     "SpMV_4_parameters_pattern",
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      Number, SparseMatrixCSC, Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -276,7 +276,7 @@ const SpMV_4_parameters_pattern = ExprPattern(
 
 const SpMV_6_parameters_pattern = ExprPattern(
     "SpMV_6_parameters_pattern",
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
       Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -361,10 +361,10 @@ const vector_add_number_pattern = ExprPattern(
     ()
 )
 
-@doc """ SparseAccelerator.WAXPBY(a, x, b, y) """
+@doc """ Sparso.WAXPBY(a, x, b, y) """
 const WAXPBY_4_parameters_pattern = ExprPattern(
     "WAXPBY_4_parameters_pattern",
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+    (:call, GlobalRef(Sparso, :WAXPBY),
       Number, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
@@ -378,13 +378,13 @@ const WAXPBY_4_parameters_pattern = ExprPattern(
 )
 
 # Patterns that do transformation
-@doc """ dot(x, y) ==> SparseAccelerator.dot(x, y)"""
+@doc """ dot(x, y) ==> Sparso.dot(x, y)"""
 const dot_pattern1 = ExprPattern(
     "dot_pattern1",
     (:call, GlobalRef(Main, :dot), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :dot), :a2, :a3),
+    (:call, GlobalRef(Sparso, :dot), :a2, :a3),
     do_nothing,
     "",
     "",
@@ -393,13 +393,13 @@ const dot_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ norm(x)^2 ==> SparseAccelerator.dot(x, x)"""
+@doc """ norm(x)^2 ==> Sparso.dot(x, x)"""
 const dot_pattern2 = ExprPattern(
     "dot_pattern2",
     (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(Main, :norm), Vector), 2),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :dot),
+    (:call, GlobalRef(Sparso, :dot),
      :a2_2, :a2_2),
     do_nothing,
     "",
@@ -409,13 +409,13 @@ const dot_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ SparseAccelerator.norm(x)^2 ==> SparseAccelerator.dot(x, x)"""
+@doc """ Sparso.norm(x)^2 ==> Sparso.dot(x, x)"""
 const dot_pattern3 = ExprPattern(
     "dot_pattern3",
-    (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(SparseAccelerator, :norm), Vector), 2),
+    (:call, GlobalRef(Main, :^), Expr(:call, GlobalRef(Sparso, :norm), Vector), 2),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :dot),
+    (:call, GlobalRef(Sparso, :dot),
      :a2_2, :a2_2),
     do_nothing,
     "",
@@ -425,13 +425,13 @@ const dot_pattern3 = ExprPattern(
     ()
 )
 
-@doc """ norm(x) ==> SparseAccelerator.norm(x)"""
+@doc """ norm(x) ==> Sparso.norm(x)"""
 const norm_pattern1 = ExprPattern(
     "norm_pattern1",
     (:call, GlobalRef(Main, :norm), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :norm), :a2),
+    (:call, GlobalRef(Sparso, :norm), :a2),
     do_nothing,
     "",
     "",
@@ -440,13 +440,13 @@ const norm_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ sum(x) ==> SparseAccelerator.sum(x)"""
+@doc """ sum(x) ==> Sparso.sum(x)"""
 const sum_pattern1 = ExprPattern(
     "sum_pattern1",
     (:call, GlobalRef(Main, :sum), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :sum),
+    (:call, GlobalRef(Sparso, :sum),
      :a2),
     do_nothing,
     "",
@@ -456,14 +456,14 @@ const sum_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ mean(x) ==> SparseAccelerator.sum(x)/length(x)"""
+@doc """ mean(x) ==> Sparso.sum(x)/length(x)"""
 const mean_pattern1 = ExprPattern(
     "mean_pattern1",
     (:call, GlobalRef(Main, :mean), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
     (:call, GlobalRef(Main, :(/)),
-      (:call, GlobalRef(SparseAccelerator, :sum), :a2),
+      (:call, GlobalRef(Sparso, :sum), :a2),
       (:call, GlobalRef(Base, :arraylen), :a2)
     ),
     do_nothing,
@@ -474,13 +474,13 @@ const mean_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ minimum(x) ==> SparseAccelerator.minimum(x)"""
+@doc """ minimum(x) ==> Sparso.minimum(x)"""
 const minimum_pattern1 = ExprPattern(
     "minimum_pattern1",
     (:call, GlobalRef(Main, :minimum), Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :minimum),
+    (:call, GlobalRef(Sparso, :minimum),
      :a2),
     do_nothing,
     "",
@@ -490,13 +490,13 @@ const minimum_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ abs!(w, x) ==> SparseAccelerator.abs!(w, x)"""
+@doc """ abs!(w, x) ==> Sparso.abs!(w, x)"""
 const abs!_pattern1 = ExprPattern(
     "abs!_pattern1",
     (:call, GlobalRef(Main, :abs!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :abs!),
+    (:call, GlobalRef(Sparso, :abs!),
      :a2, :a3),
     do_nothing,
     "",
@@ -507,7 +507,7 @@ const abs!_pattern1 = ExprPattern(
 )
 
 @doc """
-    abs(x) ==> SparseAccelerator.abs!(temp, x), where temp is a temporary to be
+    abs(x) ==> Sparso.abs!(temp, x), where temp is a temporary to be
     generated by the compiler.
 """
 const abs!_pattern2 = ExprPattern(
@@ -515,7 +515,7 @@ const abs!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :abs), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :abs!),
+    (:call, GlobalRef(Sparso, :abs!),
      :t2, :a2),
     do_nothing,
     "",
@@ -525,13 +525,13 @@ const abs!_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ exp!(w, x) ==> SparseAccelerator.exp!(w, x)"""
+@doc """ exp!(w, x) ==> Sparso.exp!(w, x)"""
 const exp!_pattern1 = ExprPattern(
     "exp!_pattern1",
     (:call, GlobalRef(Main, :exp!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :exp!),
+    (:call, GlobalRef(Sparso, :exp!),
      :a2, :a3),
     do_nothing,
     "",
@@ -542,7 +542,7 @@ const exp!_pattern1 = ExprPattern(
 )
 
 @doc """
-    exp(x) ==> SparseAccelerator.exp!(temp, x), where temp is a temporary to be
+    exp(x) ==> Sparso.exp!(temp, x), where temp is a temporary to be
     generated by the compiler.
 """
 const exp!_pattern2 = ExprPattern(
@@ -550,7 +550,7 @@ const exp!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :exp), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :exp!),
+    (:call, GlobalRef(Sparso, :exp!),
      :t2, :a2),
     do_nothing,
     "",
@@ -561,7 +561,7 @@ const exp!_pattern2 = ExprPattern(
 )
 
 @doc """
-    log(1 + x) ==> SparseAccelerator.log1p!(temp, x), where temp is a temporary to be
+    log(1 + x) ==> Sparso.log1p!(temp, x), where temp is a temporary to be
     generated by the compiler.
 """
 const log1p!_pattern1 = ExprPattern(
@@ -569,7 +569,7 @@ const log1p!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :log), Expr(:call, GlobalRef(Main, :+), 1, Vector{Float64})),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :log1p!),
+    (:call, GlobalRef(Sparso, :log1p!),
      :t2_3, :a2_3), # If use :t2 instead of :t2_3, since arg2 is an Expr and thus will be hoisted ahead of the statement and replaced with a symbol, the next :a2_3 will be meaningless.
     do_nothing,
     "",
@@ -580,7 +580,7 @@ const log1p!_pattern1 = ExprPattern(
 )
 
 @doc """
-    log(SparseAccelerator.WAXPB!(temp, 1, x, 1) ==> SparseAccelerator.log1p!(temp, x), 
+    log(Sparso.WAXPB!(temp, 1, x, 1) ==> Sparso.log1p!(temp, x), 
     where temp is a temporary already generated by the compiler. We can use
     temp as the result of log because a temp is only used in the tree and only once,
     so that we are sure it will not be used outside the tree, nor used by any other 
@@ -589,10 +589,10 @@ const log1p!_pattern1 = ExprPattern(
 const log1p!_pattern2 = ExprPattern(
     "log1p!_pattern2",
     (:call, GlobalRef(Main, :log), 
-      Expr(:call, GlobalRef(SparseAccelerator, :WAXPB!), Vector{Float64}, 1, Vector{Float64}, 1)),
+      Expr(:call, GlobalRef(Sparso, :WAXPB!), Vector{Float64}, 1, Vector{Float64}, 1)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :log1p!),
+    (:call, GlobalRef(Sparso, :log1p!),
      :t2_2, :a2_4), # If use :t2 instead of :t2_2, since arg2 is an Expr and thus will be hoisted ahead of the statement and replaced with a symbol, the next :a2_4 will be meaningless.
     do_nothing,
     "",
@@ -603,7 +603,7 @@ const log1p!_pattern2 = ExprPattern(
 )
 
 @doc """
-    min(x, a) ==> SparseAccelerator.min!(temp, x, a), where temp is a temporary to be
+    min(x, a) ==> Sparso.min!(temp, x, a), where temp is a temporary to be
     generated by the compiler.
 """
 const min!_pattern1 = ExprPattern(
@@ -611,7 +611,7 @@ const min!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :min), Vector{Float64}, Number),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :min!),
+    (:call, GlobalRef(Sparso, :min!),
      :t2, :a2, :a3),
     do_nothing,
     "",
@@ -621,13 +621,13 @@ const min!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ copy!(y, x) ==> SparseAccelerator.copy!(y, x) """
+@doc """ copy!(y, x) ==> Sparso.copy!(y, x) """
 const copy!_pattern1 = ExprPattern(
     "copy!_pattern1",
     (:call, GlobalRef(Main, :copy!), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :copy!), :a2, :a3),
+    (:call, GlobalRef(Sparso, :copy!), :a2, :a3),
     do_nothing,
     "",
     "",
@@ -637,7 +637,7 @@ const copy!_pattern1 = ExprPattern(
 )
 
 @doc """
-    copy(x) ==> SparseAccelerator.copy!(temp, x), where temp is a temporary to be
+    copy(x) ==> Sparso.copy!(temp, x), where temp is a temporary to be
     generated by the compiler.
 """
 const copy!_pattern2 = ExprPattern(
@@ -645,7 +645,7 @@ const copy!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :copy), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :copy!), :t0!2, :a2),
+    (:call, GlobalRef(Sparso, :copy!), :t0!2, :a2),
     do_nothing,
     "",
     "",
@@ -660,7 +660,7 @@ const SpMV_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2, :a3),
     do_nothing,
     "",
@@ -676,7 +676,7 @@ const SpMV_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     do_nothing,
     "",
@@ -692,7 +692,7 @@ const SpMV_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2, :a3, :a4),
     do_nothing,
     "",
@@ -708,7 +708,7 @@ const SpMV_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     do_nothing,
     "",
@@ -733,7 +733,7 @@ const SpMV_pattern5 = ExprPattern(
       Expr(:call, GlobalRef(Main, :*), Number, Vector)), 
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      Expr(:call, GlobalRef(Main, :/), -1, :a2_3), :a2_2_2_2, :a2_2_2_3, :a3_2, :a3_3),
     do_nothing,
     "",
@@ -749,7 +749,7 @@ const SpMV!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a2, :a3, :a4),
     do_nothing,
     "",
@@ -765,7 +765,7 @@ const SpMV!_pattern2 = ExprPattern(
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_6_parameters_pattern),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     do_nothing,
     "",
@@ -781,7 +781,7 @@ const SpMV!_pattern3 = ExprPattern(
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, SpMV_3_parameters_pattern),
     do_nothing,
-    (GlobalRef(SparseAccelerator, :SpMV!),
+    (GlobalRef(Sparso, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     do_nothing,
     "",
@@ -797,7 +797,7 @@ const SpMV!_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a6, :a2, :a3, :a4, :a5, :a6, 0.0),
     do_nothing,
     "",
@@ -812,7 +812,7 @@ const WAXPBY_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Vector),
     (nothing, nothing, nothing, number_times_vector_pattern),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+    (:call, GlobalRef(Sparso, :WAXPBY),
      1, :a2, :a3_2, :a3_3),
     do_nothing,
     "",
@@ -827,7 +827,7 @@ const WAXPBY_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector, Vector),
     (nothing, nothing, nothing, number_times_vector_pattern),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY),
+    (:call, GlobalRef(Sparso, :WAXPBY),
      1, :a2, :n3_2, :a3_3),
     do_nothing,
     "",
@@ -837,14 +837,14 @@ const WAXPBY_pattern2 = ExprPattern(
     ()
 )
 
-@doc """ z = SparseAccelerator.WAXPBY(a, x, b, y) => SparseAccelerator.WAXPBY!(z, a, x, b, y) """
+@doc """ z = Sparso.WAXPBY(a, x, b, y) => Sparso.WAXPBY!(z, a, x, b, y) """
 const WAXPBY!_pattern1 = ExprPattern(
     "WAXPBY!_pattern1",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), 
-           Expr(:call, GlobalRef(SparseAccelerator, :WAXPBY), Number, Vector, Number, Vector)),
+           Expr(:call, GlobalRef(Sparso, :WAXPBY), Number, Vector, Number, Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+    (:call, GlobalRef(Sparso, :WAXPBY!),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5),
     do_nothing,
     "",
@@ -855,7 +855,7 @@ const WAXPBY!_pattern1 = ExprPattern(
 )
 
 @doc """ 
-x - y => SparseAccelerator.WAXPBY!(temp, 1, x, -1, y) , where temp is a temporary
+x - y => Sparso.WAXPBY!(temp, 1, x, -1, y) , where temp is a temporary
 to be generated by the compiler.
 """
 const WAXPBY!_pattern2 = ExprPattern(
@@ -863,7 +863,7 @@ const WAXPBY!_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector{Float64}, Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+    (:call, GlobalRef(Sparso, :WAXPBY!),
      :t2!3, 1, :a2, -1, :a3),
     do_nothing,
     "",
@@ -874,7 +874,7 @@ const WAXPBY!_pattern2 = ExprPattern(
 )
 
 @doc """ 
- -x => SparseAccelerator.WAXPBY!(temp, -1, x, 0, x) , where temp is a temporary
+ -x => Sparso.WAXPBY!(temp, -1, x, 0, x) , where temp is a temporary
 to be generated by the compiler.
 """
 const WAXPBY!_pattern3 = ExprPattern(
@@ -882,7 +882,7 @@ const WAXPBY!_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector{Float64}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+    (:call, GlobalRef(Sparso, :WAXPBY!),
      :t2, -1, :a2, 0, :a2),
     do_nothing,
     "",
@@ -892,13 +892,13 @@ const WAXPBY!_pattern3 = ExprPattern(
     ()
 )
 
-@doc """ w = x - a => SparseAccelerator.WAXPB!(w, 1, x, -a)"""
+@doc """ w = x - a => Sparso.WAXPB!(w, 1, x, -a)"""
 const WAXPB!_pattern1 = ExprPattern(
     "WAXPB!_pattern1",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_minus_number_pattern),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
+    (:call, GlobalRef(Sparso, :WAXPB!),
      :a1, 1, :a2_2, :n2_3),
     do_nothing,
     "",
@@ -908,13 +908,13 @@ const WAXPB!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ w = x + a => SparseAccelerator.WAXPB!(w, 1, x, a)"""
+@doc """ w = x + a => Sparso.WAXPB!(w, 1, x, a)"""
 const WAXPB!_pattern2 = ExprPattern(
     "WAXPB!_pattern2",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), Vector),
     (nothing, nothing, vector_add_number_pattern),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
+    (:call, GlobalRef(Sparso, :WAXPB!),
      :a1, 1, :a2_2, :a2_3),
     do_nothing,
     "",
@@ -925,7 +925,7 @@ const WAXPB!_pattern2 = ExprPattern(
 )
 
 @doc """ 
-a + x => SparseAccelerator.WAXPB!(temp, 1, x, a), where temp is a temporary
+a + x => Sparso.WAXPB!(temp, 1, x, a), where temp is a temporary
 to be genreated by the compiler.
 """
 const WAXPB!_pattern3 = ExprPattern(
@@ -933,7 +933,7 @@ const WAXPB!_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :+), Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPB!),
+    (:call, GlobalRef(Sparso, :WAXPB!),
      :t3, 1, :a3, :a2),
     do_nothing,
     "",
@@ -949,7 +949,7 @@ const element_wise_multiply_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :.*), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :element_wise_multiply),
+    (:call, GlobalRef(Sparso, :element_wise_multiply),
      :a2, :a3),
     do_nothing,
     "",
@@ -959,14 +959,14 @@ const element_wise_multiply_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ w = x .* y => SparseAccelerator.element_wise_multiply!(w, x, y)"""
+@doc """ w = x .* y => Sparso.element_wise_multiply!(w, x, y)"""
 const element_wise_multiply!_pattern1 = ExprPattern(
     "element_wise_multiply!_pattern1",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), 
-        Expr(:call, GlobalRef(SparseAccelerator, :element_wise_multiply), Vector, Vector)),
+        Expr(:call, GlobalRef(Sparso, :element_wise_multiply), Vector, Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :element_wise_multiply!),
+    (:call, GlobalRef(Sparso, :element_wise_multiply!),
      :a1, :a2_2, :a2_3),
     do_nothing,
     "",
@@ -982,7 +982,7 @@ const element_wise_divide_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :./), Vector, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :element_wise_divide),
+    (:call, GlobalRef(Sparso, :element_wise_divide),
      :a2, :a3),
     do_nothing,
     "",
@@ -992,14 +992,14 @@ const element_wise_divide_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ w = x ./ y => SparseAccelerator.element_wise_divide!(w, x, y)"""
+@doc """ w = x ./ y => Sparso.element_wise_divide!(w, x, y)"""
 const element_wise_divide!_pattern1 = ExprPattern(
     "element_wise_divide!_pattern1",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), 
-        Expr(:call, GlobalRef(SparseAccelerator, :element_wise_divide), Vector, Vector)),
+        Expr(:call, GlobalRef(Sparso, :element_wise_divide), Vector, Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :element_wise_divide!),
+    (:call, GlobalRef(Sparso, :element_wise_divide!),
      :a1, :a2_2, :a2_3),
     do_nothing,
     "",
@@ -1009,13 +1009,13 @@ const element_wise_divide!_pattern1 = ExprPattern(
     ()
 )
 
-@doc """ Main.trace(A) => SparseAccelerator.trace(A) """
+@doc """ Main.trace(A) => Sparso.trace(A) """
 const trace_pattern1 = ExprPattern(
     "trace_pattern1",
     (:call, GlobalRef(Main, :trace), SparseMatrixCSC),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :trace),
+    (:call, GlobalRef(Sparso, :trace),
      :a2),
     do_nothing,
     "",
@@ -1036,7 +1036,7 @@ const SpAdd_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :-), SparseMatrixCSC{Float64, Int32}, SparseMatrixCSC{Float64, Int32}),
     (nothing, nothing,           number_times_matrix_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpAdd),
+    (:call, GlobalRef(Sparso, :SpAdd),
      :a2_2, :a2_3, -1, :a3),
     do_nothing,
     "",
@@ -1091,20 +1091,20 @@ expr_patterns = [
 ]
 
 @doc """
-    z = SparseAccelerator.SpMV(a, A, x, b, y, r)
+    z = Sparso.SpMV(a, A, x, b, y, r)
     y = z
 =>
-    SparseAccelerator.SpMV!(y, a, A, x, b, y, r)
+    Sparso.SpMV!(y, a, A, x, b, y, r)
     z = y    
 """
 const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "SpMV!_two_statements_pattern1",
     (:(=), Any, 
-           Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+           Expr(:call, GlobalRef(Sparso, :SpMV),
                  Number, SparseMatrixCSC, Vector, Number, Vector, Number)),
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5, :f2_6, :f2_7),
     (:(=), :f1, :s1),
     do_nothing,
@@ -1116,20 +1116,20 @@ const SpMV!_two_statements_pattern1 = TwoStatementsPattern(
 )
 
 @doc """
-    z = SparseAccelerator.WAXPBY(a, x, b, y)
+    z = Sparso.WAXPBY(a, x, b, y)
     y = z
 =>
-    SparseAccelerator.WAXPBY!(y, a, x, b, y)
+    Sparso.WAXPBY!(y, a, x, b, y)
     z = y    
 """
 const WAXPBY!_two_statements_pattern1 = TwoStatementsPattern(
     "WAXPBY!_two_statements_pattern1",
     (:(=), Any,
-           Expr(:call, GlobalRef(SparseAccelerator, :WAXPBY),
+           Expr(:call, GlobalRef(Sparso, :WAXPBY),
                  Number, Vector, Number, Vector)),
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY), :f1),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :WAXPBY!),
+    (:call, GlobalRef(Sparso, :WAXPBY!),
      :s1, :f2_2, :f2_3, :f2_4, :f2_5),
     (:(=), :f1, :s1),
     do_nothing,
@@ -1650,7 +1650,7 @@ function match_replace(
     trace_pattern_match = false
     if false #pattern == CS_fwdTriSolve_backslash_pattern && ast.head == :(=) && length(ast.args) ==2 && 
         #typeof(ast.args[2]) == Expr &&
-        #ast.args[2].head == :call && ast.args[2].args[1] == GlobalRef(SparseAccelerator, :\)
+        #ast.args[2].head == :call && ast.args[2].args[1] == GlobalRef(Sparso, :\)
         trace_pattern_match = true
         println("... Matching ", pattern.name, " with ", ast)
     end

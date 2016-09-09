@@ -360,7 +360,7 @@ The above code is transformed into
     add mknob_R into fknob_cholmod_factor_inverse_divide
     for
         ...
-        # SparseAccelerator.ADB(A', D, A, fknob_ADB)
+        # Sparso.ADB(A', D, A, fknob_ADB)
         #   if fknob_ADB == NULL
         #       return A * D * A'
         #   get the input mknob_A from fknob_ADB
@@ -373,9 +373,9 @@ The above code is transformed into
         #       mknob_B->matrix = ADAT
         #   d = diag(D)
         #   adb_execute!(mknob_B->matrix, A', A, d)
-        B = SparseAccelerator.ADB(A', D, A, fknob_ADB)
+        B = Sparso.ADB(A', D, A, fknob_ADB)
         ...
-        # SparseAccelerator.cholfact_int32(B, fknobcholfact_int32)
+        # Sparso.cholfact_int32(B, fknobcholfact_int32)
         #   if fknobcholfact_int32 == NULL
         #       return cholfact_int32(B)
         #   get the input mknob_B from fknob_cholfact_int32
@@ -388,7 +388,7 @@ The above code is transformed into
         #   dss_factor(mknob_R->dss_handle, mknob_B->matrix)
         #   BUT HOW TO RETURN R?
         
-        R = SparseAccelerator.cholfact_int32(B, fknob_cholfact_int32)
+        R = Sparso.cholfact_int32(B, fknob_cholfact_int32)
         ...
         
         # cholmod_factor_inverse_divide(dy, R, t2, fknob_cholmod_factor_inverse_divide)
@@ -423,7 +423,7 @@ const CS_ADAT_pattern = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC),
     (nothing, nothing, nothing, nothing, CS_transpose_pattern),
     CS_ADAT_check,
-    (:call, GlobalRef(SparseAccelerator, :ADB), :a2, :a3, :a2),
+    (:call, GlobalRef(Sparso, :ADB), :a2, :a3, :a2),
     CS_ADAT_post_replacement,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -437,7 +437,7 @@ const CS_cholfact_int32_pattern = ExprPattern(
     (:call, GlobalRef(Main, :cholfact_int32), SparseMatrixCSC{Float64, Int32}),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :cholfact_int32), :a2),
+    (:call, GlobalRef(Sparso, :cholfact_int32), :a2),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -451,7 +451,7 @@ const CS_cholsolve_pattern = ExprPattern(
     (:call, GlobalRef(Main, :\), Factorization{Float64}, Any),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :cholfact_inverse_divide), :a2, :a3),
+    (:call, GlobalRef(Sparso, :cholfact_inverse_divide), :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -470,7 +470,7 @@ const CS_fwdTriSolve!_pattern = ExprPattern(
       SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     CS_fwdBwdTriSolve!_check,
-    (:call, GlobalRef(SparseAccelerator, :fwdTriSolve!), :a2, :a3),
+    (:call, GlobalRef(Sparso, :fwdTriSolve!), :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -491,7 +491,7 @@ const CS_fwdTriSolve!_backslash_pattern = ExprPattern(
             Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :fwdTriSolve!), :a1, :a2_2, :a2_3),
+    (:call, GlobalRef(Sparso, :fwdTriSolve!), :a1, :a2_2, :a2_3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -509,7 +509,7 @@ const CS_bwdTriSolve!_pattern = ExprPattern(
       Any, Vector), #SparseMatrixCSC, Vector), # Somehow, type inference does not figure out U's type is SparseMatrixCSC
     (:NO_SUB_PATTERNS,),
     CS_fwdBwdTriSolve!_check,
-    (:call, GlobalRef(SparseAccelerator, :bwdTriSolve!), :a2, :a3),
+    (:call, GlobalRef(Sparso, :bwdTriSolve!), :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -530,7 +530,7 @@ const CS_bwdTriSolve!_backslash_pattern = ExprPattern(
             Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :bwdTriSolve!), :a1, :a2_2, :a2_3),
+    (:call, GlobalRef(Sparso, :bwdTriSolve!), :a1, :a2_2, :a2_3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -550,7 +550,7 @@ const CS_SpMV_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :*), SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV), 1, :a2, :a3),
+    (:call, GlobalRef(Sparso, :SpMV), 1, :a2, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -565,7 +565,7 @@ const CS_SpMV_pattern2 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, number_times_matrix_vector_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV), :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
+    (:call, GlobalRef(Sparso, :SpMV), :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -580,7 +580,7 @@ const CS_SpMV_pattern3 = ExprPattern(
     (:call, GlobalRef(Main, :*), Number, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV), :a2, :a3, :a4),
+    (:call, GlobalRef(Sparso, :SpMV), :a2, :a3, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
     "DeleteFunctionKnob",
@@ -602,7 +602,7 @@ const CS_SpMV_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Number),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2_2, :a2_3, :a2_4, 0, :a2_4, :a3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -625,7 +625,7 @@ const CS_SpMV_pattern5 = ExprPattern(
     (:call, GlobalRef(Main, :+), Vector, Vector),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2_2, :a2_3, :a2_4, 1, :a3, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -648,7 +648,7 @@ const CS_SpMV_pattern6 = ExprPattern(
     (:call, GlobalRef(Main, :-), Vector, Vector),
     (nothing, nothing, SpMV_3_parameters_pattern, nothing),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
      :a2_2, :a2_3, :a2_4, -1, :a3, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -671,7 +671,7 @@ const CS_SpMV_pattern7 = ExprPattern(
       Expr(:call, GlobalRef(Main, :*), Number, Vector)), 
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV),
+    (:call, GlobalRef(Sparso, :SpMV),
       TypedExprNode(Float64, :call, GlobalRef(Main, :/), -1, :a2_3), :a2_2_2_2, :a2_2_2_3, :a3_2, :a3_3),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -773,7 +773,7 @@ const CS_SpMV!_pattern1 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Vector, SparseMatrixCSC, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a2, :a3, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -793,7 +793,7 @@ const CS_SpMV!_pattern2 = ExprPattern(
     # TODO: uncomment this condition below after Linxiang's analysis works
     # LHS_in_RHS,
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, :a2_7),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -807,11 +807,11 @@ const CS_SpMV!_pattern2 = ExprPattern(
 const CS_SpMV!_pattern3 = ExprPattern(
     "CS_SpMV!_pattern3",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY),
-        Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+        Expr(:call, GlobalRef(Sparso, :SpMV),
               Number, SparseMatrixCSC, Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, 0.0, :a1, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -827,7 +827,7 @@ const CS_SpMV!_pattern4 = ExprPattern(
     (:call, GlobalRef(Main, :A_mul_B!), Number, SparseMatrixCSC, Vector, Number, Vector),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a6, :a2, :a3, :a4, :a5, :a6, 0.0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -841,11 +841,11 @@ const CS_SpMV!_pattern4 = ExprPattern(
 const CS_SpMV!_pattern5 = ExprPattern(
     "CS_SpMV!_pattern5",
     (:(=), AD(Vector, SA_HAS_FREE_MEMORY),
-        Expr(:call, GlobalRef(SparseAccelerator, :SpMV),
+        Expr(:call, GlobalRef(Sparso, :SpMV),
              Number, SparseMatrixCSC, Vector, Number, Vector)),
     (:NO_SUB_PATTERNS,),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :a1, :a2_2, :a2_3, :a2_4, :a2_5, :a2_6, 0),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -861,7 +861,7 @@ const SpSquareWithEps_pattern1 = ExprPattern(
     (:call,   GlobalRef(Main, :spmatmul_witheps), SparseMatrixCSC, SparseMatrixCSC,      Number),
     (nothing, nothing,                            nothing,         CS_transpose_pattern, nothing),
     SpSquareWithEps_check,
-    (:call, GlobalRef(SparseAccelerator, :SpSquareWithEps),
+    (:call, GlobalRef(Sparso, :SpSquareWithEps),
      :a2, :a4),
     gather_context_sensitive_info,
     "NewFunctionKnob",
@@ -896,19 +896,19 @@ CS_transformation_patterns = [
 ]
 
 @doc """
-    SparseAccelerator.SpMV!(z, a, A, x, b, y, r)
+    Sparso.SpMV!(z, a, A, x, b, y, r)
     z = z .* u
 =>
-    SparseAccelerator.SpMV!(z, a, A, x, b, y, r, u)
+    Sparso.SpMV!(z, a, A, x, b, y, r, u)
     z = z # Useless
 """
 const CS_SpMV!_two_statements_pattern1 = TwoStatementsPattern(
     "CS_SpMV!_two_statements_pattern1",
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
       Vector, Number, SparseMatrixCSC, Vector, Number, Vector, Number),
     (:(=), :f2, Expr(:call, GlobalRef(Main, :.*), :f2, Vector)),
     do_nothing,
-    (:call, GlobalRef(SparseAccelerator, :SpMV!),
+    (:call, GlobalRef(Sparso, :SpMV!),
      :f2, :f3, :f4, :f5, :f6, :f7, :f8, :s2_3),
     (:(=), :f2, :f2),
     gather_context_sensitive_info,
@@ -935,7 +935,7 @@ function create_new_matrix_knob(
 )
     properties = call_sites.extra.matrix_properties[M]
     new_stmt = Expr(:(=), mknob,
-                    Expr(:call, GlobalRef(SparseAccelerator, :new_matrix_knob), 
+                    Expr(:call, GlobalRef(Sparso, :new_matrix_knob), 
                          typeof(M) == Expr ? QuoteNode(symbol("Expr")) : QuoteNode(M),
                          properties.constant_valued, 
                          properties.constant_structured, 
@@ -959,7 +959,7 @@ function create_propagate_matrix_info(
     # Insert the propagation after the (assignment) statement.
     action = InsertBeforeOrAfterStatement(Vector{Statement}(), false, bb, stmt_idx)
     stmt = Statement(0, 
-                     Expr(:call, GlobalRef(SparseAccelerator, :propagate_matrix_info), 
+                     Expr(:call, GlobalRef(Sparso, :propagate_matrix_info), 
                            to_mknob, from_mknob))
     push!(action.new_stmts, stmt)
     push!(call_sites.actions, action)
@@ -980,13 +980,13 @@ function create_new_function_knob(
         # Create a function knob. It has no private info specific to that function.
         # Call the parameterless version of new_function_knob for cleaner code.
         new_stmt = Expr(:(=), fknob, 
-                        Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob))
+                        Expr(:call, GlobalRef(Sparso, :new_function_knob))
                    )
     else
         # So far, we do not create any special knob. So this case is never reached.
         assert(false)
         new_stmt = Expr(:(=), fknob, 
-                        Expr(:call, GlobalRef(SparseAccelerator, :new_function_knob),
+                        Expr(:call, GlobalRef(Sparso, :new_function_knob),
                               fknob_creator
                         )
                    )
@@ -1002,7 +1002,7 @@ function create_add_mknob_to_fknob(
     mknob     :: Symbol,
     fknob     :: Symbol
 )
-    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :add_mknob_to_fknob), mknob, fknob)
+    new_stmt = Expr(:call, GlobalRef(Sparso, :add_mknob_to_fknob), mknob, fknob)
     push!(new_stmts, Statement(0, new_stmt))
 end
 
@@ -1019,12 +1019,12 @@ function create_delete_function_knob(
     if fknob_deletor == "DeleteFunctionKnob"
         # Delete a function knob, which has no private info specific to that function.
         # Call the 1-parameter version of delete_function_knob for cleaner code.
-        new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob), 
+        new_stmt = Expr(:call, GlobalRef(Sparso, :delete_function_knob), 
                          fknob)
     else
         # So far, we have not created any special knob. So this case is never reached.
         assert(false)
-        new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_function_knob),
+        new_stmt = Expr(:call, GlobalRef(Sparso, :delete_function_knob),
                          fknob_deletor, fknob)
     end
     push!(new_stmts, Statement(0, new_stmt))
@@ -1037,7 +1037,7 @@ function create_delete_matrix_knob(
     new_stmts :: Vector{Statement},
     mknob     :: Symbol
 )
-    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :delete_matrix_knob), mknob)
+    new_stmt = Expr(:call, GlobalRef(Sparso, :delete_matrix_knob), mknob)
     push!(new_stmts, Statement(0, new_stmt))
 end
 
@@ -1050,7 +1050,7 @@ function create_set_derivative(
     relation  :: Int,
     mknob2    :: Symbol
 )
-    new_stmt = Expr(:call, GlobalRef(SparseAccelerator, :set_derivative),
+    new_stmt = Expr(:call, GlobalRef(Sparso, :set_derivative),
                      mknob1, int2derivative_map[relation], mknob2)
     push!(new_stmts, Statement(0, new_stmt))
 end

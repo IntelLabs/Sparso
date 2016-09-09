@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 function pagerank(A, p, r) # p: initial rank, r: damping factor
   for i = 1 : 100
-    # SparseAccelerator.SpMV!(p, 1 - r, A, p, 0, p, r) # manual
+    # Sparso.SpMV!(p, 1 - r, A, p, 0, p, r) # manual
     p = (1-r) *A * p + r
   end
   p

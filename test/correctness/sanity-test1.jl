@@ -25,17 +25,17 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_VERBOSE)
 
-SparseAccelerator.dprintln(0, 1, "should not print \n as the \n level is too low")
-SparseAccelerator.dprintln(1, 0, "Testing tabbed display:")
-SparseAccelerator.dprintln(1, 1, "1 tab")
-SparseAccelerator.dprintln(1, 1, "OK")
-SparseAccelerator.dprintln(1, 2, "2 tabs", "\nOK")
-SparseAccelerator.dprintln(1, 3, "3 tabs", "\nOK")
+Sparso.dprintln(0, 1, "should not print \n as the \n level is too low")
+Sparso.dprintln(1, 0, "Testing tabbed display:")
+Sparso.dprintln(1, 1, "1 tab")
+Sparso.dprintln(1, 1, "OK")
+Sparso.dprintln(1, 2, "2 tabs", "\nOK")
+Sparso.dprintln(1, 3, "3 tabs", "\nOK")
 flush(STDOUT)
 

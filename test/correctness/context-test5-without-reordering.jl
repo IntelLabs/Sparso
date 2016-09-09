@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_USE_SPMP, SA_CONTEXT, SA_REPLACE_CALLS)
 
@@ -55,7 +55,7 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     spmv_time = 0.
     blas1_time = 0.
 
-    L, U = SparseAccelerator.ilu(A)
+    L, U = Sparso.ilu(A)
 
     spmv_time -= time()
     r = b - A * x
@@ -94,8 +94,8 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
         old_rz = rz
 
         spmv_time -= time()
-        Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
-        #SparseAccelerator.SpMV!(Ap, A, p)
+        Ap = A*p # Ap = Sparso.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        #Sparso.SpMV!(Ap, A, p)
         spmv_time += time()
 
         blas1_time -= time()
@@ -159,7 +159,7 @@ A2 = copy(A) # workaround that we change A in-place
 @acc x, k, rel_err = pcg_symgs_ilu0(x, A2, b, tol, maxiter)
 println("\nAccelerated: ")
 x = zeros(m)
-SparseAccelerator.set_knob_log_level(1)
+Sparso.set_knob_log_level(1)
 @acc x, k, rel_err = pcg_symgs_ilu0(x, A, b, tol, maxiter)
 println("\tAccelerated k=", k)
 println("\tAccelerated rel_err=", rel_err)

@@ -27,8 +27,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 module StructureAnalysisConstSize
     
-    import SparseAccelerator
-    using SparseAccelerator: Sym, Symexpr, TypedExprNode
+    import Sparso
+    using Sparso: Sym, Symexpr, TypedExprNode
     using ..SymbolicAnalysis
     using ..SymbolicAnalysis: SA_SUCC
 

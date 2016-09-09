@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT)
 
@@ -79,15 +79,15 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   __AT__ = (Main.ctranspose)(A::Base.SparseMatrix.SparseMatrixCSC{Float64,Int32})
 
   # Create mknobs for constant-valued matrices. They are of course constant-structured.
-  __mknob__AT___8599 = SparseAccelerator.new_matrix_knob(:__AT__,true,true,false,false,false,false)
-  __mknobA_8601      = SparseAccelerator.new_matrix_knob(:A,     true,true,false,false,false,false)
+  __mknob__AT___8599 = Sparso.new_matrix_knob(:__AT__,true,true,false,false,false,false)
+  __mknobA_8601      = Sparso.new_matrix_knob(:A,     true,true,false,false,false,false)
 
   # Create mknobs for constant-structured matrices in the source code
   # Note R and B are also single-defs: key to enable context info propagation.
   # D is also single-def, but that is not important for this application.
-  __mknobR_8596 = SparseAccelerator.new_matrix_knob(:R, false,true,false,false,false,true)
-  __mknobB_8598 = SparseAccelerator.new_matrix_knob(:B, false,true,false,false,false,true)
-  __mknobD_8600 = SparseAccelerator.new_matrix_knob(:D, false,true,false,false,false,true)
+  __mknobR_8596 = Sparso.new_matrix_knob(:R, false,true,false,false,false,true)
+  __mknobB_8598 = Sparso.new_matrix_knob(:B, false,true,false,false,false,true)
+  __mknobD_8600 = Sparso.new_matrix_knob(:D, false,true,false,false,false,true)
 
   # Create mknobs for a function call at each call site, representing the
   # call's output, if the output is constant in structure or value. We do not
@@ -97,54 +97,54 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
   # is not, we simply use nothing. Any way, a function call's result must remain
   # the same, no matter it has a fknob with it or not.
   # Any function call's result is a single-def (Defined only the function call).
-  __mknob_ADB            = SparseAccelerator.new_matrix_knob(:ADB, false,true,false,false,false,true)
-  __mknob_cholfact_int32 = SparseAccelerator.new_matrix_knob(:cholfact_int32, false,true,false,false,false,true)
+  __mknob_ADB            = Sparso.new_matrix_knob(:ADB, false,true,false,false,false,true)
+  __mknob_cholfact_int32 = Sparso.new_matrix_knob(:cholfact_int32, false,true,false,false,false,true)
 
   # Create fknobs for a function call at each call site, and add related mknobs
   # For ADB
-  __fknob_8602 = SparseAccelerator.new_function_knob()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknob_ADB,__fknob_8602)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknob__AT___8599,__fknob_8602)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobD_8600,__fknob_8602)
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601,__fknob_8602)
+  __fknob_8602 = Sparso.new_function_knob()
+  (Sparso.add_mknob_to_fknob)(__mknob_ADB,__fknob_8602)
+  (Sparso.add_mknob_to_fknob)(__mknob__AT___8599,__fknob_8602)
+  (Sparso.add_mknob_to_fknob)(__mknobD_8600,__fknob_8602)
+  (Sparso.add_mknob_to_fknob)(__mknobA_8601,__fknob_8602)
 
-  (SparseAccelerator.set_derivative)(__mknobA_8601, SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE, __mknob__AT___8599)
+  (Sparso.set_derivative)(__mknobA_8601, Sparso.DERIVATIVE_TYPE_TRANSPOSE, __mknob__AT___8599)
 
   # For cholfact_int32
-  __fknob_8622 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobB_8598,__fknob_8622)
+  __fknob_8622 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(__mknobB_8598,__fknob_8622)
 
   # For cholmod_factor_inverse_divide
-  __fknob_8623 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobR_8596,__fknob_8623)
+  __fknob_8623 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(__mknobR_8596,__fknob_8623)
 
-  fknob_spmv1 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknob__AT___8599, fknob_spmv1)
+  fknob_spmv1 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(__mknob__AT___8599, fknob_spmv1)
 
-  fknob_spmv2 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601, fknob_spmv2)
+  fknob_spmv2 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(__mknobA_8601, fknob_spmv2)
 
-  fknob_spmv3 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknobA_8601, fknob_spmv3)
+  fknob_spmv3 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(__mknobA_8601, fknob_spmv3)
 
-  fknob_spmv4 = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(__mknob__AT___8599, fknob_spmv4)
+  fknob_spmv4 = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(__mknob__AT___8599, fknob_spmv4)
 
   for iter=1:200
 
     # compute residuals
     spmv_time -= time()
     #Rd = __AT__*y + s - p
-    Rd = SparseAccelerator.SpMV(1, __AT__, y, 1, s - p, fknob_spmv1)
+    Rd = Sparso.SpMV(1, __AT__, y, 1, s - p, fknob_spmv1)
     #Rp = A*x - b
-    Rp = SparseAccelerator.SpMV(1, A, x, -1, b, fknob_spmv2)
+    Rp = Sparso.SpMV(1, A, x, -1, b, fknob_spmv2)
     spmv_time += time()
 
     blas1_time -= time()
     #Rc = x.*s
-    Rc = SparseAccelerator.element_wise_multiply(x, s)
+    Rc = Sparso.element_wise_multiply(x, s)
     #mu = mean(Rc)
-    mu = SparseAccelerator.sum(Rc)/length(Rc)
+    mu = Sparso.sum(Rc)/length(Rc)
     relResidual = norm([Rd; Rp; Rc])/bc
     blas1_time += time()
 
@@ -152,90 +152,90 @@ function ipm_with_context_opt(A, b, p) # A: constraint coefficients, b: constrai
 
     blas1_time -= time()
     #Rc = Rc - min(0.1, 100*mu)*mu
-    SparseAccelerator.WAXPB!(Rc, 1, Rc, -min(0.1, 100*mu)*mu)
+    Sparso.WAXPB!(Rc, 1, Rc, -min(0.1, 100*mu)*mu)
 
     # set up the scaling matrix, and form the coefficient matrix for
     # the linear system
     #d = min(5.e+15, x./s)
-    d = SparseAccelerator.element_wise_divide(x, s)
-    SparseAccelerator.min!(d, d, 5.e+15)
+    d = Sparso.element_wise_divide(x, s)
+    Sparso.min!(d, d, 5.e+15)
     blas1_time += time()
 
     spgemm_time -= time()
     D.nzval = d
     #B = A*D*A'
-    B = SparseAccelerator.ADB(A,D,__AT__,__fknob_8602)
-    SparseAccelerator.propagate_matrix_info(__mknobB_8598, __mknob_ADB)
+    B = Sparso.ADB(A,D,__AT__,__fknob_8602)
+    Sparso.propagate_matrix_info(__mknobB_8598, __mknob_ADB)
     spgemm_time += time()
 
     # use the form of the Cholesky routine "cholinc" that's best
     # suited to interior-point methods
     fact_time -= time()
     #R = cholfact_int32(B)
-    R = SparseAccelerator.cholfact_int32(B,__fknob_8622)
+    R = Sparso.cholfact_int32(B,__fknob_8622)
     fact_time += time()
 
     # set up the right-hand side
     blas1_time -= time()
     #t1 = x.*Rd - Rc;
-    t1 = SparseAccelerator.element_wise_multiply(x, Rd)
-    SparseAccelerator.WAXPBY!(t1, 1, t1, -1, Rc)
+    t1 = Sparso.element_wise_multiply(x, Rd)
+    Sparso.WAXPBY!(t1, 1, t1, -1, Rc)
     blas1_time += time()
 
     spmv_time -= time()
     #t2 = -(Rp + A*(t1./s));
-    t2 = SparseAccelerator.SpMV(-1, A, t1./s, -1, Rp, fknob_spmv3)
+    t2 = Sparso.SpMV(-1, A, t1./s, -1, Rp, fknob_spmv3)
     spmv_time += time()
 
     # solve it and recover the other step components
     trslv_time -= time()
     #dy = R\t2
-    dy = SparseAccelerator.cholfact_inverse_divide(R,t2,__fknob_8623)
+    dy = Sparso.cholfact_inverse_divide(R,t2,__fknob_8623)
     trslv_time += time()
 
     spmv_time -= time()
     #temp = A'*dy
-    temp = SparseAccelerator.SpMV(__AT__, dy, fknob_spmv4)
+    temp = Sparso.SpMV(__AT__, dy, fknob_spmv4)
     spmv_time += time()
 
     blas1_time -= time()
     #dx = (x.*temp + t1)./s
-    SparseAccelerator.element_wise_multiply!(temp, x, temp)
-    SparseAccelerator.WAXPBY!(temp, 1, temp, 1, t1)
-    dx = SparseAccelerator.element_wise_divide(temp, s)
+    Sparso.element_wise_multiply!(temp, x, temp)
+    Sparso.WAXPBY!(temp, 1, temp, 1, t1)
+    dx = Sparso.element_wise_divide(temp, s)
     #ds = -(s.*dx + Rc)./x
-    SparseAccelerator.element_wise_multiply!(temp, s, dx)
-    SparseAccelerator.WAXPBY!(temp, -1, temp, -1, Rc)
-    ds = SparseAccelerator.element_wise_divide(temp, x)
+    Sparso.element_wise_multiply!(temp, s, dx)
+    Sparso.WAXPBY!(temp, -1, temp, -1, Rc)
+    ds = Sparso.element_wise_divide(temp, x)
 
     tau = max(.9995, 1 - mu)
     #ap = -1/minimum([dx./x; -1])
-    SparseAccelerator.element_wise_divide!(temp, dx, x)
-    ap = -1/min(SparseAccelerator.minimum(temp), -1)
+    Sparso.element_wise_divide!(temp, dx, x)
+    ap = -1/min(Sparso.minimum(temp), -1)
     #ad = -1/minimum([ds./s; -1])
-    SparseAccelerator.element_wise_divide!(temp, ds, s)
-    ad = -1/min(SparseAccelerator.minimum(temp), -1)
+    Sparso.element_wise_divide!(temp, ds, s)
+    ad = -1/min(Sparso.minimum(temp), -1)
     ap = tau*ap
     ad = tau*ad
     #x = x + ap*dx
     #s = s + ad*ds
     #y = y + ad*dy
-    SparseAccelerator.WAXPBY!(x, 1, x, ap, dx)
-    SparseAccelerator.WAXPBY!(s, 1, s, ad, ds)
-    SparseAccelerator.WAXPBY!(y, 1, y, ad, dy)
+    Sparso.WAXPBY!(x, 1, x, ap, dx)
+    Sparso.WAXPBY!(s, 1, s, ad, ds)
+    Sparso.WAXPBY!(y, 1, y, ad, dy)
     blas1_time += time()
   end
 
-  (SparseAccelerator.delete_function_knob)(__fknob_8602)
-  (SparseAccelerator.delete_function_knob)(__fknob_8622)
-  (SparseAccelerator.delete_function_knob)(__fknob_8623)
-  (SparseAccelerator.delete_matrix_knob)(__mknobR_8596)
-  (SparseAccelerator.delete_matrix_knob)(__mknobB_8598)
-  (SparseAccelerator.delete_matrix_knob)(__mknob__AT___8599)
-  (SparseAccelerator.delete_matrix_knob)(__mknobA_8601)
-  (SparseAccelerator.delete_matrix_knob)(__mknobD_8600) # line 56:
-  (SparseAccelerator.delete_matrix_knob)(__mknob_ADB)
-  (SparseAccelerator.delete_matrix_knob)(__mknob_cholfact_int32) # line 56:
+  (Sparso.delete_function_knob)(__fknob_8602)
+  (Sparso.delete_function_knob)(__fknob_8622)
+  (Sparso.delete_function_knob)(__fknob_8623)
+  (Sparso.delete_matrix_knob)(__mknobR_8596)
+  (Sparso.delete_matrix_knob)(__mknobB_8598)
+  (Sparso.delete_matrix_knob)(__mknob__AT___8599)
+  (Sparso.delete_matrix_knob)(__mknobA_8601)
+  (Sparso.delete_matrix_knob)(__mknobD_8600) # line 56:
+  (Sparso.delete_matrix_knob)(__mknob_ADB)
+  (Sparso.delete_matrix_knob)(__mknob_cholfact_int32) # line 56:
 
   blas1_time -= time()
   f = p'*x
@@ -269,7 +269,7 @@ x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
 println("\n\nWith manual context-sensitive optimization: ")
 x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_with_context_opt(A, b, p)
-SparseAccelerator.set_knob_log_level(1)
+Sparso.set_knob_log_level(1)
 x, ref_total_time, spgemm_time, fact_time, blas1_time, trslv_time, spmv_time,
     iter, relResidual, objval = ipm_with_context_opt(A, b, p)
 @printf "\nopt_total_time = %f\n" ref_total_time

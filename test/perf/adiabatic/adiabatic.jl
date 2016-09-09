@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 function abiatic(Hdmat, d, nqbits, T)
   total_time = -time()
@@ -395,7 +395,7 @@ function abiatic_sa(Hdmat, d, nqbits, T)
 
       q0 = q1
       #q1 = uk/beta[k + 1]
-      q1 = SparseAccelerator.WAXPB(1/beta[k+1], uk, 0) 
+      q1 = Sparso.WAXPB(1/beta[k+1], uk, 0) 
     end
 
     TT = SymTridiagonal(alpha, beta[2:nit])

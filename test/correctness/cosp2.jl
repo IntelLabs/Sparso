@@ -25,9 +25,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../src/SparseAccelerator.jl")
+include("../../src/Sparso.jl")
 include("../../src/simple-show.jl")
-using SparseAccelerator
+using Sparso
 
 set_options(SA_ENABLE, SA_VERBOSE, SA_USE_SPMP, SA_CONTEXT, SA_REORDER, SA_REPLACE_CALLS)
 
@@ -349,16 +349,16 @@ function CoSP2_call_replacement(X, flops)
 
   while BreakLoop == 0
     #trX = trace(X)
-    trX = SparseAccelerator.trace(X)
+    trX = Sparso.trace(X)
 
     spgemm_time -= time()
     #X2 = X*X'
     #X2 = spmatmul_witheps(X, X', eps) # CoSP2 does approximate spgemm
-    X2 = SparseAccelerator.SpSquareWithEps(X, eps)
+    X2 = Sparso.SpSquareWithEps(X, eps)
     spgemm_time += time()
 
     # trX2 = trace(X2)
-    trX2 = SparseAccelerator.trace(X2)
+    trX2 = Sparso.trace(X2)
     trXOLD = trX
 
     limDiff = abs(trX2 - occ) - abs(2*trX - trX2 - occ)
@@ -366,7 +366,7 @@ function CoSP2_call_replacement(X, flops)
 
       spadd_time -= time()
       #X = 2*X - X2 # input X is dead here, so we can free
-      X = SparseAccelerator.SpAdd(2, X, -1, X2)
+      X = Sparso.SpAdd(2, X, -1, X2)
       spadd_time += time()
 
       trX = 2*trX - trX2
@@ -419,23 +419,23 @@ function CoSP2_call_replacement_and_context_opt(X, flops)
   spgemm_time = 0
   spadd_time = 0
 
-  mknobX = (SparseAccelerator.new_matrix_knob)(:X, false, false, true, true, false, false) # X is symmetric
+  mknobX = (Sparso.new_matrix_knob)(:X, false, false, true, true, false, false) # X is symmetric
 
-  fknob_spgemm = (SparseAccelerator.new_function_knob)()
-  (SparseAccelerator.add_mknob_to_fknob)(mknobX, fknob_spgemm)
+  fknob_spgemm = (Sparso.new_function_knob)()
+  (Sparso.add_mknob_to_fknob)(mknobX, fknob_spgemm)
 
   while BreakLoop == 0
     #trX = trace(X)
-    trX = SparseAccelerator.trace(X)
+    trX = Sparso.trace(X)
 
     spgemm_time -= time()
     #X2 = X*X'
     #X2 = spmatmul_witheps(X, X', eps) # CoSP2 does approximate spgemm
-    X2 = SparseAccelerator.SpSquareWithEps(X, eps, fknob_spgemm)
+    X2 = Sparso.SpSquareWithEps(X, eps, fknob_spgemm)
     spgemm_time += time()
 
     # trX2 = trace(X2)
-    trX2 = SparseAccelerator.trace(X2)
+    trX2 = Sparso.trace(X2)
     trXOLD = trX
 
     limDiff = abs(trX2 - occ) - abs(2*trX - trX2 - occ)
@@ -443,7 +443,7 @@ function CoSP2_call_replacement_and_context_opt(X, flops)
 
       spadd_time -= time()
       #X = 2*X - X2 # input X is dead here, so we can free
-      X = SparseAccelerator.SpAdd(2, X, -1, X2)
+      X = Sparso.SpAdd(2, X, -1, X2)
       spadd_time += time()
 
       trX = 2*trX - trX2

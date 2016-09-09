@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 function mylogsumexp(b)
   # does logsumexp across column
@@ -48,8 +48,8 @@ end
 function lbfgs_ref(X, y, lambda, xinit, tol, k)
   #@printf("%5s%10s%10s%10s\n", "Iter", "alpha", "|dfk|", "fk")
 
-  SparseAccelerator.reset_spmp_spmv_time()
-  SparseAccelerator.reset_knob_spmv_time()
+  Sparso.reset_spmp_spmv_time()
+  Sparso.reset_knob_spmv_time()
 
   bytes = (nnz(X)*12. + (size(X,1) + size(X,2))*8)
 
@@ -100,9 +100,9 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
     log_time -= time()
     #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
     #fk0 = s/m+(lambda/2)*norm(x)^2
-    fk0 = SparseAccelerator.lbfgs_loss_function1(yXw, x, lambda)
+    fk0 = Sparso.lbfgs_loss_function1(yXw, x, lambda)
     #temp = y./(1+exp(yXw))
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
@@ -117,7 +117,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
     # Since Julia code for this is too slow we do this in C to show sufficient speedups by
     # faster SpMV. To be fair, the reference code also uses it.
     direction_time -= time()
-    SparseAccelerator.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
+    Sparso.lbfgs_compute_direction!(dx, k, it, n, S, Y, dfk)
     direction_time += time()
 
     # backtracking line search using armijo criterion
@@ -139,7 +139,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
       log_time -= time()
       #s = sum(log(1 + exp(-abs(yXw))) - min(yXw, 0))
       #fk = s/m+(lambda/2)*norm(w)^2
-      fk = SparseAccelerator.lbfgs_loss_function1(yXw, w, lambda)
+      fk = Sparso.lbfgs_loss_function1(yXw, w, lambda)
       log_time += time()
       # end objective function
 
@@ -168,7 +168,7 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
     yXw = y.*Xw
 
     log_time -= time()
-    SparseAccelerator.lbfgs_loss_function2!(temp, y, yXw)
+    Sparso.lbfgs_loss_function2!(temp, y, yXw)
     log_time += time()
 
     spmv_time -= time()
@@ -183,10 +183,10 @@ function lbfgs_ref(X, y, lambda, xinit, tol, k)
   bytes *= spmv_count
   println("\nSpMV takes $spmv_time sec ($(bytes/spmv_time/1e9) gbps).")
 
-  spmv_time = SparseAccelerator.get_spmp_spmv_time()
+  spmv_time = Sparso.get_spmp_spmv_time()
   if spmv_time > 0
     println("time spent on spmp spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
-    spmv_time = SparseAccelerator.get_knob_spmv_time()
+    spmv_time = Sparso.get_knob_spmv_time()
     println("time spent on knob spmv $spmv_time sec ($(bytes/spmv_time/1e9) gbps)")
   end
 

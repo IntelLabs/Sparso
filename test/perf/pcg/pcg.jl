@@ -25,8 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-include("../../../src/SparseAccelerator.jl")
-using SparseAccelerator
+include("../../../src/Sparso.jl")
+using Sparso
 
 include("utils.jl")
 
@@ -49,7 +49,7 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
     spmv_time = 0.
     blas1_time = 0.
 
-    L, U = SparseAccelerator.ilu(A)
+    L, U = Sparso.ilu(A)
 
     spmv_time -= time()
     r = b - A * x
@@ -94,8 +94,8 @@ function pcg_symgs_ilu0(x, A, b, tol, maxiter)
         old_rz = rz
 
         spmv_time -= time()
-        #Ap = A*p # Ap = SparseAccelerator.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
-        #SparseAccelerator.SpMV!(Ap, A, p)
+        #Ap = A*p # Ap = Sparso.SpMV(A, p) # This takes most time. Compiler can reorder A to make faster
+        #Sparso.SpMV!(Ap, A, p)
         # TODO: remove A_mul_B!. Use A*p once object removal works
         A_mul_B!(Ap, A, p)
         spmv_time += time()

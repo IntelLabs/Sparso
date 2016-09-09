@@ -105,7 +105,7 @@ const sanity_test3 = Test(
     "sanity-test3.jl",
     [
         TestPattern(r"New AST:(.|\n)*?return A \* x",
-                     "Test if optimization framework invokes SparseAccelerator to generate a new AST."
+                     "Test if optimization framework invokes Sparso to generate a new AST."
         ),
         exception_pattern
     ]
@@ -149,22 +149,22 @@ const context_test1 = Test(
         TestPattern(r"U is upper of A",
                      "Test U and A"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(:A,true,true,true,true,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(Sparso.new_matrix_knob\)\(:A,true,true,true,true,false,false\)",
                      "Test if mknobA is generated and is constant valued and constant structured"
         ),
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
                      "Test if mknobA is added to a function knob (for SpMV)"
         ),
-        TestPattern(r"New AST:(.|\n)*?Ap = \(SparseAccelerator.SpMV\)\(1,A.*,p.*,.*fknob.*\)",
+        TestPattern(r"New AST:(.|\n)*?Ap = \(Sparso.SpMV\)\(1,A.*,p.*,.*fknob.*\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test reordering"
         ),
-        TestPattern(r"\(SparseAccelerator.reordering\)\(__fknob\d*__,__reordering_status\d*__,A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobA\d*__,U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobU\d*__,:__delimitor__,p,SparseAccelerator.ROW_PERM,r,SparseAccelerator.ROW_PERM,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"\(Sparso.reordering\)\(__fknob\d*__,__reordering_status\d*__,A,Sparso.ROW_PERM,Sparso.ROW_INV_PERM,__mknobA\d*__,U,Sparso.ROW_PERM,Sparso.ROW_INV_PERM,__mknobU\d*__,:__delimitor__,p,Sparso.ROW_PERM,r,Sparso.ROW_PERM,x,Sparso.ROW_PERM\)",
                      "Test reordering"
         ),      
-        TestPattern(r"reverse_reordering\)\(__reordering_status\d*__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"reverse_reordering\)\(__reordering_status\d*__,:__delimitor__,x,Sparso.ROW_PERM\)",
                      "Test reordering"
         ),
         TestPattern(r"Accelerated k=208",
@@ -265,32 +265,32 @@ const context_test3 = Test(
         TestPattern(r"New AST:(.|\n)*?new_function_knob(.|\n)*?new_function_knob(.|\n)*?new_function_knob",
                      "Test if accelerated ipm-ref generates function knobs"
         ),
-        TestPattern(r"New AST:(.|\n)*?B = .*\(SparseAccelerator.ADB\)\(A.*,D.*,__AT__.*,__fknob\d*?__",
+        TestPattern(r"New AST:(.|\n)*?B = .*\(Sparso.ADB\)\(A.*,D.*,__AT__.*,__fknob\d*?__",
                      "Test if accelerated ipm-ref generates ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*?B = .*\(SparseAccelerator.ADB\).*\n.*propagate_matrix_info.*mknobB.*mknobExpr",
+        TestPattern(r"New AST:(.|\n)*?B = .*\(Sparso.ADB\).*\n.*propagate_matrix_info.*mknobB.*mknobExpr",
                      "Test if accelerated ipm-ref generates propagate_matrix_info after B = ADB"
         ),
-        TestPattern(r"New AST:(.|\n)*?R = .*\(SparseAccelerator.cholfact_int32\)\(B.*,__fknob\d*?__",
+        TestPattern(r"New AST:(.|\n)*?R = .*\(Sparso.cholfact_int32\)\(B.*,__fknob\d*?__",
                      "Test if accelerated ipm-ref generates cholfact_int32"
         ),
-        TestPattern(r"New AST:(.|\n)*?dy = .*\(SparseAccelerator.cholfact_inverse_divide\)\(R.*,t2.*,__fknob\d*?__",
+        TestPattern(r"New AST:(.|\n)*?dy = .*\(Sparso.cholfact_inverse_divide\)\(R.*,t2.*,__fknob\d*?__",
                      "Test if accelerated ipm-ref generates cholfact_inverse_divide"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.set_derivative\)\(.*mknobA.*,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,.*mknob__AT.*\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.set_derivative\)\(.*mknobA.*,Sparso.DERIVATIVE_TYPE_TRANSPOSE,.*mknob__AT.*\)",
                      "Test if accelerated ipm-ref generates a derivative between A and A'"
         ),
         # TODO: enable these patterns
-#        TestPattern(r"New AST:(.|\n)*?Rd = .*\(SparseAccelerator.SpMV\)\(1,__AT__,y,1,s-p,fknob_spmv.*\)",
+#        TestPattern(r"New AST:(.|\n)*?Rd = .*\(Sparso.SpMV\)\(1,__AT__,y,1,s-p,fknob_spmv.*\)",
 #                     "Test call replacement. Currently cannot match as we need to handle AT specially."
 #        ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Rp,1,A,x,-1,b,0,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Rp,1,A,x,-1,b,0,.*?fknob.*?\)",
                      "Test call replacement."
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(Rc,x,s\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.element_wise_multiply!\)\(Rc,x,s\)",
                      "Test call replacement."
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.WAXPB!\)\(Rc,1,Rc,-\(\(Main.min\)\(0.1,100 \* mu.*?\).*? \* mu.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.WAXPB!\)\(Rc,1,Rc,-\(\(Main.min\)\(0.1,100 \* mu.*?\).*? \* mu.*?\)",
                      "Test call replacement."
         ),
         #TestPattern(r"Original sum of x=715375.98850000",
@@ -351,70 +351,70 @@ const context_test5 = Test(
         TestPattern(r"U is upper of A",
                      "Test U and A"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(SparseAccelerator.new_matrix_knob\)\(:A,true,true,true,true,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobA.* = \(Sparso.new_matrix_knob\)\(:A,true,true,true,true,false,false\)",
                      "Test if mknobA is generated and is constant valued, constant structured, symmetric valued and structured"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(SparseAccelerator.new_matrix_knob\)\(:L,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobL.* = \(Sparso.new_matrix_knob\)\(:L,true,true,false,false,false,false\)",
                      "Test if mknobL is generated and is constant valued and constant structured"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(SparseAccelerator.new_matrix_knob\)\(:U,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobU.* = \(Sparso.new_matrix_knob\)\(:U,true,true,false,false,false,false\)",
                      "Test if mknobL is generated and is constant valued and constant structured"
         ),
-        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobL.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobL.*?,Sparso.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
                     "Test if L is found as part of A"
         ),
-        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobU.*?,SparseAccelerator.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
+        TestPattern(r"New AST:(.|\n)*?set_derivative\)\(.*?mknobU.*?,Sparso.DERIVATIVE_TYPE_SYMMETRIC,.*?mknobA.*?\)",
                     "Test if U is found as part of A"
         ),
         TestPattern(r"New AST:(.|\n)*?add_mknob_to_fknob\)\(.*mknobA.*,..*fknob.*\)",
                      "Test if mknobA is added to a function knob (for SpMV)"
         ),
-#        TestPattern(r"New AST:(.|\n)*?Ap = \(SparseAccelerator.SpMV\)\(1,A,p,.*fknob.*\)",
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Ap,A,p,__fknob\d*?__\)",
+#        TestPattern(r"New AST:(.|\n)*?Ap = \(Sparso.SpMV\)\(1,A,p,.*fknob.*\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Ap,A,p,__fknob\d*?__\)",
                      "Test if Ap = A * p has been replaced with SpMV with context info"
         ),
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test reordering"
         ),
-#        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(__fknob\d*?__,##reordering_status#\d*?,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?){3,3}\)",
-        TestPattern( r"New AST:(.|\n)*?SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,(U,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobU\d*?__,|A,SparseAccelerator.ROW_PERM,SparseAccelerator.ROW_INV_PERM,__mknobA\d*?__,){2,2}:__delimitor__,(r,SparseAccelerator.ROW_PERM,?|p,SparseAccelerator.ROW_PERM,?|x,SparseAccelerator.ROW_PERM,?|Ap,SparseAccelerator.ROW_PERM,?){4,4}\)",
+#        TestPattern(r"New AST:(.|\n)*?Sparso.reordering\)\(__fknob\d*?__,##reordering_status#\d*?,(U,Sparso.ROW_PERM,Sparso.ROW_INV_PERM,|A,Sparso.ROW_PERM,Sparso.ROW_INV_PERM,){2,2}:__delimitor__,(r,Sparso.ROW_PERM,?|p,Sparso.ROW_PERM,?|x,Sparso.ROW_PERM,?){3,3}\)",
+        TestPattern( r"New AST:(.|\n)*?Sparso.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,(U,Sparso.ROW_PERM,Sparso.ROW_INV_PERM,__mknobU\d*?__,|A,Sparso.ROW_PERM,Sparso.ROW_INV_PERM,__mknobA\d*?__,){2,2}:__delimitor__,(r,Sparso.ROW_PERM,?|p,Sparso.ROW_PERM,?|x,Sparso.ROW_PERM,?|Ap,Sparso.ROW_PERM,?){4,4}\)",
                       "Test reordering"
         ),
-        TestPattern(r"New AST:(.|\n)*?reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"New AST:(.|\n)*?reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,Sparso.ROW_PERM\)",
                      "Test reordering"
         ),
-        TestPattern(r"New AST:(.|\n)*?r = b - \(SparseAccelerator.SpMV\)\(A,x\)",
+        TestPattern(r"New AST:(.|\n)*?r = b - \(Sparso.SpMV\)\(A,x\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?normr0 = .*SparseAccelerator.norm\)\(r.*\)",
+        TestPattern(r"New AST:(.|\n)*?normr0 = .*Sparso.norm\)\(r.*\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?rz = .*SparseAccelerator.dot\)\(r.*,z.*\)",
+        TestPattern(r"New AST:(.|\n)*?rz = .*Sparso.dot\)\(r.*,z.*\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?alpha = old_rz.*?/.*?SparseAccelerator.dot\)\(p.*?,Ap.*?\)",
+        TestPattern(r"New AST:(.|\n)*?alpha = old_rz.*?/.*?Sparso.dot\)\(p.*?,Ap.*?\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.WAXPBY!\)\(x,1,x.*?,alpha.*?,p.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.WAXPBY!\)\(x,1,x.*?,alpha.*?,p.*?\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.WAXPBY!\)\(r,1,r.*?,-alpha.*?,Ap.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.WAXPBY!\)\(r,1,r.*?,-alpha.*?,Ap.*?\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?rel_err = .*?SparseAccelerator.norm\)\(r.*?\).*?/ normr0",
+        TestPattern(r"New AST:(.|\n)*?rel_err = .*?Sparso.norm\)\(r.*?\).*?/ normr0",
                      "Test call replacement"
         ),
 # TODO: enable this test.
-#        TestPattern(r"New AST:(.|\n)*?SparseAccelerator,:copy!\)\(z.*?,r.*?\)",
+#        TestPattern(r"New AST:(.|\n)*?Sparso,:copy!\)\(z.*?,r.*?\)",
 #                     "Test call replacement"
 #        )
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.fwdTriSolve!\)\(L,z,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.fwdTriSolve!\)\(L,z,.*?fknob.*?\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.bwdTriSolve!\)\(U,z,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.bwdTriSolve!\)\(U,z,.*?fknob.*?\)",
                      "Test call replacement"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.WAXPBY!\)\(p,1,z.*?,beta.*?,p.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.WAXPBY!\)\(p,1,z.*?,beta.*?,p.*?\)",
                      "Test call replacement"
         ),
         exception_pattern
@@ -434,13 +434,13 @@ const pagerank_test1 = Test(
         TestPattern(r"New AST:(.|\n)*?set_reordering_decision_maker",
                      "Test pagerank with reordering"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Ap,1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,d_inv.*?,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Ap,1 - r.*?,A.*?,p.*?,0,p.*?,r.*?,d_inv.*?,__fknob\d*?__\)",
                      "Test pagerank with reordering"
         ),
-        TestPattern(r"reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,p,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,p,Sparso.ROW_PERM\)",
                      "Test pagerank with reordering"
         ),
-        TestPattern(r"err = .*?\(SparseAccelerator.norm\)\(Ap.*? - p.*?\).*? / .*?\(SparseAccelerator.norm\)\(p.*?\)",
+        TestPattern(r"err = .*?\(Sparso.norm\)\(Ap.*? - p.*?\).*? / .*?\(Sparso.norm\)\(p.*?\)",
                      "Test pagerank if call replacement of norm happens"
         ),
         exception_pattern
@@ -460,22 +460,22 @@ const cosp2_test1 = Test(
         #TestPattern(r"CoSP2_call_replacement_and_context_opt:\nX sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End CoSP2_call_replacement_and_context_opt.",
         #             "Test CoSP2_call_replacement_and_context_opt"
         #),
-        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,false,.*?,true,true,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(Sparso.new_matrix_knob\)\(:X,false,.*?,true,true,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.add_mknob_to_fknob\)\(.*?mknobX.*?,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.add_mknob_to_fknob\)\(.*?mknobX.*?,.*?fknob.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?trX = \(SparseAccelerator.trace\)\(X.*?\)",
+        TestPattern(r"New AST:(.|\n)*?trX = \(Sparso.trace\)\(X.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?X2 = \(SparseAccelerator.SpSquareWithEps\)\(X.*?,eps.*?,.*?fknob.*?\)",
+        TestPattern(r"New AST:(.|\n)*?X2 = \(Sparso.SpSquareWithEps\)\(X.*?,eps.*?,.*?fknob.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?trX2 = \(SparseAccelerator.trace\)\(X2.*?\)",
+        TestPattern(r"New AST:(.|\n)*?trX2 = \(Sparso.trace\)\(X2.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?X = \(SparseAccelerator.SpAdd\)\(2,X.*?,-1,X2.*?\)",
+        TestPattern(r"New AST:(.|\n)*?X = \(Sparso.SpAdd\)\(2,X.*?,-1,X2.*?\)",
                      "Test accelerated"
         ),
         TestPattern(r"New AST:(.|\n)*?X sum = 6106.4049\d*, max = 1.2808\d*\nNumber of iterations = 25(.|\n)*?End accelerated",
@@ -504,82 +504,82 @@ const lbfgs_test1 = Test(
         TestPattern(r"Accelerated L-BFGS:      3[345] iterations f = 0.0000000",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(:Xt,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(Sparso.new_matrix_knob\)\(:Xt,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(Sparso.new_matrix_knob\)\(:X,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.set_derivative\)\(__mknobXt\d*?__,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,__mknobX\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.set_derivative\)\(__mknobXt\d*?__,Sparso.DERIVATIVE_TYPE_TRANSPOSE,__mknobX\d*?__\)",
                      "Test accelerated"
         ),                                 
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,X,x,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Xw,X,x,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(yXw,y,Xw\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.element_wise_multiply!\)\(yXw,y,Xw\)",
                      "Test accelerated"
         ),           
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.abs!\)\(__temp.*?,yXw\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.abs!\)\(__temp.*?,yXw\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(__temp.*?,-1,__temp.*?,0,__temp.*?\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(__temp.*?,-1,__temp.*?,0,__temp.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.exp!\)\(__temp.*?,__temp.*?\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.exp!\)\(__temp.*?,__temp.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.log1p!\)\(__temp.*?,__temp.*?\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.log1p!\)\(__temp.*?,__temp.*?\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.sum\)\(\(SparseAccelerator.WAXPBY!\)\(__temp.*?,1,__temp.*?,-1,\(SparseAccelerator.min!\)\(__temp.*?,yXw,0\)\)\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.sum\)\(\(Sparso.WAXPBY!\)\(__temp.*?,1,__temp.*?,-1,\(Sparso.min!\)\(__temp.*?,yXw,0\)\)\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?fk0 = s / m \+ \(lambda / 2\) \* \(SparseAccelerator.dot\)\(x,x\)",
+        TestPattern(r"New AST:(.|\n)*?fk0 = s / m \+ \(lambda / 2\) \* \(Sparso.dot\)\(x,x\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.exp!\)\(__temp.*?,yXw\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.exp!\)\(__temp.*?,yXw\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_divide!\)\(temp,y,\(SparseAccelerator.WAXPB!\)\(__temp.*?,1,__temp.*?,1\)\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.element_wise_divide!\)\(temp,y,\(Sparso.WAXPB!\)\(__temp.*?,1,__temp.*?,1\)\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,__mknobX\d*?__,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,Sparso.COL_INV_PERM,Sparso.ROW_INV_PERM,__mknobX\d*?__,:__delimitor__,y,Sparso.COL_INV_PERM,dx,Sparso.ROW_PERM\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?unless \(SparseAccelerator.norm\)\(dfk\)",
+        TestPattern(r"New AST:(.|\n)*?unless \(Sparso.norm\)\(dfk\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,Sparso.ROW_PERM\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(w,1,x,-alpha,dfk\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(w,1,x,-alpha,dfk\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,1,X,w,0.0,Xw,0.0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Xw,1,X,w,0.0,Xw,0.0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(yXw,y,Xw\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.element_wise_multiply!\)\(yXw,y,Xw\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?fk = s / m \+ \(lambda / 2\) \* \(SparseAccelerator.dot\)\(w,w\)",
+        TestPattern(r"New AST:(.|\n)*?fk = s / m \+ \(lambda / 2\) \* \(Sparso.dot\)\(w,w\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.dot\)\(dfk,dfk\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.dot\)\(dfk,dfk\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,alpha,dx\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(x,1,x,alpha,dx\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,1,X,x,0.0,Xw,0.0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Xw,1,X,x,0.0,Xw,0.0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfkp1,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(dfkp1,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(__temp.*?,1,dfkp1,-1,dfk\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(__temp.*?,1,dfkp1,-1,dfk\)",
                      "Test accelerated"
         ),    
         exception_pattern
@@ -602,53 +602,53 @@ const lbfgs_test2 = Test(
         TestPattern(r"Accelerated L-BFGS:      3[345] iterations f = 0.00000000",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(SparseAccelerator.new_matrix_knob\)\(:Xt,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobXt.*? = \(Sparso.new_matrix_knob\)\(:Xt,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(SparseAccelerator.new_matrix_knob\)\(:X,true,true,false,false,false,false\)",
+        TestPattern(r"New AST:(.|\n)*?mknobX.*? = \(Sparso.new_matrix_knob\)\(:X,true,true,false,false,false,false\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.set_derivative\)\(__mknobXt\d*?__,SparseAccelerator.DERIVATIVE_TYPE_TRANSPOSE,__mknobX\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.set_derivative\)\(__mknobXt\d*?__,Sparso.DERIVATIVE_TYPE_TRANSPOSE,__mknobX\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,1,X,x,0.0,Xw,0.0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Xw,1,X,x,0.0,Xw,0.0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(yXw,y,Xw\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.element_wise_multiply!\)\(yXw,y,Xw\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(dfk,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,SparseAccelerator.COL_INV_PERM,SparseAccelerator.ROW_INV_PERM,__mknobX\d*?__,:__delimitor__,y,SparseAccelerator.COL_INV_PERM,dx,SparseAccelerator.ROW_PERM\)
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.reordering\)\(__fknob\d*?__,__reordering_status\d*?__,X,Sparso.COL_INV_PERM,Sparso.ROW_INV_PERM,__mknobX\d*?__,:__delimitor__,y,Sparso.COL_INV_PERM,dx,Sparso.ROW_PERM\)
 ",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?unless \(SparseAccelerator.norm\)\(dfk\)",
+        TestPattern(r"New AST:(.|\n)*?unless \(Sparso.norm\)\(dfk\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,Sparso.ROW_PERM\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(w,1,x,-alpha,dfk\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(w,1,x,-alpha,dfk\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(Xw,1,X,w,0.0,Xw,0.0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(Xw,1,X,w,0.0,Xw,0.0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.element_wise_multiply!\)\(yXw,y,Xw\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.element_wise_multiply!\)\(yXw,y,Xw\)",
                      "Test accelerated"
         ),        
-        TestPattern(r"New AST:(.|\n)*?SparseAccelerator.dot\)\(dfk,dfk\)",
+        TestPattern(r"New AST:(.|\n)*?Sparso.dot\)\(dfk,dfk\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(dfkp1,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(dfkp1,-1 / m,Xt,temp,lambda,x,0,__fknob\d*?__\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,SparseAccelerator.ROW_PERM\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.reverse_reordering\)\(__reordering_status\d*?__,:__delimitor__,x,Sparso.ROW_PERM\)",
                      "Test accelerated"
         ),
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(__temp.*?,1,dfkp1,-1,dfk\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(__temp.*?,1,dfkp1,-1,dfk\)",
                      "Test accelerated"
         ),    
         exception_pattern
@@ -702,8 +702,8 @@ const call_replacement_test1 = Test(
     "call-replacement-test1",
     "call-replacement-test1.jl $MTX_small_diag",
     [
-        TestPattern(r"AST:(.|\n)*?Main.dot(.|\n)*?New AST(.|\n)*?SparseAccelerator.dot",
-                     "Test call replacement of Main.dot with SparseAccelerator.dot."
+        TestPattern(r"AST:(.|\n)*?Main.dot(.|\n)*?New AST(.|\n)*?Sparso.dot",
+                     "Test call replacement of Main.dot with Sparso.dot."
         ),
         exception_pattern
     ]
@@ -713,8 +713,8 @@ const call_replacement_test2 = Test(
     "call-replacement-test2",
     "call-replacement-test2.jl $MTX_small_diag",
     [
-        TestPattern(r"AST:(.|\n)*?\(SparseAccelerator.SpMV\)\(A,x\)",
-                     "Test call replacement of * with SparseAccelerator.SpMV."
+        TestPattern(r"AST:(.|\n)*?\(Sparso.SpMV\)\(A,x\)",
+                     "Test call replacement of * with Sparso.SpMV."
         ),
         exception_pattern
     ]
@@ -724,7 +724,7 @@ const call_replacement_test3 = Test(
     "call-replacement-test3",
     "call-replacement-test3.jl $MTX_small_diag",
     [
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(y,A,x\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(y,A,x\)",
                      "Test call replacement of SpMV! for A_mul_B!(y, A, x)."
         ),
         exception_pattern
@@ -735,7 +735,7 @@ const call_replacement_test4 = Test(
     "call-replacement-test4",
     "call-replacement-test4.jl $MTX_small_diag",
     [
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.SpMV!\)\(y,0.1,A,x,0.1,y,0.0\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.SpMV!\)\(y,0.1,A,x,0.1,y,0.0\)",
                      "Test call replacement of SpMV for A_mul_B!(0.1, A, x, 0.1, y)."
         ),
         exception_pattern
@@ -746,7 +746,7 @@ const call_replacement_test5 = Test(
     "call-replacement-test5",
     "call-replacement-test5.jl $MTX_small_diag",
     [
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,alpha,p\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(x,1,x,alpha,p\)",
                      "Test call replacement of WAXPBY! for x += alpha * p."
         ),
         exception_pattern
@@ -757,7 +757,7 @@ const call_replacement_test6 = Test(
     "call-replacement-test6",
     "call-replacement-test6.jl $MTX_small_diag",
     [
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(x,1,x,-alpha,p\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(x,1,x,-alpha,p\)",
                      "Test call replacement of WAXPBY! for x -= alpha * p."
         ),
         exception_pattern
@@ -768,7 +768,7 @@ const call_replacement_test7 = Test(
     "call-replacement-test7",
     "call-replacement-test7.jl $MTX_small_diag",
     [
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(p,1,r,beta,p\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(p,1,r,beta,p\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
         ),
         exception_pattern
@@ -779,7 +779,7 @@ const call_replacement_test8 = Test(
     "call-replacement-test8",
     "call-replacement-test8.jl $MTX_small_diag",
     [
-	TestPattern(r"New AST:(.|\n)*?SparseAccelerator.SpMV\)\(1 - r,A,p\),r\)",
+	TestPattern(r"New AST:(.|\n)*?Sparso.SpMV\)\(1 - r,A,p\),r\)",
                      "Test call replacement of SpMV! in simple page rank."
         ),
         exception_pattern
@@ -836,7 +836,7 @@ const call_replacement_test12 = Test(
     "call-replacement-test12",
     string("call-replacement-test12.jl  ", CG_MATRIX),
     [
-        TestPattern(r"New AST:(.|\n)*?\(SparseAccelerator.WAXPBY!\)\(p,1,z,beta,p\)",
+        TestPattern(r"New AST:(.|\n)*?\(Sparso.WAXPBY!\)\(p,1,z,beta,p\)",
                      "Test call replacement of WAXPBY! for p = r + beta * p."
         ),
         exception_pattern
