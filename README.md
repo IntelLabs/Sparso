@@ -138,3 +138,26 @@ Enjoy!
 ## Resources
 
 - **GitHub Issues:** <https://github.com/IntelLabs/Sparso/issues>
+
+## Citation
+
+Please cite our software as follows:
+
+	@inproceedings{Sparso,
+	 author = {Rong, Hongbo and Park, Jongsoo and Xiang, Lingxiang and Anderson, Todd A. and Smelyanskiy, Mikhail},
+	 title = {Sparso: Context-driven Optimizations of Sparse Linear Algebra},
+	 booktitle = {Proceedings of the 2016 International Conference on Parallel Architectures and Compilation},
+	 series = {PACT '16},
+	 year = {2016},
+	 isbn = {978-1-4503-4121-9},
+	 location = {Haifa, Israel},
+	 pages = {247--259},
+	 numpages = {13},
+	 url = {http://doi.acm.org/10.1145/2967938.2967943},
+	 doi = {10.1145/2967938.2967943},
+	 acmid = {2967943},
+	 publisher = {ACM},
+	 address = {New York, NY, USA},
+	 keywords = {compiler, data-flow analysis, high-performance computing, inspector-executor, reordering, sparse linear algebra},
+	} 
+
